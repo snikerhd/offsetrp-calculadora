@@ -15,12 +15,12 @@ export function normalizeText(text: string): string {
 
 // Formata número para display (separador de milhares)
 export function fmt(n: number): string {
-  return n.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("pt-PT", { maximumFractionDigits: 0 });
 }
 
 // Formata número para display (versão curta)
 export function fmt2(n: number): string {
-  return n.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("pt-PT", { maximumFractionDigits: 0 });
 }
 
 // Capitaliza primeira letra
