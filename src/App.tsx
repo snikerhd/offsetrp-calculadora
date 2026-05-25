@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Shield, Clock, ShieldAlert, BookOpen, Layers, Calculator, Car,
-  Coins, Package, FlaskConical, AlertTriangle, Scale, FileSpreadsheet, Gavel
+  Coins, Package, FlaskConical, AlertTriangle, Scale, FileSpreadsheet, Gavel,
+  Pencil
 } from "lucide-react";
 import {
   ITENS_ILEGAIS, PRECOS_DROGAS,
@@ -11,11 +12,29 @@ import {
   calcArmasGrandeQtde, calcItensIlegais, calcDroga,
   obterItemPorSinonimo, obterDrogaPorSinonimo, parseQuickInput, parseCrimesInput, getAllCrimesFlat,
 } from "./utils";
+import EntriesPanel from "./EntriesPanel";
 
 // Types
 interface CadEntry { desc: string; meses: number; multa: number; }
 interface ExtraEntry { desc: string; valor: number; }
 interface ProfileCrime { crime: string; multa: number; }
+
+// Edit state for CAD (strings for numeric fields so user can freely type)
+interface EditingCAD {
+  cc: string;
+  index: number;
+  desc: string;
+  meses: string;
+  multa: string;
+}
+
+// Edit state for Extra
+interface EditingExtra {
+  cc: string;
+  index: number;
+  desc: string;
+  valor: string;
+}
 
 const TABS = [
   { id: "Sequestro", icon: Shield, label: "Sequestro" },
@@ -37,11 +56,19 @@ type Department = 'DPSA' | 'DPLS' | 'DBC';
 export default function App() {
   const [activeTab, setActiveTab] = useState("Coimas Rápidas PT");
   const [department, setDepartment] = useState<Department>('DPLS');
+  
+  // Usar ref para o tempo para evitar re-renderizações desnecessárias
   const [systemTime, setSystemTime] = useState(new Date());
+  const systemTimeRef = useRef(new Date());
 
   const [ccAtual, setCcAtual] = useState("Geral");
   const [cadPorCC, setCadPorCC] = useState<Record<string, CadEntry[]>>({});
   const [extraPorCC, setExtraPorCC] = useState<Record<string, ExtraEntry[]>>({});
+
+  // Editing states
+  const [editingCAD, setEditingCAD] = useState<EditingCAD | null>(null);
+  const [editingExtra, setEditingExtra] = useState<EditingExtra | null>(null);
+  const [showEntriesPanel, setShowEntriesPanel] = useState(false);
 
   // Profiles
   const [perfis, setPerfis] = useState<Record<string, ProfileCrime[]>>({});
@@ -135,12 +162,16 @@ export default function App() {
     try {
       const saved = localStorage.getItem("perfis_coimas");
       if (saved) setPerfis(JSON.parse(saved));
-    } catch {}
+    } catch { /* empty */ }
   }, []);
 
-  // System clock
+  // System clock - agora só atualiza o ref, não causa re-render
   useEffect(() => {
-    const timer = setInterval(() => setSystemTime(new Date()), 1000);
+    const timer = setInterval(() => {
+      systemTimeRef.current = new Date();
+      // Atualizar state apenas uma vez por segundo para o relógio do header
+      setSystemTime(new Date());
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -171,8 +202,10 @@ export default function App() {
     }));
   }, []);
 
-  const totalExtra = (extraPorCC[getCc()] || []).reduce((s, e) => s + e.valor, 0);
-  const totalCAD = (cadPorCC[getCc()] || []).reduce((s, e) => s + e.multa, 0);
+  // All CCs that have entries
+  const allCCsWithEntries = Array.from(
+    new Set([...Object.keys(cadPorCC), ...Object.keys(extraPorCC)])
+  ).filter(cc => (cadPorCC[cc]?.length || 0) > 0 || (extraPorCC[cc]?.length || 0) > 0);
 
   // Theme colors based on department
   const accentColor = department === 'DPSA' ? 'text-amber-400' : department === 'DPLS' ? 'text-blue-400' : 'text-white';
@@ -225,7 +258,6 @@ export default function App() {
     const multa = calcMunicao(munBalasBaixo, munBalasMedio, munBalasAlto, munCarrBaixo, munCarrMedio, munCarrAlto);
     if (multa > 0) {
       const cc = getCc();
-      // Criar descrição detalhada
       let desc = "Munição:\n";
       if (munBalasBaixo > 0) desc += `  ${munBalasBaixo} balas baixo calibre x 500 € = ${fmt(munBalasBaixo * 500)} €\n`;
       if (munBalasMedio > 0) desc += `  ${munBalasMedio} balas médio calibre x 1.000 € = ${fmt(munBalasMedio * 1000)} €\n`;
@@ -244,13 +276,12 @@ export default function App() {
     const { total, detalhes } = calcArmasGrandeQtde(armasBaixo, armasMedio, armasAlto);
     if (total > 0) {
       const cc = getCc();
-      let linha = "Armas Grande Quantidade:\n";
-      for (const [desc, val] of detalhes) linha += `  ${desc}: ${fmt(val)} €\n`;
-      linha += `TOTAL: ${fmt(total)} €`;
+      let linha = "Armas Grande Quantidade:";
+      for (const [desc] of detalhes) linha += `  ${desc}`;
+      linha += `\nTOTAL: ${fmt(total)} €`;
       addExtra(cc, linha, total);
       showAlert(`Multa de ${fmt(total)} € adicionada para CC ${cc}.`);
     } else {
-      // Verificar quantas armas tem em cada calibre
       let msg = "Passar coima base:\n";
       if (armasBaixo > 0 && armasBaixo < 5) msg += `- Baixo: ${armasBaixo} armas (min 5)\n`;
       if (armasMedio > 0 && armasMedio < 4) msg += `- Médio: ${armasMedio} armas (min 4)\n`;
@@ -459,7 +490,6 @@ export default function App() {
       msg += `TOTAL MUNIÇÃO: ${fmt2(totalMuni)} €\n\n`;
     }
     if (r.armas.resultados.length) {
-      // Check if it's large quantity (contains "base" keyword)
       const isLargeQtde = r.armas.resultados.some((item: string) => item.includes("base"));
       if (isLargeQtde) {
         msg += "⚠️ AVISO: Grande Quantidade de Armas - passar crime específico\n";
@@ -566,7 +596,6 @@ export default function App() {
 
       linhas.push("--- Coimas Extras ---");
       
-      // Coimas extras + sequestro automático
       const extraEntries = extraPorCC[cc] || [];
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       
@@ -574,7 +603,6 @@ export default function App() {
         for (const entry of extraEntries) {
           linhas.push(`  ${entry.desc}`);
         }
-        // Adicionar sequestro automaticamente se houver reféns
         if (sequestroMultaRel > 0) {
           let seqDesc = `  Sequestro: ${relCivis} civis (9.000€)`;
           if (relFunc > 0) seqDesc += ` + ${relFunc} func. públicos (15.000€)`;
@@ -585,7 +613,6 @@ export default function App() {
         linhas.push("  (Nenhuma coima extra registada)");
       }
 
-      // Total inclui CAD + extras + sequestro
       const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + extraEntries.reduce((s, e) => s + e.valor, 0) + sequestroMultaRel;
       const mesesCC = cadEntries.reduce((s, e) => s + e.meses, 0);
       linhas.push(`💰 Total Coimas: ${fmt2(totalCC)} €`);
@@ -612,7 +639,6 @@ export default function App() {
       const coimaFinal = totalCC * (relPercCoima / 100);
       linhas.push(cc);
       linhas.push(`Coima Total: ${fmt2(coimaFinal)} €`);
-      // Primeiro limita a 60 meses, depois aplica a mediação
       const mesesBaseCapped = Math.min(mesesCC, 60);
       const mesesComMediação = mesesBaseCapped * (relPercSentenca / 100);
       if (mesesCC > 60) {
@@ -646,9 +672,29 @@ export default function App() {
   const inputCls = `w-full px-3 py-2 bg-black/40 border border-white/10 rounded text-white text-sm focus:outline-none focus:border-white/30 font-mono`;
   const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1";
 
+  // Total calculations
+  const totalExtra = (extraPorCC[getCc()] || []).reduce((s, e) => s + e.valor, 0);
+  const totalCAD = (cadPorCC[getCc()] || []).reduce((s, e) => s + e.multa, 0);
+
   return (
     <div className={`min-h-screen bg-gradient-to-br ${bgGradient} text-white font-sans flex flex-col justify-between relative selection:bg-white/20 overflow-x-hidden`}>
       
+      {/* Entries Panel Modal - agora é um componente separado */}
+      <EntriesPanel
+        showEntriesPanel={showEntriesPanel}
+        setShowEntriesPanel={setShowEntriesPanel}
+        cadPorCC={cadPorCC}
+        extraPorCC={extraPorCC}
+        setCadPorCC={setCadPorCC}
+        setExtraPorCC={setExtraPorCC}
+        editingCAD={editingCAD}
+        setEditingCAD={setEditingCAD}
+        editingExtra={editingExtra}
+        setEditingExtra={setEditingExtra}
+        onShowAlert={showAlert}
+        fmt2={fmt2}
+      />
+
       {/* Top flashing light bar */}
       <div className="absolute top-0 left-0 right-0 h-1.5 flex z-50">
         <div className={`flex-1 transition-all duration-1000 ${department === 'DPSA' ? 'bg-amber-600 animate-pulse' : department === 'DPLS' ? 'bg-blue-600 animate-pulse' : 'bg-white/80 animate-pulse'}`} />
@@ -661,7 +707,7 @@ export default function App() {
 
       {/* Alert */}
       {alertMsg && (
-        <div className="fixed top-16 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg bg-neutral-900 border border-white/10 text-white">
+        <div className="fixed top-16 right-4 z-[60] max-w-sm p-4 rounded-lg shadow-lg bg-neutral-900 border border-white/10 text-white">
           <pre className="whitespace-pre-wrap text-sm">{alertMsg}</pre>
         </div>
       )}
@@ -714,6 +760,20 @@ export default function App() {
             <span className="mx-2 text-gray-600">|</span>
             <span className="text-sm text-gray-400">CAD: <strong className="text-green-400">{fmt2(totalCAD)} €</strong></span>
           </div>
+          {/* EDIT ENTRIES BUTTON */}
+          <button
+            onClick={() => setShowEntriesPanel(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/30 text-amber-300 transition-colors cursor-pointer"
+            title="Editar / Eliminar entradas registadas"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            <span>Editar Entradas</span>
+            {allCCsWithEntries.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-extrabold">
+                {allCCsWithEntries.length}
+              </span>
+            )}
+          </button>
           <button onClick={limparTudo} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-900/40 hover:bg-red-900/60 border border-red-500/20 text-red-300 transition-colors cursor-pointer">Limpar Tudo</button>
         </div>
       </div>
@@ -756,7 +816,7 @@ export default function App() {
                 <input type="number" value={seqFunc} onChange={e => setSeqFunc(Number(e.target.value))} className={inputCls} />
               </div>
             </div>
-            <button onClick={addSequestro} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular e Adicionar</button>
+            <button onClick={addSequestro} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
@@ -770,7 +830,7 @@ export default function App() {
               <label className={labelCls}>Valor em dinheiro apreendido (€):</label>
               <input type="number" value={dinheiroValor} onChange={e => setDinheiroValor(Number(e.target.value))} className={inputCls} />
             </div>
-            <button onClick={addDinheiro} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular e Adicionar</button>
+            <button onClick={addDinheiro} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
@@ -792,7 +852,7 @@ export default function App() {
               <div><label className={labelCls}>Médio calibre:</label><input type="number" value={munCarrMedio} onChange={e => setMunCarrMedio(Number(e.target.value))} className={inputCls} /></div>
               <div><label className={labelCls}>Alto calibre:</label><input type="number" value={munCarrAlto} onChange={e => setMunCarrAlto(Number(e.target.value))} className={inputCls} /></div>
             </div>
-            <button onClick={addMunicao} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular e Adicionar</button>
+            <button onClick={addMunicao} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
@@ -807,7 +867,7 @@ export default function App() {
               <div><label className={labelCls}>Médio calibre:</label><input type="number" value={armasMedio} onChange={e => setArmasMedio(Number(e.target.value))} className={inputCls} /></div>
               <div><label className={labelCls}>Alto calibre:</label><input type="number" value={armasAlto} onChange={e => setArmasAlto(Number(e.target.value))} className={inputCls} /></div>
             </div>
-            <button onClick={addArmas} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular e Adicionar</button>
+            <button onClick={addArmas} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
@@ -821,10 +881,10 @@ export default function App() {
               <label className={labelCls}>Cálculo Rápido (ex: 10 lockpick, 5 algemas):</label>
               <div className="flex gap-2 mt-1">
                 <input value={itensInput} onChange={e => setItensInput(e.target.value)} className={inputCls} placeholder="10 lockpick, 5 algemas" />
-                <button onClick={calcItensRapido} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase ${fillBtnTheme}`}>Calcular</button>
+                <button onClick={calcItensRapido} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Calcular</button>
               </div>
               {itensResultado && <pre className="mt-2 text-xs whitespace-pre-wrap text-amber-400 font-mono">{itensResultado}</pre>}
-              {itensTotal && <button onClick={() => { navigator.clipboard.writeText(itensTotal); showAlert("Copiado!"); }} className="mt-2 px-3 py-1 rounded bg-white/10 text-xs text-gray-400 hover:text-white">Copiar Total</button>}
+              {itensTotal && <button onClick={() => { navigator.clipboard.writeText(itensTotal); showAlert("Copiado!"); }} className="mt-2 px-3 py-1 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Copiar Total</button>}
             </div>
             <div className="mb-3">
               <input value={searchItens} onChange={e => setSearchItens(e.target.value)} className={inputCls} placeholder="Pesquisar item..." />
@@ -840,7 +900,7 @@ export default function App() {
                   </div>
                 ))}
             </div>
-            <button onClick={addItensGrid} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular e Adicionar</button>
+            <button onClick={addItensGrid} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
@@ -854,7 +914,7 @@ export default function App() {
               <label className={labelCls}>Cálculo Rápido (ex: 45 maços, 6 óleos):</label>
               <div className="flex gap-2 mt-1">
                 <input value={drogasInput} onChange={e => setDrogasInput(e.target.value)} className={inputCls} placeholder="45 maços, 6 óleos" />
-                <button onClick={calcDrogasRapido} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase ${fillBtnTheme}`}>Calcular</button>
+                <button onClick={calcDrogasRapido} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Calcular</button>
               </div>
               {drogasResultado && <pre className="mt-2 text-xs whitespace-pre-wrap text-amber-400 font-mono">{drogasResultado}</pre>}
             </div>
@@ -869,7 +929,7 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <button onClick={addDrogasGrid} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular e Adicionar</button>
+            <button onClick={addDrogasGrid} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
@@ -886,14 +946,14 @@ export default function App() {
                 <div><label className={labelCls}>Percentagem da coima (%):</label><input type="number" value={medPercCoima} onChange={e => setMedPercCoima(Number(e.target.value))} className={inputCls} /></div>
                 <div><label className={labelCls}>Percentagem da sentença (%):</label><input type="number" value={medPercMeses} onChange={e => setMedPercMeses(Number(e.target.value))} className={inputCls} /></div>
               </div>
-              <button onClick={calcMediacao} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular Mediação</button>
+              <button onClick={calcMediacao} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular Mediação</button>
             </div>
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
               <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
                 <Gavel className={`w-5 h-5 ${accentColor}`} /> Tentativa de Crime (75%)
               </h2>
               <div><label className={labelCls}>Valor do crime consumado:</label><input type="number" value={tentValor} onChange={e => setTentValor(Number(e.target.value))} className={inputCls} /></div>
-              <button onClick={calcTentativa} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular Tentativa</button>
+              <button onClick={calcTentativa} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular Tentativa</button>
             </div>
           </div>
         )}
@@ -912,7 +972,7 @@ export default function App() {
               <button onClick={() => {
                 if (velRegistrada <= velLimite + 5) setVelResultado("Sem multa (dentro do limite + 5km/h de tolerância)");
                 else { const excesso = velRegistrada - velLimite - 5; const blocos = Math.ceil(excesso / 10); const total = Math.min(3000 + blocos * 1500, 10000); setVelResultado(`Multa: ${fmt2(total)} € (Excesso: ${excesso} km/h, ${blocos} bloco(s))`); }
-              }} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular Multa</button>
+              }} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular Multa</button>
               {velResultado && <div className={`mt-3 p-3 rounded-lg text-xs ${velResultado.includes("Sem") ? "bg-green-900/30 text-green-400" : "bg-amber-900/30 text-amber-400"}`}>{velResultado}</div>}
             </div>
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
@@ -927,7 +987,7 @@ export default function App() {
                 ))}
               </div>
               <p className="text-[10px] text-gray-500 mt-2">Nota: Cada peça em falta = 2.500€, máximo 12.500€</p>
-              <button onClick={() => { const falta = [epiColete, epiCapacete, epiBotas, epiCalcas, epiMascara].filter(v => !v).length; const total = Math.min(falta * 2500, 12500); setEpiResultado(falta === 0 ? "Todas presentes. Sem multa." : `Multa: ${fmt2(total)} € (${falta} peça(s) x 2.500€)`); }} className={`w-full mt-3 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Calcular Multa</button>
+              <button onClick={() => { const falta = [epiColete, epiCapacete, epiBotas, epiCalcas, epiMascara].filter(v => !v).length; const total = Math.min(falta * 2500, 12500); setEpiResultado(falta === 0 ? "Todas presentes. Sem multa." : `Multa: ${fmt2(total)} € (${falta} peça(s) x 2.500€)`); }} className={`w-full mt-3 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular Multa</button>
               {epiResultado && <div className={`mt-3 p-3 rounded-lg text-xs ${epiResultado.includes("Todas") ? "bg-green-900/30 text-green-400" : "bg-amber-900/30 text-amber-400"}`}>{epiResultado}</div>}
             </div>
           </div>
@@ -941,8 +1001,8 @@ export default function App() {
             </h2>
             <div className="flex gap-2 mb-4">
               <input value={searchCrime} onChange={e => setSearchCrime(e.target.value)} className={inputCls} placeholder="Pesquisar crime..." />
-              <button onClick={() => setSearchCrime("")} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white">Limpar</button>
-              <button onClick={addCrimesCatalogo} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme}`}>Adicionar</button>
+              <button onClick={() => setSearchCrime("")} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Limpar</button>
+              <button onClick={addCrimesCatalogo} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button>
             </div>
             <div className="overflow-auto max-h-[60vh] rounded border border-white/10">
               <table className="w-full text-xs font-mono">
@@ -981,12 +1041,12 @@ export default function App() {
               <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-3">Perfis Guardados</h2>
               <div className="space-y-1 mb-3 max-h-96 overflow-auto">
                 {Object.keys(perfis).map(nome => (
-                  <button key={nome} onClick={() => setSelectedPerfil(nome)} className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-colors ${selectedPerfil === nome ? "bg-amber-600 text-white" : "bg-black/40 hover:bg-white/10 text-gray-400"}`}>{nome}</button>
+                  <button key={nome} onClick={() => setSelectedPerfil(nome)} className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-colors cursor-pointer ${selectedPerfil === nome ? "bg-amber-600 text-white" : "bg-black/40 hover:bg-white/10 text-gray-400"}`}>{nome}</button>
                 ))}
               </div>
               <div className="flex gap-2">
-                <button onClick={novoPerfil} className="px-3 py-1.5 rounded bg-white/10 text-xs text-gray-300 hover:text-white">Novo</button>
-                <button onClick={eliminarPerfil} className="px-3 py-1.5 rounded bg-red-900/40 text-xs text-red-300 hover:bg-red-900/60">Eliminar</button>
+                <button onClick={novoPerfil} className="px-3 py-1.5 rounded bg-white/10 text-xs text-gray-300 hover:text-white cursor-pointer">Novo</button>
+                <button onClick={eliminarPerfil} className="px-3 py-1.5 rounded bg-red-900/40 text-xs text-red-300 hover:bg-red-900/60 cursor-pointer">Eliminar</button>
               </div>
             </div>
             <div className={`md:col-span-2 bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
@@ -998,7 +1058,7 @@ export default function App() {
                       <span className="text-xs text-gray-300">{c.crime}</span>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-amber-400">{fmt(c.multa)} €</span>
-                        <button onClick={() => removePerfilCrime(idx)} className="text-red-500 text-xs hover:underline">✕</button>
+                        <button onClick={() => removePerfilCrime(idx)} className="text-red-500 text-xs hover:underline cursor-pointer">✕</button>
                       </div>
                     </div>
                   ))}
@@ -1006,8 +1066,8 @@ export default function App() {
               )}
               <p className="text-right font-bold mb-3 text-amber-400">Total: {fmt2(perfilTotal)} €</p>
               <div className="flex gap-2">
-                <button onClick={aplicarPerfil} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme}`}>Aplicar Perfil</button>
-                <button onClick={() => setActiveTab("Catálogo")} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white">Ir ao Catálogo</button>
+                <button onClick={aplicarPerfil} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Aplicar Perfil</button>
+                <button onClick={() => setActiveTab("Catálogo")} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Ir ao Catálogo</button>
               </div>
             </div>
           </div>
@@ -1022,8 +1082,8 @@ export default function App() {
             <p className="text-xs text-gray-500 mb-2">Escreva quantidade e item (ex: 45 maços). Para vários, separe por vírgulas.</p>
             <div className="flex gap-2 mb-4">
               <input value={testeInput} onChange={e => setTesteInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calcularTeste(); }} className={inputCls} placeholder="45 maços, 6 óleos, 100 balas baixo..." />
-              <button onClick={calcularTeste} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme}`}>Calcular</button>
-              <button onClick={() => setTesteHistorico([])} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white">Limpar</button>
+              <button onClick={calcularTeste} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Calcular</button>
+              <button onClick={() => setTesteHistorico([])} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Limpar</button>
             </div>
             <div className="rounded-lg border border-white/10 p-4 max-h-96 overflow-auto bg-black/60 font-mono text-xs text-green-400">
               <pre>{testeHistorico.join("\n" + "—".repeat(50) + "\n\n") || "// Resultados aparecerão aqui..."}</pre>
@@ -1053,7 +1113,7 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div><label className={labelCls}>CC:</label><input value={relCCCoima} onChange={e => setRelCCCoima(e.target.value)} className={inputCls} /></div>
                 <div className="md:col-span-2"><label className={labelCls}>Lista de itens:</label><input value={relCoimaRapida} onChange={e => setRelCoimaRapida(e.target.value)} className={inputCls} placeholder="122 balas baixo, 2 armas baixo..." /></div>
-                <div className="flex items-end"><button onClick={addCoimasRapidasRelatorio} className={`w-full py-2 rounded text-xs font-bold uppercase ${fillBtnTheme}`}>Adicionar</button></div>
+                <div className="flex items-end"><button onClick={addCoimasRapidasRelatorio} className={`w-full py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button></div>
               </div>
             </div>
 
@@ -1063,7 +1123,7 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div><label className={labelCls}>CC:</label><input value={relCCCrimesNome} onChange={e => setRelCCCrimesNome(e.target.value)} className={inputCls} /></div>
                 <div className="md:col-span-2"><label className={labelCls}>Lista de crimes:</label><input value={relCrimesNome} onChange={e => setRelCrimesNome(e.target.value)} className={inputCls} placeholder="1 assalto a loja, 2 sequestro..." /></div>
-                <div className="flex items-end gap-2"><label className="flex items-center gap-1 text-xs text-gray-400"><input type="checkbox" checked={relTentativa} onChange={e => setRelTentativa(e.target.checked)} /> Tentativa</label><button onClick={addCrimesPorNome} className={`px-3 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme}`}>Adicionar</button></div>
+                <div className="flex items-end gap-2"><label className="flex items-center gap-1 text-xs text-gray-400"><input type="checkbox" checked={relTentativa} onChange={e => setRelTentativa(e.target.checked)} /> Tentativa</label><button onClick={addCrimesPorNome} className={`px-3 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button></div>
               </div>
             </div>
 
@@ -1074,7 +1134,7 @@ export default function App() {
                 <div><label className={labelCls}>CC:</label><input value={relCCCAD} onChange={e => setRelCCCAD(e.target.value)} className={inputCls} /></div>
                 <div><label className={labelCls}>Meses:</label><input type="number" value={relMesesCAD} onChange={e => setRelMesesCAD(Number(e.target.value))} className={inputCls} /></div>
                 <div><label className={labelCls}>Valor (€):</label><input type="number" value={relValorCAD} onChange={e => setRelValorCAD(Number(e.target.value))} className={inputCls} /></div>
-                <div className="flex items-end"><button onClick={addValorCAD} className={`w-full py-2 rounded text-xs font-bold uppercase ${fillBtnTheme}`}>Adicionar</button></div>
+                <div className="flex items-end"><button onClick={addValorCAD} className={`w-full py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button></div>
               </div>
             </div>
 
@@ -1094,11 +1154,52 @@ export default function App() {
               </div>
             </div>
 
+            {/* Entradas Registadas - Inline Preview */}
+            {allCCsWithEntries.length > 0 && (
+              <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 flex items-center gap-2">
+                    <Pencil className="w-4 h-4 text-amber-400" />
+                    Entradas Registadas ({allCCsWithEntries.length} CC)
+                  </h2>
+                  <button
+                    onClick={() => setShowEntriesPanel(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/30 text-amber-300 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Pencil className="w-3 h-3" /> Editar / Eliminar
+                  </button>
+                </div>
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {allCCsWithEntries.map(cc => {
+                    const cadEntries = cadPorCC[cc] || [];
+                    const extraEntries = extraPorCC[cc] || [];
+                    const totalCadCC = cadEntries.reduce((s, e) => s + e.multa, 0);
+                    const totalExtraCC = extraEntries.reduce((s, e) => s + e.valor, 0);
+                    const totalMesesCC = cadEntries.reduce((s, e) => s + e.meses, 0);
+
+                    return (
+                      <div key={cc} className="bg-black/30 rounded-lg border border-white/5 px-4 py-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">CC: {cc}</span>
+                          <div className="flex gap-3 text-[10px]">
+                            <span className="text-green-400">CAD: {fmt2(totalCadCC)} € ({cadEntries.length})</span>
+                            <span className="text-amber-400">Extra: {fmt2(totalExtraCC)} € ({extraEntries.length})</span>
+                            <span className="text-white font-bold">Total: {fmt2(totalCadCC + totalExtraCC)} €</span>
+                            {totalMesesCC > 0 && <span className="text-blue-400">{totalMesesCC.toFixed(1)} meses</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Buttons */}
             <div className="flex gap-3">
-              <button onClick={gerarRelatorio} className={`px-6 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme}`}>Gerar Relatório</button>
-              <button onClick={copiarRelatorio} className="px-4 py-3 rounded-lg bg-white/10 text-xs text-gray-300 hover:text-white hover:bg-white/20">Copiar Relatório</button>
-              <button onClick={() => setRelatorio("")} className="px-3 py-3 rounded bg-white/10 text-xs text-gray-400 hover:text-white">Limpar</button>
+              <button onClick={gerarRelatorio} className={`px-6 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Gerar Relatório</button>
+              <button onClick={copiarRelatorio} className="px-4 py-3 rounded-lg bg-white/10 text-xs text-gray-300 hover:text-white hover:bg-white/20 cursor-pointer">Copiar Relatório</button>
+              <button onClick={() => setRelatorio("")} className="px-3 py-3 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Limpar</button>
             </div>
 
             {/* Output */}

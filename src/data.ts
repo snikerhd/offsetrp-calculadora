@@ -189,6 +189,9 @@ export const CRIMES_CATALOGO: Crime[] = [
   { nome: "Veículo Apreendido por Danos Premeditados", categoria: "Crimes DPSA", multa: 10000, meses: 0 },
 ];
 
+// Alias for backwards compatibility
+export type CrimeData = Crime;
+
 // Tabela de armas em grande quantidade
 export interface ArmaGrandeQuantidade {
   calibre: string;
