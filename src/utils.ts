@@ -13,14 +13,14 @@ export function normalizeText(text: string): string {
     .trim();
 }
 
-// Formata número para display (separador de milhares)
+// Formata número para display (sem casas decimais, sem separador de milhares)
 export function fmt(n: number): string {
-  return n.toLocaleString("pt-PT", { maximumFractionDigits: 0 });
+  return Math.round(n).toString();
 }
 
-// Formata número para display (versão curta)
+// Formata número para display (sem casas decimais, sem separador de milhares)
 export function fmt2(n: number): string {
-  return n.toLocaleString("pt-PT", { maximumFractionDigits: 0 });
+  return Math.round(n).toString();
 }
 
 // Capitaliza primeira letra
@@ -713,10 +713,10 @@ export function parseQuickInput(input: string): ParseResult {
     result.erros.push(`Não reconhecido: '${originalNome}'`);
   }
 
-  // Calcular totals
-  const totalItens = 30000 + result.itens.subtotal; // Base 30000 para posse de itens ilegais
-  const totalDrogas = 22500 + result.drogas.subtotal; // Base 22500 para posse de droga
-  const totalMunicao = result.municao.total; // Sem base, só preço unitário
+  // Calcular totals - só adicionar base se houver itens nessa categoria
+  const totalDrogas = result.drogas.subtotal > 0 ? result.drogas.subtotal : 0;
+  const totalItens = result.itens.subtotal > 0 ? result.itens.subtotal : 0;
+  const totalMunicao = result.municao.total;
   const totalArmas = result.armas.total;
 
   result.totalGeral =

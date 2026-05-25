@@ -241,6 +241,7 @@ export default function App() {
       const cc = getCc();
       addExtra(cc, `Sequestro: ${seqCivis} civis, ${seqFunc} func. → ${fmt2(multa)} €`, multa);
       showAlert(`Multa de ${fmt2(multa)} € adicionada para CC ${cc}.`);
+      setSeqCivis(0); setSeqFunc(0);
     } else showAlert("Nenhum refém informado.");
   };
 
@@ -251,6 +252,7 @@ export default function App() {
     const cc = getCc();
     addExtra(cc, `Dinheiro não declarado: ${fmt2(dinheiroValor)} € → multa ${fmt2(multa)} €`, multa);
     showAlert(`Multa de ${fmt2(multa)} € adicionada para CC ${cc}.`);
+    setDinheiroValor(0);
   };
 
   // ========== TAB: MUNIÇÃO ==========
@@ -268,6 +270,8 @@ export default function App() {
       desc = desc.trimEnd();
       addExtra(cc, desc, multa);
       showAlert(`Multa de ${fmt2(multa)} € adicionada para CC ${cc}.`);
+      setMunBalasBaixo(0); setMunBalasMedio(0); setMunBalasAlto(0);
+      setMunCarrBaixo(0); setMunCarrMedio(0); setMunCarrAlto(0);
     } else showAlert("Nenhuma munição informada.");
   };
 
@@ -281,6 +285,7 @@ export default function App() {
       linha += `\nTOTAL: ${fmt(total)} €`;
       addExtra(cc, linha, total);
       showAlert(`Multa de ${fmt(total)} € adicionada para CC ${cc}.`);
+      setArmasBaixo(0); setArmasMedio(0); setArmasAlto(0);
     } else {
       let msg = "Passar coima base:\n";
       if (armasBaixo > 0 && armasBaixo < 5) msg += `- Baixo: ${armasBaixo} armas (min 5)\n`;
@@ -337,6 +342,7 @@ export default function App() {
     linha = linha.trimEnd();
     addExtra(cc, linha, total);
     showAlert(`Multa de ${fmt(total)} € adicionada para CC ${cc}.`);
+    setItensQuantidades({});
   };
 
   // ========== TAB: DROGAS ==========
@@ -384,6 +390,7 @@ export default function App() {
     linha = linha.trimEnd();
     addExtra(cc, linha, total);
     showAlert(`Multa de ${fmt(total)} € adicionada para CC ${cc}.`);
+    setDrogasQuantidades({});
   };
 
   // ========== TAB: MEDIAÇÃO ==========
@@ -479,21 +486,14 @@ export default function App() {
       msg += "--- DROGAS ---\n" + r.drogas.resultados.join("\n") + `\nTOTAL DROGAS: ${fmt2(r.drogas.subtotal)} €\n\n`;
     }
     if (r.itens.resultados.length) {
-      const totalItens = 30000 + r.itens.subtotal;
-      msg += "--- ITENS ILEGAIS (base 30 000€) ---\n  Coima base: 30 000.00 €\n" + r.itens.resultados.join("\n") + `\nTOTAL ITENS: ${fmt2(totalItens)} €\n\n`;
+      msg += "--- ITENS ILEGAIS ---\n" + r.itens.resultados.join("\n") + `\nTOTAL ITENS: ${fmt2(r.itens.subtotal)} €\n\n`;
     }
     if (r.municao.resultados.length) {
-      const totalMuni = r.municao.base + r.municao.total;
-      msg += "--- MUNIÇÃO (base 10.000€) ---\n";
-      msg += `  Coima base: ${fmt2(r.municao.base)}\n`;
+      msg += "--- MUNIÇÃO ---\n";
       msg += r.municao.resultados.join("\n") + `\n`;
-      msg += `TOTAL MUNIÇÃO: ${fmt2(totalMuni)} €\n\n`;
+      msg += `TOTAL MUNIÇÃO: ${fmt2(r.municao.total)} €\n\n`;
     }
     if (r.armas.resultados.length) {
-      const isLargeQtde = r.armas.resultados.some((item: string) => item.includes("base"));
-      if (isLargeQtde) {
-        msg += "⚠️ AVISO: Grande Quantidade de Armas - passar crime específico\n";
-      }
       msg += "--- ARMAS ---\n" + r.armas.resultados.join("\n") + `\nTOTAL ARMAS: ${fmt2(r.armas.total)} €\n\n`;
     }
     if (r.dinheiro.resultados.length) {
