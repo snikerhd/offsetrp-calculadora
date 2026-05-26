@@ -486,7 +486,7 @@ export default function App() {
       msg += "--- DROGAS ---\n" + r.drogas.resultados.join("\n") + `\nTOTAL DROGAS: ${fmt2(r.drogas.subtotal)} €\n\n`;
     }
     if (r.itens.resultados.length) {
-      msg += "--- ITENS ILEGAIS ---\n" + r.itens.resultados.join("\n") + `\nTOTAL ITENS: ${fmt2(r.itens.subtotal)} €\n\n`;
+      msg += "--- ITENS ILEGAIS (base 30 000€) ---\n" + r.itens.resultados.join("\n") + `\nTOTAL ITENS: ${fmt2(30000 + r.itens.subtotal)} €\n\n`;
     }
     if (r.municao.resultados.length) {
       msg += "--- MUNIÇÃO ---\n";

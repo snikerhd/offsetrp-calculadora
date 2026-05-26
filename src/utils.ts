@@ -715,7 +715,7 @@ export function parseQuickInput(input: string): ParseResult {
 
   // Calcular totals - só adicionar base se houver itens nessa categoria
   const totalDrogas = result.drogas.subtotal > 0 ? result.drogas.subtotal : 0;
-  const totalItens = result.itens.subtotal > 0 ? result.itens.subtotal : 0;
+  const totalItens = result.itens.subtotal > 0 ? 30000 + result.itens.subtotal : 0;
   const totalMunicao = result.municao.total;
   const totalArmas = result.armas.total;
 
