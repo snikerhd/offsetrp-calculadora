@@ -14,12 +14,37 @@ import {
 } from "./utils";
 import EntriesPanel from "./EntriesPanel";
 
-// Types
+// ==================== IMPORTS DINÂMICOS DE IMAGENS ====================
+const imageModules = import.meta.glob<{ default: string }>(
+  "./assets/items/*.png",
+  { eager: true }
+);
+
+const imageMap: Record<string, string> = {};
+for (const [path, module] of Object.entries(imageModules)) {
+  const fileName = path.split("/").pop()!;
+  const normalizedName = fileName
+    .replace(/\.png$/i, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  imageMap[normalizedName] = module.default;
+}
+
+function normalizeImageName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+// ==================== TIPOS ====================
 interface CadEntry { desc: string; meses: number; multa: number; }
 interface ExtraEntry { desc: string; valor: number; }
 interface ProfileCrime { crime: string; multa: number; }
 
-// Edit state for CAD (strings for numeric fields so user can freely type)
 interface EditingCAD {
   cc: string;
   index: number;
@@ -28,7 +53,6 @@ interface EditingCAD {
   multa: string;
 }
 
-// Edit state for Extra
 interface EditingExtra {
   cc: string;
   index: number;
@@ -48,6 +72,7 @@ const TABS = [
   { id: "Catálogo", icon: BookOpen, label: "Catálogo" },
   { id: "Perfis", icon: Layers, label: "Perfis" },
   { id: "Coimas Rápidas PT", icon: Calculator, label: "Coimas Rápidas" },
+  { id: "Homicídios", icon: Gavel, label: "Homicídios" },
   { id: "Relatório", icon: FileSpreadsheet, label: "Relatório" },
 ];
 
@@ -56,8 +81,6 @@ type Department = 'DPSA' | 'DPLS' | 'DBC';
 export default function App() {
   const [activeTab, setActiveTab] = useState("Coimas Rápidas PT");
   const [department, setDepartment] = useState<Department>('DPLS');
-  
-  // Usar ref para o tempo para evitar re-renderizações desnecessárias
   const [systemTime, setSystemTime] = useState(new Date());
   const systemTimeRef = useRef(new Date());
 
@@ -65,23 +88,24 @@ export default function App() {
   const [cadPorCC, setCadPorCC] = useState<Record<string, CadEntry[]>>({});
   const [extraPorCC, setExtraPorCC] = useState<Record<string, ExtraEntry[]>>({});
 
-  // Editing states
   const [editingCAD, setEditingCAD] = useState<EditingCAD | null>(null);
   const [editingExtra, setEditingExtra] = useState<EditingExtra | null>(null);
   const [showEntriesPanel, setShowEntriesPanel] = useState(false);
 
-  // Profiles
   const [perfis, setPerfis] = useState<Record<string, ProfileCrime[]>>({});
   const [selectedPerfil, setSelectedPerfil] = useState<string | null>(null);
 
-  // Sequestro
   const [seqCivis, setSeqCivis] = useState(0);
   const [seqFunc, setSeqFunc] = useState(0);
+  const [homCivis,setHomCivis]=useState(0);
+  const [homFunc,setHomFunc]=useState(0);
+  const [homQCivis,setHomQCivis]=useState(0);
+  const [homQFunc,setHomQFunc]=useState(0);
+  const [homTent,setHomTent]=useState(false);
+  const [homQTent,setHomQTent]=useState(false);
 
-  // Dinheiro
   const [dinheiroValor, setDinheiroValor] = useState(0);
 
-  // Munição
   const [munBalasBaixo, setMunBalasBaixo] = useState(0);
   const [munBalasMedio, setMunBalasMedio] = useState(0);
   const [munBalasAlto, setMunBalasAlto] = useState(0);
@@ -89,39 +113,32 @@ export default function App() {
   const [munCarrMedio, setMunCarrMedio] = useState(0);
   const [munCarrAlto, setMunCarrAlto] = useState(0);
 
-  // Armas
   const [armasBaixo, setArmasBaixo] = useState(0);
   const [armasMedio, setArmasMedio] = useState(0);
   const [armasAlto, setArmasAlto] = useState(0);
 
-  // Itens
   const [itensInput, setItensInput] = useState("");
   const [itensResultado, setItensResultado] = useState("");
   const [itensTotal, setItensTotal] = useState("");
   const [searchItens, setSearchItens] = useState("");
   const [itensQuantidades, setItensQuantidades] = useState<Record<string, number>>({});
 
-  // Drogas
   const [drogasInput, setDrogasInput] = useState("");
   const [drogasResultado, setDrogasResultado] = useState("");
   const [drogasQuantidades, setDrogasQuantidades] = useState<Record<string, number>>({});
 
-  // Mediação
   const [medCoima, setMedCoima] = useState(0);
   const [medMeses, setMedMeses] = useState(0);
   const [medPercCoima, setMedPercCoima] = useState(100);
   const [medPercMeses, setMedPercMeses] = useState(100);
   const [tentValor, setTentValor] = useState(0);
 
-  // Catálogo
   const [searchCrime, setSearchCrime] = useState("");
   const [selectedCrimes, setSelectedCrimes] = useState<Set<number>>(new Set());
 
-  // Testes
   const [testeInput, setTesteInput] = useState("");
   const [testeHistorico, setTesteHistorico] = useState<string[]>([]);
 
-  // Relatório
   const [relTipo, setRelTipo] = useState("Assalto a loja");
   const [relAssaltantes, setRelAssaltantes] = useState(1);
   const [relCivis, setRelCivis] = useState(0);
@@ -133,16 +150,10 @@ export default function App() {
   const [relPercCoima, setRelPercCoima] = useState(100);
   const [relPercSentenca, setRelPercSentenca] = useState(100);
   const [relatorio, setRelatorio] = useState("");
-  const [relCCCoima, setRelCCCoima] = useState("");
-  const [relCoimaRapida, setRelCoimaRapida] = useState("");
-  const [relCCCrimesNome, setRelCCCrimesNome] = useState("");
-  const [relCrimesNome, setRelCrimesNome] = useState("");
-  const [relTentativa, setRelTentativa] = useState(false);
   const [relCCCAD, setRelCCCAD] = useState("");
   const [relMesesCAD, setRelMesesCAD] = useState(0);
   const [relValorCAD, setRelValorCAD] = useState(0);
 
-  // Velocidade e EPI
   const [velLimite, setVelLimite] = useState(50);
   const [velRegistrada, setVelRegistrada] = useState(0);
   const [velResultado, setVelResultado] = useState("");
@@ -153,11 +164,10 @@ export default function App() {
   const [epiMascara, setEpiMascara] = useState(false);
   const [epiResultado, setEpiResultado] = useState("");
 
-  // Alert
   const [alertMsg, setAlertMsg] = useState("");
   const alertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load profiles from localStorage
+  // Load profiles
   useEffect(() => {
     try {
       const saved = localStorage.getItem("perfis_coimas");
@@ -165,11 +175,10 @@ export default function App() {
     } catch { /* empty */ }
   }, []);
 
-  // System clock - agora só atualiza o ref, não causa re-render
+  // Clock
   useEffect(() => {
     const timer = setInterval(() => {
       systemTimeRef.current = new Date();
-      // Atualizar state apenas uma vez por segundo para o relógio do header
       setSystemTime(new Date());
     }, 1000);
     return () => clearInterval(timer);
@@ -202,12 +211,11 @@ export default function App() {
     }));
   }, []);
 
-  // All CCs that have entries
   const allCCsWithEntries = Array.from(
     new Set([...Object.keys(cadPorCC), ...Object.keys(extraPorCC)])
   ).filter(cc => (cadPorCC[cc]?.length || 0) > 0 || (extraPorCC[cc]?.length || 0) > 0);
 
-  // Theme colors based on department
+  // Theme
   const accentColor = department === 'DPSA' ? 'text-amber-400' : department === 'DPLS' ? 'text-blue-400' : 'text-white';
   const bgGradient = department === 'DPSA'
     ? 'from-amber-950/95 via-slate-900/98 to-neutral-950/100'
@@ -234,7 +242,7 @@ export default function App() {
     return 'text-gray-400 hover:text-white';
   };
 
-  // ========== TAB: SEQUESTRO ==========
+  // ========== FUNÇÕES DAS ABAS ==========
   const addSequestro = () => {
     const multa = calcSequestro(seqCivis, seqFunc);
     if (multa > 0) {
@@ -245,7 +253,14 @@ export default function App() {
     } else showAlert("Nenhum refém informado.");
   };
 
-  // ========== TAB: DINHEIRO ==========
+  const addHomicidios = () => {
+    const cc = getCc();
+    const v1 = ((homCivis*85000)+(homFunc*100000))*(homTent?0.75:1);
+    const v2 = ((homQCivis*100000)+(homQFunc*115000))*(homQTent?0.75:1);
+    if(v1>0) addExtra(cc,`HOMICÍDIO${homTent?' (Tentativa)':''}: ${homCivis} civis, ${homFunc} func. → ${fmt2(v1)} €`,v1);
+    if(v2>0) addExtra(cc,`HOMICÍDIO QUALIFICADO${homQTent?' (Tentativa)':''}: ${homQCivis} civis, ${homQFunc} func. → ${fmt2(v2)} €`,v2);
+  };
+
   const addDinheiro = () => {
     if (dinheiroValor <= 10000) { showAlert("Quantidade Legal"); return; }
     const multa = dinheiroValor * 0.75;
@@ -255,7 +270,6 @@ export default function App() {
     setDinheiroValor(0);
   };
 
-  // ========== TAB: MUNIÇÃO ==========
   const addMunicao = () => {
     const multa = calcMunicao(munBalasBaixo, munBalasMedio, munBalasAlto, munCarrBaixo, munCarrMedio, munCarrAlto);
     if (multa > 0) {
@@ -275,7 +289,6 @@ export default function App() {
     } else showAlert("Nenhuma munição informada.");
   };
 
-  // ========== TAB: ARMAS ==========
   const addArmas = () => {
     const { total, detalhes } = calcArmasGrandeQtde(armasBaixo, armasMedio, armasAlto);
     if (total > 0) {
@@ -296,7 +309,6 @@ export default function App() {
     }
   };
 
-  // ========== TAB: ITENS ==========
   const calcItensRapido = () => {
     const texto = itensInput.trim();
     if (!texto) { showAlert("Digite uma lista de itens"); return; }
@@ -345,7 +357,6 @@ export default function App() {
     setItensQuantidades({});
   };
 
-  // ========== TAB: DROGAS ==========
   const calcDrogasRapido = () => {
     const texto = drogasInput.trim();
     if (!texto) { showAlert("Digite uma lista de drogas"); return; }
@@ -393,17 +404,16 @@ export default function App() {
     setDrogasQuantidades({});
   };
 
-  // ========== TAB: MEDIAÇÃO ==========
   const calcMediacao = () => {
     const nc = medCoima * (medPercCoima / 100);
     const nm = medMeses * (medPercMeses / 100);
     showAlert(`Após mediação:\nCoima: ${fmt2(nc)} €\nMeses: ${nm.toFixed(1)} meses`);
   };
+
   const calcTentativa = () => {
     showAlert(`Valor da tentativa: ${fmt2(tentValor * 0.75)} €`);
   };
 
-  // ========== TAB: CATÁLOGO ==========
   const allCrimes = getAllCrimesFlat();
   const filteredCrimes = searchCrime
     ? allCrimes.filter(c => {
@@ -433,7 +443,6 @@ export default function App() {
     }
   };
 
-  // ========== TAB: PERFIS ==========
   const perfilCrimes = selectedPerfil ? (perfis[selectedPerfil] || []) : [];
   const perfilTotal = perfilCrimes.reduce((s, c) => s + c.multa, 0);
 
@@ -475,7 +484,6 @@ export default function App() {
     }));
   };
 
-  // ========== TAB: COIMAS RÁPIDAS PT ==========
   const calcularTeste = () => {
     const texto = testeInput.trim();
     if (!texto) { showAlert("Digite algo no formato: quantidade item"); return; }
@@ -515,7 +523,6 @@ export default function App() {
     setTesteInput("");
   };
 
-  // ========== TAB: RELATÓRIO ==========
   const addValorCAD = () => {
     const cc = relCCCAD.trim();
     if (!cc) { showAlert("Indique o CC."); return; }
@@ -524,50 +531,45 @@ export default function App() {
     showAlert(`Valor de ${fmt2(relValorCAD)} € e ${relMesesCAD} meses adicionados ao CAD do CC '${cc}'.`);
   };
 
-  const addCoimasRapidasRelatorio = () => {
-    const texto = relCoimaRapida.trim();
-    const cc = relCCCoima.trim() || "Geral";
-    if (!texto) { showAlert("Digite a lista de coimas rápidas."); return; }
-
-    const r = parseQuickInput(texto);
-    if (r.totalGeral === 0) { showAlert("Nenhuma coima válida calculada."); return; }
-
-    const blocos: string[] = [];
-    if (r.drogas.subtotal > 0) blocos.push(`• Drogas: ${fmt(r.drogas.subtotal)} €`);
-    if (r.itens.subtotal > 0) blocos.push(`• Itens Ilegais: ${fmt(30000 + r.itens.subtotal)} €`);
-    if (r.municao.total > 0) blocos.push(`• Munição: ${fmt(r.municao.base + r.municao.total)} €`);
-    if (r.armas.total > 0) blocos.push(`• Armas Grande Qtde: ${fmt(r.armas.total)} €`);
-    if (r.dinheiro.total > 0) blocos.push(`• Dinheiro não declarado: ${fmt(r.dinheiro.total)} €`);
-    if (r.sequestro.total > 0) blocos.push(`• Sequestro: ${fmt(r.sequestro.total)} €`);
-    if (r.crimes.totalMulta > 0) blocos.push(`• Crimes: ${fmt(r.crimes.totalMulta)} €`);
-
-    const blocoCompleto = blocos.join("\n");
-    addExtra(cc, blocoCompleto, r.totalGeral);
-    setRelCoimaRapida(""); setRelCCCoima("");
-    showAlert(`Coimas extras no valor de ${fmt2(r.totalGeral)} € para CC '${cc}'.`);
-  };
-
-  const addCrimesPorNome = () => {
-    const texto = relCrimesNome.trim();
-    const cc = relCCCrimesNome.trim() || "Geral";
-    if (!texto) { showAlert("Digite a lista de crimes."); return; }
-    const { descricoes, totalMulta, totalMeses } = parseCrimesInput(texto, relTentativa);
-    if (totalMulta === 0 && !descricoes.some(d => d.includes("⚠️"))) {
-      showAlert("Nenhum crime válido identificado."); return;
-    }
-    addCAD(cc, descricoes.join("\n"), totalMeses, totalMulta);
-    setRelCrimesNome(""); setRelCCCrimesNome(""); setRelTentativa(false);
-    showAlert(`Crimes adicionados ao CAD do CC '${cc}'. Total: ${fmt2(totalMulta)} €, ${totalMeses.toFixed(1)} meses`);
-  };
-
+  // ========== FUNÇÃO GERAR RELATÓRIO (COM PRODUÇÃO DE DROGA) ==========
   const gerarRelatorio = () => {
     const ccs = relCCs.trim().split("\n").map(l => l.trim()).filter(Boolean);
     const linhas: string[] = [];
 
-    linhas.push("📝 Resumo:");
-    if (relCP) linhas.push(`${relTipo} (cp da ${relCP}), tinha ${relAssaltantes} assaltante e ${relCivis} reféns civis e ${relFunc} funcionários públicos.`);
-    else linhas.push(`${relTipo}, tinha ${relAssaltantes} assaltante e ${relCivis} reféns civis e ${relFunc} funcionários públicos.`);
-    linhas.push(relObs);
+    let resumo = "📝 Resumo:\n";
+    const isProducaoDroga = relTipo === "Produção de droga";
+
+    if (isProducaoDroga) {
+      if (relCP) {
+        resumo += `Recebemos um alerta de produção de droga, chegamos ao local no cp ${relCP} encontramos ${relAssaltantes} sujeito${relAssaltantes !== 1 ? 's' : ''} a processar.`;
+      } else {
+        resumo += `Recebemos um alerta de produção de droga, chegamos ao local encontramos ${relAssaltantes} sujeito${relAssaltantes !== 1 ? 's' : ''} a processar.`;
+      }
+      let obs = relObs.trim();
+      obs = obs.replace(/passado alguns minutos\.?/i, '').trim();
+      if (obs) {
+        obs = obs.charAt(0).toUpperCase() + obs.slice(1);
+        resumo += ` ${obs}`;
+      }
+    } else {
+      if (relCP) {
+        resumo += `Houve um ${relTipo} no cp ${relCP}, tinha ${relAssaltantes} assaltante${relAssaltantes !== 1 ? 's' : ''} e ${relCivis} refém${relCivis !== 1 ? 's' : ''} civis`;
+      } else {
+        resumo += `Houve um ${relTipo}, tinha ${relAssaltantes} assaltante${relAssaltantes !== 1 ? 's' : ''} e ${relCivis} refém${relCivis !== 1 ? 's' : ''} civis`;
+      }
+      if (relFunc > 0) {
+        resumo += ` e ${relFunc} funcionário${relFunc !== 1 ? 's' : ''} públicos`;
+      }
+      let obs = relObs.trim();
+      obs = obs.replace(/passado alguns minutos\.?/i, '').trim();
+      if (obs) {
+        obs = obs.charAt(0).toUpperCase() + obs.slice(1);
+        resumo += `, os assaltantes ${obs}.`;
+      } else {
+        resumo += `.`;
+      }
+    }
+    linhas.push(resumo);
     linhas.push("");
 
     linhas.push("-----------------------------📸 EVIDÊNCIAS 📸------------------------------");
@@ -584,7 +586,6 @@ export default function App() {
       linhas.push(`================== CC: ${cc} ==================`);
       linhas.push("--- Coimas CAD ---");
       const cadEntries = cadPorCC[cc] || [];
-      
       if (cadEntries.length) {
         for (const entry of cadEntries) {
           linhas.push(`  ${entry.desc}`);
@@ -595,10 +596,8 @@ export default function App() {
       }
 
       linhas.push("--- Coimas Extras ---");
-      
       const extraEntries = extraPorCC[cc] || [];
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
-      
       if (extraEntries.length || sequestroMultaRel > 0) {
         for (const entry of extraEntries) {
           linhas.push(`  ${entry.desc}`);
@@ -626,7 +625,7 @@ export default function App() {
     }
 
     linhas.push("------------------------------- MEDIAÇÃO -------------------------------");
-    linhas.push(`Mediação ao cargo da ${relAdvogado} devido ao facto de não se encontrarem advogados presentes ao serviço no momento da detenção. A mediação foi efetuada após acordo mútuo entre ambas as partes, sendo a coima ajustada para ${relPercCoima}% e a sentença ajustada para ${relPercSentenca}% do valor original.`);
+    linhas.push(`Mediação ao cargo da ${relAdvogado} devido ao facto de não se encontrarem advogados presentes ao serviço no momento da detenção. A mediação foi efetuada após acordo mútuo entre ambas as partes, sendo a coima a ${relPercCoima}% e a sentença a ${relPercSentenca}%.`);
     linhas.push("");
 
     for (const cc of ccs) {
@@ -668,18 +667,15 @@ export default function App() {
     }
   };
 
-  // Input/Button styles
   const inputCls = `w-full px-3 py-2 bg-black/40 border border-white/10 rounded text-white text-sm focus:outline-none focus:border-white/30 font-mono`;
   const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1";
 
-  // Total calculations
   const totalExtra = (extraPorCC[getCc()] || []).reduce((s, e) => s + e.valor, 0);
   const totalCAD = (cadPorCC[getCc()] || []).reduce((s, e) => s + e.multa, 0);
 
   return (
     <div className={`min-h-screen bg-gradient-to-br ${bgGradient} text-white font-sans flex flex-col justify-between relative selection:bg-white/20 overflow-x-hidden`}>
       
-      {/* Entries Panel Modal - agora é um componente separado */}
       <EntriesPanel
         showEntriesPanel={showEntriesPanel}
         setShowEntriesPanel={setShowEntriesPanel}
@@ -695,24 +691,20 @@ export default function App() {
         fmt2={fmt2}
       />
 
-      {/* Top flashing light bar */}
       <div className="absolute top-0 left-0 right-0 h-1.5 flex z-50">
         <div className={`flex-1 transition-all duration-1000 ${department === 'DPSA' ? 'bg-amber-600 animate-pulse' : department === 'DPLS' ? 'bg-blue-600 animate-pulse' : 'bg-white/80 animate-pulse'}`} />
         <div className="w-12 bg-white/20 animate-ping absolute left-1/2 transform -translate-x-1/2 h-1.5" />
         <div className={`flex-1 transition-all duration-1000 ${department === 'DPSA' ? 'bg-yellow-600 animate-pulse delay-500' : department === 'DPLS' ? 'bg-red-600 animate-pulse delay-500' : 'bg-neutral-400 animate-pulse delay-500'}`} />
       </div>
 
-      {/* Decorative Grid */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none opacity-40" />
 
-      {/* Alert */}
       {alertMsg && (
         <div className="fixed top-16 right-4 z-[60] max-w-sm p-4 rounded-lg shadow-lg bg-neutral-900 border border-white/10 text-white">
           <pre className="whitespace-pre-wrap text-sm">{alertMsg}</pre>
         </div>
       )}
 
-      {/* Header */}
       <header className="border-b border-white/10 bg-slate-950/90 backdrop-blur-md px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 z-10 relative">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg bg-neutral-900 border ${department === 'DPSA' ? 'border-amber-500/30' : department === 'DPLS' ? 'border-blue-500/30' : 'border-white/30'}`}>
@@ -733,16 +725,13 @@ export default function App() {
           </div>
         </div>
 
-        {/* Toggles */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Department Toggle */}
           <div className="flex bg-neutral-900/95 border border-white/10 rounded-lg p-0.5 text-xs">
             <button onClick={() => setDepartment('DPSA')} className={`px-3.5 py-1.5 rounded-md font-bold uppercase transition-all duration-200 cursor-pointer ${activeHeaderTab('DPSA')}`}>DPSA</button>
             <button onClick={() => setDepartment('DPLS')} className={`px-3.5 py-1.5 rounded-md font-bold uppercase transition-all duration-200 cursor-pointer ${activeHeaderTab('DPLS')}`}>DPLS</button>
             <button onClick={() => setDepartment('DBC')} className={`px-3.5 py-1.5 rounded-md font-bold uppercase transition-all duration-200 cursor-pointer ${activeHeaderTab('DBC')}`}>DBC</button>
           </div>
 
-          {/* Digital Clock */}
           <div className="hidden lg:flex items-center gap-2 bg-neutral-900/95 border border-white/10 px-3 py-1.5 rounded-lg text-xs font-mono font-bold tracking-wider text-gray-300">
             <Clock className="w-4 h-4 text-amber-500" />
             <span>{systemTime.toLocaleTimeString('pt-PT')}</span>
@@ -750,7 +739,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Bottom bar - CC */}
       <div className="border-b border-white/10 bg-slate-950/90 px-4 py-3 z-10 relative">
         <div className="max-w-7xl mx-auto flex items-center gap-3 flex-wrap">
           <label className="text-sm font-bold text-white">CC Atual:</label>
@@ -760,7 +748,6 @@ export default function App() {
             <span className="mx-2 text-gray-600">|</span>
             <span className="text-sm text-gray-400">CAD: <strong className="text-green-400">{fmt2(totalCAD)} €</strong></span>
           </div>
-          {/* EDIT ENTRIES BUTTON */}
           <button
             onClick={() => setShowEntriesPanel(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/30 text-amber-300 transition-colors cursor-pointer"
@@ -778,7 +765,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="border-b border-white/10 bg-slate-950/60 overflow-x-auto z-10 relative">
         <div className="max-w-7xl mx-auto flex">
           {TABS.map(({ id, icon: Icon, label }) => (
@@ -798,7 +784,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Tab Content */}
       <div className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full z-10 relative">
         {/* SEQUESTRO */}
         {activeTab === "Sequestro" && (
@@ -807,34 +792,40 @@ export default function App() {
               <Shield className={`w-5 h-5 ${accentColor}`} /> Sequestro
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg">
-              <div>
-                <label className={labelCls}>Civis:</label>
-                <input type="number" value={seqCivis} onChange={e => setSeqCivis(Number(e.target.value))} className={inputCls} />
-              </div>
-              <div>
-                <label className={labelCls}>Funcionários Públicos:</label>
-                <input type="number" value={seqFunc} onChange={e => setSeqFunc(Number(e.target.value))} className={inputCls} />
-              </div>
+              <div><label className={labelCls}>Civis:</label><input type="number" value={seqCivis} onChange={e => setSeqCivis(Number(e.target.value))} className={inputCls} /></div>
+              <div><label className={labelCls}>Funcionários Públicos:</label><input type="number" value={seqFunc} onChange={e => setSeqFunc(Number(e.target.value))} className={inputCls} /></div>
             </div>
             <button onClick={addSequestro} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
-        {/* DINHEIRO */}
+        {activeTab === "Homicídios" && (
+          <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
+            <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4">Homicídios</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className={labelCls}>Homicídio Civis</label><input type="number" value={homCivis} onChange={e=>setHomCivis(Number(e.target.value))} className={inputCls}/></div>
+              <div><label className={labelCls}>Homicídio Func.</label><input type="number" value={homFunc} onChange={e=>setHomFunc(Number(e.target.value))} className={inputCls}/></div>
+            </div>
+            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={homTent} onChange={e=>setHomTent(e.target.checked)}/> Tentativa x0.75</label>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div><label className={labelCls}>Hom. Qualificado Civis</label><input type="number" value={homQCivis} onChange={e=>setHomQCivis(Number(e.target.value))} className={inputCls}/></div>
+              <div><label className={labelCls}>Hom. Qualificado Func.</label><input type="number" value={homQFunc} onChange={e=>setHomQFunc(Number(e.target.value))} className={inputCls}/></div>
+            </div>
+            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={homQTent} onChange={e=>setHomQTent(e.target.checked)}/> Tentativa x0.75</label>
+            <button onClick={addHomicidios} className={`w-full mt-4 py-3 rounded-lg ${fillBtnTheme}`}>Adicionar</button>
+          </div>
+        )}
+
         {activeTab === "Dinheiro" && (
           <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
             <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
               <Coins className={`w-5 h-5 ${accentColor}`} /> Dinheiro Não Declarado
             </h2>
-            <div className="max-w-md">
-              <label className={labelCls}>Valor em dinheiro apreendido (€):</label>
-              <input type="number" value={dinheiroValor} onChange={e => setDinheiroValor(Number(e.target.value))} className={inputCls} />
-            </div>
+            <div className="max-w-md"><label className={labelCls}>Valor em dinheiro apreendido (€):</label><input type="number" value={dinheiroValor} onChange={e => setDinheiroValor(Number(e.target.value))} className={inputCls} /></div>
             <button onClick={addDinheiro} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
-        {/* MUNIÇÃO */}
         {activeTab === "Munição" && (
           <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
             <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
@@ -856,7 +847,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ARMAS */}
         {activeTab === "Armas G. Qtde" && (
           <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
             <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
@@ -871,7 +861,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ITENS ILEGAIS */}
+        {/* ITENS ILEGAIS - IMAGENS GRANDES À DIREITA */}
         {activeTab === "Itens Ilegais" && (
           <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
             <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
@@ -889,22 +879,36 @@ export default function App() {
             <div className="mb-3">
               <input value={searchItens} onChange={e => setSearchItens(e.target.value)} className={inputCls} placeholder="Pesquisar item..." />
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-4 max-h-64 overflow-y-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-4">
               {Object.entries(ITENS_ILEGAIS)
                 .filter(([item]) => !searchItens || normalizeText(item).includes(normalizeText(searchItens)))
-                .map(([item, preco]) => (
-                  <div key={item} className="bg-black/40 rounded-lg border border-white/10 p-3 text-center">
-                    <div className="text-xs font-bold text-gray-300">{item}</div>
-                    <div className="text-[10px] text-gray-500">{fmt(preco)} €</div>
-                    <input type="number" min={0} value={itensQuantidades[item] || 0} onChange={e => setItensQuantidades(prev => ({ ...prev, [item]: Number(e.target.value) }))} className={`${inputCls} !mt-2 text-center text-xs`} />
-                  </div>
-                ))}
+                .map(([item, preco]) => {
+                  const imgSrc = imageMap[normalizeImageName(item)];
+                  return (
+                    <div key={item} className="bg-black/40 rounded-lg border border-white/10 p-3">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1">
+                          <div className="text-xs font-bold text-gray-300">{item}</div>
+                          <div className="text-[10px] text-gray-500">{fmt(preco)} €</div>
+                        </div>
+                        {imgSrc && <img src={imgSrc} alt={item} className="w-16 h-16 object-contain" />}
+                      </div>
+                      <input
+                        type="number"
+                        min={0}
+                        value={itensQuantidades[item] || 0}
+                        onChange={e => setItensQuantidades(prev => ({ ...prev, [item]: Number(e.target.value) }))}
+                        className={`${inputCls} !mt-2 text-center text-xs`}
+                      />
+                    </div>
+                  );
+                })}
             </div>
             <button onClick={addItensGrid} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
-        {/* DROGAS */}
+        {/* DROGAS - IMAGENS GRANDES À ESQUERDA */}
         {activeTab === "Drogas" && (
           <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
             <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
@@ -918,28 +922,37 @@ export default function App() {
               </div>
               {drogasResultado && <pre className="mt-2 text-xs whitespace-pre-wrap text-amber-400 font-mono">{drogasResultado}</pre>}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4 max-h-64 overflow-y-auto">
-              {Object.keys(PRECOS_DROGAS).map(droga => (
-                <div key={droga} className="bg-black/40 rounded-lg border border-white/10 p-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-gray-300">{droga}:</label>
-                    <span className="text-xs text-amber-400/70">{fmt(PRECOS_DROGAS[droga])} €</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+              {Object.keys(PRECOS_DROGAS).map(droga => {
+                const imgSrc = imageMap[normalizeImageName(droga)];
+                return (
+                  <div key={droga} className="bg-black/40 rounded-lg border border-white/10 p-3">
+                    <div className="flex items-center gap-3">
+                      {imgSrc && <img src={imgSrc} alt={droga} className="w-16 h-16 object-contain" />}
+                      <div className="flex-1">
+                        <label className="text-xs font-bold text-gray-300">{droga}:</label>
+                        <div className="text-[10px] text-amber-400/70">{fmt(PRECOS_DROGAS[droga])} €</div>
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      value={drogasQuantidades[droga] || 0}
+                      onChange={e => setDrogasQuantidades(prev => ({ ...prev, [droga]: Number(e.target.value) }))}
+                      className={`${inputCls} mt-2`}
+                    />
                   </div>
-                  <input type="number" min={0} value={drogasQuantidades[droga] || 0} onChange={e => setDrogasQuantidades(prev => ({ ...prev, [droga]: Number(e.target.value) }))} className={`${inputCls} mt-1`} />
-                </div>
-              ))}
+                );
+              })}
             </div>
             <button onClick={addDrogasGrid} className={`w-full py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
           </div>
         )}
 
-        {/* MEDIAÇÃO/TENTATIVA */}
         {activeTab === "Mediação/Tentativa" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
-                <Scale className={`w-5 h-5 ${accentColor}`} /> Mediação
-              </h2>
+              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2"><Scale className={`w-5 h-5 ${accentColor}`} /> Mediação</h2>
               <div className="space-y-3">
                 <div><label className={labelCls}>Coima original (CAD):</label><input type="number" value={medCoima} onChange={e => setMedCoima(Number(e.target.value))} className={inputCls} /></div>
                 <div><label className={labelCls}>Meses originais:</label><input type="number" value={medMeses} onChange={e => setMedMeses(Number(e.target.value))} className={inputCls} /></div>
@@ -949,22 +962,17 @@ export default function App() {
               <button onClick={calcMediacao} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular Mediação</button>
             </div>
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
-                <Gavel className={`w-5 h-5 ${accentColor}`} /> Tentativa de Crime (75%)
-              </h2>
+              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2"><Gavel className={`w-5 h-5 ${accentColor}`} /> Tentativa de Crime (75%)</h2>
               <div><label className={labelCls}>Valor do crime consumado:</label><input type="number" value={tentValor} onChange={e => setTentValor(Number(e.target.value))} className={inputCls} /></div>
               <button onClick={calcTentativa} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular Tentativa</button>
             </div>
           </div>
         )}
 
-        {/* VELOCIDADE E EPI */}
         {activeTab === "Velocidade/EPI" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
-                <Car className={`w-5 h-5 ${accentColor}`} /> Excesso de Velocidade
-              </h2>
+              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2"><Car className={`w-5 h-5 ${accentColor}`} /> Excesso de Velocidade</h2>
               <div className="space-y-3">
                 <div><label className={labelCls}>Limite de velocidade (km/h):</label><input type="number" value={velLimite} onChange={e => setVelLimite(Number(e.target.value))} className={inputCls} /></div>
                 <div><label className={labelCls}>Velocidade registada (km/h):</label><input type="number" value={velRegistrada} onChange={e => setVelRegistrada(Number(e.target.value))} className={inputCls} /></div>
@@ -976,14 +984,10 @@ export default function App() {
               {velResultado && <div className={`mt-3 p-3 rounded-lg text-xs ${velResultado.includes("Sem") ? "bg-green-900/30 text-green-400" : "bg-amber-900/30 text-amber-400"}`}>{velResultado}</div>}
             </div>
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
-                <ShieldAlert className={`w-5 h-5 ${accentColor}`} /> Falta de EPI
-              </h2>
+              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2"><ShieldAlert className={`w-5 h-5 ${accentColor}`} /> Falta de EPI</h2>
               <div className="space-y-2">
                 {[{ label: "Colete Refletor", val: epiColete, set: setEpiColete }, { label: "Capacete (mineiros)", val: epiCapacete, set: setEpiCapacete }, { label: "Botas biqueira aço", val: epiBotas, set: setEpiBotas }, { label: "Calças largas", val: epiCalcas, set: setEpiCalcas }, { label: "Máscara proteção", val: epiMascara, set: setEpiMascara }].map(({ label, val, set }) => (
-                  <label key={label} className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-white">
-                    <input type="checkbox" checked={val} onChange={e => set(e.target.checked)} className="accent-amber-500" /> {label}
-                  </label>
+                  <label key={label} className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-white"><input type="checkbox" checked={val} onChange={e => set(e.target.checked)} className="accent-amber-500" /> {label}</label>
                 ))}
               </div>
               <p className="text-[10px] text-gray-500 mt-2">Nota: Cada peça em falta = 2.500€, máximo 12.500€</p>
@@ -993,12 +997,9 @@ export default function App() {
           </div>
         )}
 
-        {/* CATÁLOGO */}
         {activeTab === "Catálogo" && (
           <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-            <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
-              <BookOpen className={`w-5 h-5 ${accentColor}`} /> Catálogo de Crimes
-            </h2>
+            <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2"><BookOpen className={`w-5 h-5 ${accentColor}`} /> Catálogo de Crimes</h2>
             <div className="flex gap-2 mb-4">
               <input value={searchCrime} onChange={e => setSearchCrime(e.target.value)} className={inputCls} placeholder="Pesquisar crime..." />
               <button onClick={() => setSearchCrime("")} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Limpar</button>
@@ -1007,13 +1008,7 @@ export default function App() {
             <div className="overflow-auto max-h-[60vh] rounded border border-white/10">
               <table className="w-full text-xs font-mono">
                 <thead className="bg-neutral-900 sticky top-0">
-                  <tr>
-                    <th className="p-2 text-left w-8"><input type="checkbox" onChange={e => handleSelectAllCrimes(e.target.checked)} checked={selectedCrimes.size > 0} /></th>
-                    <th className="p-2 text-left">Categoria</th>
-                    <th className="p-2 text-left">Crime</th>
-                    <th className="p-2 text-center">Meses</th>
-                    <th className="p-2 text-right">Multa</th>
-                  </tr>
+                  <tr><th className="p-2 text-left w-8"><input type="checkbox" onChange={e => handleSelectAllCrimes(e.target.checked)} checked={selectedCrimes.size > 0} /></th><th className="p-2 text-left">Categoria</th><th className="p-2 text-left">Crime</th><th className="p-2 text-center">Meses</th><th className="p-2 text-right">Multa</th></tr>
                 </thead>
                 <tbody>
                   {filteredCrimes.map((c) => {
@@ -1034,72 +1029,60 @@ export default function App() {
           </div>
         )}
 
-        {/* PERFIS */}
         {activeTab === "Perfis" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
               <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-3">Perfis Guardados</h2>
               <div className="space-y-1 mb-3 max-h-96 overflow-auto">
-                {Object.keys(perfis).map(nome => (
-                  <button key={nome} onClick={() => setSelectedPerfil(nome)} className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-colors cursor-pointer ${selectedPerfil === nome ? "bg-amber-600 text-white" : "bg-black/40 hover:bg-white/10 text-gray-400"}`}>{nome}</button>
-                ))}
+                {Object.keys(perfis).map(nome => <button key={nome} onClick={() => setSelectedPerfil(nome)} className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-colors cursor-pointer ${selectedPerfil === nome ? "bg-amber-600 text-white" : "bg-black/40 hover:bg-white/10 text-gray-400"}`}>{nome}</button>)}
               </div>
-              <div className="flex gap-2">
-                <button onClick={novoPerfil} className="px-3 py-1.5 rounded bg-white/10 text-xs text-gray-300 hover:text-white cursor-pointer">Novo</button>
-                <button onClick={eliminarPerfil} className="px-3 py-1.5 rounded bg-red-900/40 text-xs text-red-300 hover:bg-red-900/60 cursor-pointer">Eliminar</button>
-              </div>
+              <div className="flex gap-2"><button onClick={novoPerfil} className="px-3 py-1.5 rounded bg-white/10 text-xs text-gray-300 hover:text-white cursor-pointer">Novo</button><button onClick={eliminarPerfil} className="px-3 py-1.5 rounded bg-red-900/40 text-xs text-red-300 hover:bg-red-900/60 cursor-pointer">Eliminar</button></div>
             </div>
             <div className={`md:col-span-2 bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
               <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-3">Crimes no Perfil: {selectedPerfil || "—"}</h2>
               {perfilCrimes.length === 0 ? <p className="text-xs text-gray-500">Nenhum crime.</p> : (
                 <div className="space-y-1 mb-3 max-h-64 overflow-auto">
-                  {perfilCrimes.map((c, idx) => (
-                    <div key={idx} className="flex justify-between items-center px-3 py-2 rounded bg-black/40">
-                      <span className="text-xs text-gray-300">{c.crime}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-amber-400">{fmt(c.multa)} €</span>
-                        <button onClick={() => removePerfilCrime(idx)} className="text-red-500 text-xs hover:underline cursor-pointer">✕</button>
-                      </div>
-                    </div>
-                  ))}
+                  {perfilCrimes.map((c, idx) => <div key={idx} className="flex justify-between items-center px-3 py-2 rounded bg-black/40"><span className="text-xs text-gray-300">{c.crime}</span><div className="flex items-center gap-2"><span className="text-xs font-bold text-amber-400">{fmt(c.multa)} €</span><button onClick={() => removePerfilCrime(idx)} className="text-red-500 text-xs hover:underline cursor-pointer">✕</button></div></div>)}
                 </div>
               )}
               <p className="text-right font-bold mb-3 text-amber-400">Total: {fmt2(perfilTotal)} €</p>
-              <div className="flex gap-2">
-                <button onClick={aplicarPerfil} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Aplicar Perfil</button>
-                <button onClick={() => setActiveTab("Catálogo")} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Ir ao Catálogo</button>
-              </div>
+              <div className="flex gap-2"><button onClick={aplicarPerfil} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Aplicar Perfil</button><button onClick={() => setActiveTab("Catálogo")} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Ir ao Catálogo</button></div>
             </div>
           </div>
         )}
 
-        {/* COIMAS RÁPIDAS PT */}
         {activeTab === "Coimas Rápidas PT" && (
           <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-            <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2">
-              <Calculator className={`w-5 h-5 ${accentColor}`} /> Coimas Rápidas Portugal
-            </h2>
+            <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4 flex items-center gap-2"><Calculator className={`w-5 h-5 ${accentColor}`} /> Coimas Rápidas Portugal</h2>
             <p className="text-xs text-gray-500 mb-2">Escreva quantidade e item (ex: 45 maços). Para vários, separe por vírgulas.</p>
             <div className="flex gap-2 mb-4">
               <input value={testeInput} onChange={e => setTesteInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calcularTeste(); }} className={inputCls} placeholder="45 maços, 6 óleos, 100 balas baixo..." />
               <button onClick={calcularTeste} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Calcular</button>
               <button onClick={() => setTesteHistorico([])} className="px-3 py-2 rounded bg-white/10 text-xs text-gray-400 hover:text-white cursor-pointer">Limpar</button>
             </div>
-            <div className="rounded-lg border border-white/10 p-4 max-h-96 overflow-auto bg-black/60 font-mono text-xs text-green-400">
-              <pre>{testeHistorico.join("\n" + "—".repeat(50) + "\n\n") || "// Resultados aparecerão aqui..."}</pre>
-            </div>
+            <div className="rounded-lg border border-white/10 p-4 max-h-96 overflow-auto bg-black/60 font-mono text-xs text-green-400"><pre>{testeHistorico.join("\n" + "—".repeat(50) + "\n\n") || "// Resultados aparecerão aqui..."}</pre></div>
           </div>
         )}
 
-        {/* RELATÓRIO */}
+        {/* RELATÓRIO - APENAS COM VALOR DO CAD RESTAURADO */}
         {activeTab === "Relatório" && (
           <div className="space-y-4">
-            {/* Dados */}
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
               <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4">📝 Dados da Ocorrência</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className={labelCls}>Tipo de crime:</label><select value={relTipo} onChange={e => setRelTipo(e.target.value)} className={inputCls}><option>Assalto a loja</option><option>Assalto a casa</option><option>Assalto a joalharia</option><option>Assalto a banco</option><option>Assalto a loja de armas</option><option>Assalto a carrinha de valores</option><option>Roubo</option><option>Furto</option><option>Outro</option></select></div>
-                <div><label className={labelCls}>Número de assaltantes:</label><input type="number" value={relAssaltantes} onChange={e => setRelAssaltantes(Number(e.target.value))} className={inputCls} /></div>
+                <div><label className={labelCls}>Tipo de crime:</label>
+                  <select value={relTipo} onChange={e => setRelTipo(e.target.value)} className={inputCls}>
+                    <option>Assalto a loja</option>
+                    <option>Assalto a casa</option>
+                    <option>Assalto a joalharia</option>
+                    <option>Assalto a banco</option>
+                    <option>Assalto a AmmuNation</option>
+                    <option>Assalto a contentor</option>
+                    <option>Produção de droga</option>
+                    <option>Outro</option>
+                  </select>
+                </div>
+                <div><label className={labelCls}>Número de assaltantes / sujeitos:</label><input type="number" value={relAssaltantes} onChange={e => setRelAssaltantes(Number(e.target.value))} className={inputCls} /></div>
                 <div><label className={labelCls}>Número de reféns (civis):</label><input type="number" value={relCivis} onChange={e => setRelCivis(Number(e.target.value))} className={inputCls} /></div>
                 <div><label className={labelCls}>Funcionários Públicos:</label><input type="number" value={relFunc} onChange={e => setRelFunc(Number(e.target.value))} className={inputCls} /></div>
                 <div><label className={labelCls}>CP (Código Postal/Processo):</label><input value={relCP} onChange={e => setRelCP(e.target.value)} className={inputCls} /></div>
@@ -1107,27 +1090,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Coimas Extras */}
-            <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4">💰 Coimas Extras Rápidas</h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div><label className={labelCls}>CC:</label><input value={relCCCoima} onChange={e => setRelCCCoima(e.target.value)} className={inputCls} /></div>
-                <div className="md:col-span-2"><label className={labelCls}>Lista de itens:</label><input value={relCoimaRapida} onChange={e => setRelCoimaRapida(e.target.value)} className={inputCls} placeholder="122 balas baixo, 2 armas baixo..." /></div>
-                <div className="flex items-end"><button onClick={addCoimasRapidasRelatorio} className={`w-full py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button></div>
-              </div>
-            </div>
-
-            {/* Crimes por Nome */}
-            <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4">⚖️ Adicionar Crimes por Nome</h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div><label className={labelCls}>CC:</label><input value={relCCCrimesNome} onChange={e => setRelCCCrimesNome(e.target.value)} className={inputCls} /></div>
-                <div className="md:col-span-2"><label className={labelCls}>Lista de crimes:</label><input value={relCrimesNome} onChange={e => setRelCrimesNome(e.target.value)} className={inputCls} placeholder="1 assalto a loja, 2 sequestro..." /></div>
-                <div className="flex items-end gap-2"><label className="flex items-center gap-1 text-xs text-gray-400"><input type="checkbox" checked={relTentativa} onChange={e => setRelTentativa(e.target.checked)} /> Tentativa</label><button onClick={addCrimesPorNome} className={`px-3 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button></div>
-              </div>
-            </div>
-
-            {/* Valor CAD */}
+            {/* ===== SECÇÃO VALOR DO CAD ===== */}
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
               <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4">📋 Valor do CAD</h2>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1138,7 +1101,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* CCs */}
+            {/* CC dos Suspeitos */}
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
               <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4">👥 CC dos Suspeitos (um por linha)</h2>
               <textarea value={relCCs} onChange={e => setRelCCs(e.target.value)} rows={4} className={inputCls} placeholder={"222\n333"} />
@@ -1154,20 +1117,12 @@ export default function App() {
               </div>
             </div>
 
-            {/* Entradas Registadas - Inline Preview */}
+            {/* Entradas Registadas */}
             {allCCsWithEntries.length > 0 && (
               <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 flex items-center gap-2">
-                    <Pencil className="w-4 h-4 text-amber-400" />
-                    Entradas Registadas ({allCCsWithEntries.length} CC)
-                  </h2>
-                  <button
-                    onClick={() => setShowEntriesPanel(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/30 text-amber-300 text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    <Pencil className="w-3 h-3" /> Editar / Eliminar
-                  </button>
+                  <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 flex items-center gap-2"><Pencil className="w-4 h-4 text-amber-400" /> Entradas Registadas ({allCCsWithEntries.length} CC)</h2>
+                  <button onClick={() => setShowEntriesPanel(true)} className="flex items-center gap-1 px-3 py-1.5 rounded bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/30 text-amber-300 text-xs font-bold transition-colors cursor-pointer"><Pencil className="w-3 h-3" /> Editar / Eliminar</button>
                 </div>
                 <div className="space-y-3 max-h-64 overflow-y-auto">
                   {allCCsWithEntries.map(cc => {
@@ -1176,18 +1131,9 @@ export default function App() {
                     const totalCadCC = cadEntries.reduce((s, e) => s + e.multa, 0);
                     const totalExtraCC = extraEntries.reduce((s, e) => s + e.valor, 0);
                     const totalMesesCC = cadEntries.reduce((s, e) => s + e.meses, 0);
-
                     return (
                       <div key={cc} className="bg-black/30 rounded-lg border border-white/5 px-4 py-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white">CC: {cc}</span>
-                          <div className="flex gap-3 text-[10px]">
-                            <span className="text-green-400">CAD: {fmt2(totalCadCC)} € ({cadEntries.length})</span>
-                            <span className="text-amber-400">Extra: {fmt2(totalExtraCC)} € ({extraEntries.length})</span>
-                            <span className="text-white font-bold">Total: {fmt2(totalCadCC + totalExtraCC)} €</span>
-                            {totalMesesCC > 0 && <span className="text-blue-400">{totalMesesCC.toFixed(1)} meses</span>}
-                          </div>
-                        </div>
+                        <div className="flex items-center justify-between"><span className="text-xs font-bold text-white">CC: {cc}</span><div className="flex gap-3 text-[10px]"><span className="text-green-400">CAD: {fmt2(totalCadCC)} € ({cadEntries.length})</span><span className="text-amber-400">Extra: {fmt2(totalExtraCC)} € ({extraEntries.length})</span><span className="text-white font-bold">Total: {fmt2(totalCadCC + totalExtraCC)} €</span>{totalMesesCC > 0 && <span className="text-blue-400">{totalMesesCC.toFixed(1)} meses</span>}</div></div>
                       </div>
                     );
                   })}
@@ -1195,7 +1141,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Buttons */}
+            {/* Botões */}
             <div className="flex gap-3">
               <button onClick={gerarRelatorio} className={`px-6 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Gerar Relatório</button>
               <button onClick={copiarRelatorio} className="px-4 py-3 rounded-lg bg-white/10 text-xs text-gray-300 hover:text-white hover:bg-white/20 cursor-pointer">Copiar Relatório</button>
@@ -1206,25 +1152,17 @@ export default function App() {
             {relatorio && (
               <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
                 <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-4">📄 Relatório Gerado</h2>
-                <div className="rounded-lg border border-white/10 p-4 bg-black/60 max-h-96 overflow-auto">
-                  <pre className="text-xs whitespace-pre-wrap font-mono text-green-400">{relatorio}</pre>
-                </div>
+                <div className="rounded-lg border border-white/10 p-4 bg-black/60 max-h-96 overflow-auto"><pre className="text-xs whitespace-pre-wrap font-mono text-green-400">{relatorio}</pre></div>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Footer */}
       <footer className="border-t border-white/5 bg-slate-950 py-3 text-center text-[10px] text-gray-500 font-mono z-10 relative">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span className="flex items-center justify-center sm:justify-start gap-1">
-            <ShieldAlert className="w-4 h-4 text-red-500/80 animate-pulse" />
-            <span>PORTAL OFICIAL DE SEGURANÇA RODOVIÁRIA • OFFSET PORTUGAL ROLEPLAY</span>
-          </span>
-          <span className="opacity-60">
-            © {systemTime.getFullYear()} {department} Los Santos • Codificação UTF-8
-          </span>
+          <span className="flex items-center justify-center sm:justify-start gap-1"><ShieldAlert className="w-4 h-4 text-red-500/80 animate-pulse" /><span>PORTAL OFICIAL DE SEGURANÇA RODOVIÁRIA • OFFSET PORTUGAL ROLEPLAY</span></span>
+          <span className="opacity-60">© {systemTime.getFullYear()} {department} Los Santos • Codificação UTF-8</span>
         </div>
       </footer>
     </div>
