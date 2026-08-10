@@ -163,7 +163,9 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/charro/i, "charros"],
     [/cristal\s*processado/i, "cristal processado"],
     [/cristal/i, "cristal"],
-    [/tabaco|ma[cç]o/i, "maço"],
+    [/folha\s*tabaco/i, "folha tabaco"],
+    [/ma[cç]o\s*tabaco/i, "maço"],
+    [/ma[cç]o/i, "maço"],
     [/estimulante/i, "estimulante"],
     [/semente\s*(de\s*)?(erva|cannabis)/i, "semente erva"],
     [/sementes?\s*(de\s*)?(erva|cannabis)/i, "semente erva"],
@@ -284,6 +286,8 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "enxofre": [0.4],
     "polimero": [0.2],
     "bronze": [0.2],
+    "maço": [0.3],
+    "folha tabaco": [0.2],
     "garrafa de nitro": [1],
     "chifres": [0.2],
     "idolo": [0.3],
@@ -367,106 +371,148 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     return weights?.length === 1 ? weights[0] : null;
   }
 
-  // Strategy 1: Parse tab-separated rows (isTable=true format)
-  // The inventory grid produces pairs of rows:
-  //   Row A (quantities): "38805 (0.4)\t24 (2.4)\t9 (1.8)\t3 (0.6)\t1(1.0)"
-  //   Row B (names):      "DINHEIRO\tPACOTE DEALER\tQUADRO\tPULSEIRA OURO\tKNIFE"
-  // We need to find ALL such pairs and match columns by position
-
-  // First, collect all tab-separated rows
+  // Strategy 1: Parse tab-separated rows. OCR.space can split the inventory
+  // into several quantity/name rows, and sometimes the columns shift. Instead
+  // of trusting position only, score every quantity/name pair using BOTH the
+  // recognized name and the unit weight. This fixes cases such as:
+  //   8 (2.4) | 110 (22.0) | MAÇO TABACO | FOLHA TABACO
+  //   11 (1.1) | 11 (1.1) | CARTÃO | ESTANHO
+  // where the weight is the safest confirmation.
   const tabRows: { cells: string[]; lineIdx: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
     const cells = lines[i].split("\t").map((c) => c.trim()).filter(Boolean);
-    if (cells.length >= 2) {
-      tabRows.push({ cells, lineIdx: i });
-    }
+    if (cells.length >= 2) tabRows.push({ cells, lineIdx: i });
   }
 
-  // Try pairs of rows: quantity-row + name-row
-  // Prioritise adjacent rows, accept even 1 recognised item
   const usedLines = new Set<number>();
 
-  // Build scored candidates: (qtyRowIdx, nameRowIdx, realScore, distance)
-  // realScore = quantos itens REALMENTE seriam emparelhados (considerando min de colunas)
-  const candidates: { a: number; b: number; realScore: number; cellMatch: number; dist: number }[] = [];
-  for (let a = 0; a < tabRows.length; a++) {
-    for (let b = 0; b < tabRows.length; b++) {
-      if (a === b) continue;
-      const qCells = tabRows[a].cells;
-      const nCells = tabRows[b].cells;
-      const isQtyRow = qCells.filter((c) => /^\d/.test(c)).length >= 2;
-      if (!isQtyRow) continue;
+  // Some OCR.space responses collapse an entire inventory strip into ONE row:
+  //   8 (2.4) | 110 (22.0) | MAÇO TABACO | FOLHA TABACO | 11 (1.1) | 11 (1.1) | CARTÃO | ESTANHO
+  // In that format, positional parsing is wrong. Match every numeric cell to
+  // the best textual cell using the known item name + known unit weight.
+  for (let i = 0; i < tabRows.length; i++) {
+    const cells = tabRows[i].cells;
+    const numeric = cells
+      .map((cell, idx) => ({ ...parseQtyWeight(cell), idx, raw: cell }))
+      .filter((x) => /^\d/.test(x.raw) && x.totalKg != null);
+    const textual = cells.map((cell, idx) => ({ cell, idx })).filter((x) => !/^\d/.test(x.cell));
+    if (numeric.length === 0 || textual.length === 0) continue;
 
-      const len = Math.min(qCells.length, nCells.length);
-      const nameMatches = nCells.slice(0, len).map((c) => matchItem(c));
-      const realScore = nameMatches.filter(Boolean).length;
-      // cellMatch = quantas colunas alinham (preferir qtd e nomes com mesmo nº de colunas)
-      const cellMatch = Math.min(qCells.length, nCells.length);
-
-      if (realScore >= 1) {
-        const dist = Math.abs(tabRows[a].lineIdx - tabRows[b].lineIdx);
-        candidates.push({ a, b, realScore, cellMatch, dist });
+    const usedText = new Set<number>();
+    const sameLinePairs: { idx: number; item: string; qty: number; totalKg: number | null; score: number }[] = [];
+    for (const q of numeric) {
+      let best: { idx: number; item: string; score: number } | null = null;
+      for (const t of textual) {
+        if (usedText.has(t.idx)) continue;
+        const direct = matchItem(t.cell);
+        if (!direct) continue;
+        let score = 100;
+        if (weightMatches(direct, q.qty, q.totalKg)) score += 100;
+        if (Math.abs(t.idx - q.idx) === 1) score += 5;
+        if (!best || score > best.score) best = { idx: t.idx, item: direct, score };
+      }
+      if (best) {
+        usedText.add(best.idx);
+        sameLinePairs.push({ idx: q.idx, item: best.item, qty: q.qty, totalKg: q.totalKg, score: best.score });
       }
     }
-  }
-  // Sort: mais colunas alinhadas primeiro, depois mais itens reconhecidos, depois mais perto
-  candidates.sort((x, y) => y.cellMatch - x.cellMatch || y.realScore - x.realScore || x.dist - y.dist);
 
-  for (const { a, b } of candidates) {
-    if (usedLines.has(tabRows[a].lineIdx) || usedLines.has(tabRows[b].lineIdx)) continue;
-    const qCells = tabRows[a].cells;
-    const nCells = tabRows[b].cells;
-    const len = Math.min(qCells.length, nCells.length);
-    let paired = 0;
-    for (let j = 0; j < len; j++) {
-      const { qty, totalKg } = parseQtyWeight(qCells[j]);
-      const itemName = matchItem(nCells[j], qty, totalKg);
-      if (itemName) {
-        items.push(`${qty} ${itemName}`);
-        const kg = totalKg != null ? totalKg : (getWeightForItem(itemName) ?? 0) * qty;
-        if (kg > 0) weightTotals.set(itemName, (weightTotals.get(itemName) || 0) + kg);
-        paired++;
+    if (sameLinePairs.length) {
+      for (const pair of sameLinePairs) {
+        items.push(`${pair.qty} ${pair.item}`);
+        const kg = pair.totalKg != null ? pair.totalKg : (getWeightForItem(pair.item) ?? 0) * pair.qty;
+        if (kg > 0) weightTotals.set(pair.item, (weightTotals.get(pair.item) || 0) + kg);
       }
-    }
-    if (paired >= 1) {
-      usedLines.add(tabRows[a].lineIdx);
-      usedLines.add(tabRows[b].lineIdx);
+      usedLines.add(tabRows[i].lineIdx);
     }
   }
 
-  // Also handle single-column items and weapon inspection screens
+  function nameMatchScore(rawName: string, qty: number, totalKg: number | null): { item: string | null; score: number } {
+    const direct = matchItem(rawName);
+    if (!direct) return { item: null, score: 0 };
+    let score = 100;
+    if (weightMatches(direct, qty, totalKg)) score += 50;
+    return { item: direct, score };
+  }
+
+  // Pair quantity rows with name rows. For each pair, use the best assignment
+  // of columns instead of assuming column N always belongs to column N.
+  const pairCandidates: { q: number; n: number; score: number; pairs: { q: number; n: number; item: string; qty: number; totalKg: number | null; score: number }[] }[] = [];
+  for (let qi = 0; qi < tabRows.length; qi++) {
+    const qRow = tabRows[qi];
+    if (usedLines.has(qRow.lineIdx)) continue;
+    const qtyCells = qRow.cells.map((c, idx) => ({ ...parseQtyWeight(c), idx })).filter((x) => x.totalKg != null || /^\d/.test(qRow.cells[x.idx]));
+    if (qtyCells.length === 0) continue;
+
+    for (let ni = 0; ni < tabRows.length; ni++) {
+      if (qi === ni) continue;
+      const nRow = tabRows[ni];
+      if (usedLines.has(nRow.lineIdx)) continue;
+      const pairs: { q: number; n: number; item: string; qty: number; totalKg: number | null; score: number }[] = [];
+      const usedN = new Set<number>();
+
+      for (const qc of qtyCells) {
+        let best: { n: number; item: string; score: number } | null = null;
+        for (let j = 0; j < nRow.cells.length; j++) {
+          if (usedN.has(j)) continue;
+          const nm = nameMatchScore(nRow.cells[j], qc.qty, qc.totalKg);
+          if (!nm.item) continue;
+          // Same column gets a small bonus; matching the known weight gets a
+          // larger bonus, so a shifted OCR table can still be corrected.
+          const positionalBonus = j === qc.idx ? 8 : 0;
+          const score = nm.score + positionalBonus;
+          if (!best || score > best.score) best = { n: j, item: nm.item, score };
+        }
+        if (best) {
+          usedN.add(best.n);
+          pairs.push({ q: qc.idx, n: best.n, item: best.item, qty: qc.qty, totalKg: qc.totalKg, score: best.score });
+        }
+      }
+
+      if (pairs.length) {
+        pairCandidates.push({
+          q: qi,
+          n: ni,
+          score: pairs.reduce((sum, p) => sum + p.score, 0),
+          pairs,
+        });
+      }
+    }
+  }
+
+  pairCandidates.sort((a, b) => b.score - a.score || b.pairs.length - a.pairs.length || Math.abs(tabRows[a.q].lineIdx - tabRows[a.n].lineIdx) - Math.abs(tabRows[b.q].lineIdx - tabRows[b.n].lineIdx));
+
+  for (const candidate of pairCandidates) {
+    const qLine = tabRows[candidate.q].lineIdx;
+    const nLine = tabRows[candidate.n].lineIdx;
+    if (usedLines.has(qLine) || usedLines.has(nLine)) continue;
+    if (!candidate.pairs.length) continue;
+
+    for (const pair of candidate.pairs) {
+      items.push(`${pair.qty} ${pair.item}`);
+      const kg = pair.totalKg != null ? pair.totalKg : (getWeightForItem(pair.item) ?? 0) * pair.qty;
+      if (kg > 0) weightTotals.set(pair.item, (weightTotals.get(pair.item) || 0) + kg);
+    }
+    usedLines.add(qLine);
+    usedLines.add(nLine);
+  }
+
+  // Also parse quantity/name information when OCR puts several cells on the
+  // same physical line rather than creating clean row pairs.
   for (let i = 0; i < lines.length; i++) {
     if (usedLines.has(i)) continue;
     const line = lines[i];
+    const cells = line.split("\t").map((c) => c.trim()).filter(Boolean);
+    if (cells.length < 2) continue;
 
-    // Detect "Munição: X" from weapon inspection (balas dentro da arma)
-    const munMatch = line.match(/muni[cç][aã]o\s*:\s*(\d+)/i);
-    if (munMatch) {
-      const qty = parseInt(munMatch[1]);
-      if (qty > 0) {
-        items.push(`${qty} balas baixo`);
-      }
-      continue;
-    }
-
-    if (!line.includes("\t") || line.split("\t").filter(Boolean).length < 2) {
-      // Single cell line — check if it's "QUANTITY NAME"
-      const qtyNameMatch = line.match(/^(\d[\d.,]*)\s*\(\s*(\d+(?:[.,]\d+)?)\s*\)\s+(.+)/);
-      if (qtyNameMatch) {
-        const qty = Math.round(parseFloat(qtyNameMatch[1].replace(/\./g, "").replace(",", ".")) || 1);
-        const totalKg = parseFloat(qtyNameMatch[2].replace(",", "."));
-        const itemName = matchItem(qtyNameMatch[3], qty, totalKg);
-        if (itemName) {
-          items.push(`${qty} ${itemName}`);
-          if (totalKg > 0) weightTotals.set(itemName, (weightTotals.get(itemName) || 0) + totalKg);
-        }
-      } else {
-        const simpleQtyName = line.match(/^(\d[\d.,]*)\s+(.+)/);
-        if (simpleQtyName) {
-          const qty = Math.round(parseFloat(simpleQtyName[1].replace(/\./g, "").replace(",", ".")) || 1);
-          const itemName = matchItem(simpleQtyName[2], qty, null);
-          if (itemName) items.push(`${qty} ${itemName}`);
-        }
+    for (let j = 0; j < cells.length; j++) {
+      const parsedQty = parseQtyWeight(cells[j]);
+      if (!/^\d/.test(cells[j])) continue;
+      const itemName = matchItem(cells[j + 1] || "", parsedQty.qty, parsedQty.totalKg);
+      if (itemName) {
+        items.push(`${parsedQty.qty} ${itemName}`);
+        const kg = parsedQty.totalKg != null ? parsedQty.totalKg : (getWeightForItem(itemName) ?? 0) * parsedQty.qty;
+        if (kg > 0) weightTotals.set(itemName, (weightTotals.get(itemName) || 0) + kg);
       }
     }
   }
