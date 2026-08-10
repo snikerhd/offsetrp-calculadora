@@ -91,10 +91,11 @@ export async function POST(req: NextRequest) {
     const parsed = parseInventoryOCR(ocrText);
 
     return NextResponse.json({
-      result: parsed,
+      result: parsed.text,
+      detectedWeights: parsed.weights,
       ocrRaw: ocrText,
       preview,
-      error: parsed ? undefined : "Não foram identificados itens automaticamente.",
+      error: parsed.text ? undefined : "Não foram identificados itens automaticamente.",
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Erro desconhecido";
@@ -107,8 +108,9 @@ export async function POST(req: NextRequest) {
 // The game inventory grid produces OCR like:
 //   38805 (0.4)\t24 (2.4)\t9 (1.8)\t3 (0.6)     ← quantities row
 //   DINHEIRO\tPACOTE DEALER\tQUADRO\tPULSEIRA OURO  ← names row
-function parseInventoryOCR(text: string): string {
+function parseInventoryOCR(text: string): { text: string; weights: { item: string; kg: number; unitKg: number | null }[] } {
   const items: string[] = [];
+  const weightTotals = new Map<string, number>();
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
 
   // SÓ ITENS ILEGAIS — nada de bandagem, knife, carta condução, kit, rádio, telemovel, etc.
@@ -248,12 +250,121 @@ function parseInventoryOCR(text: string): string {
     [/pack\s*safira/i, "pack safira"],
   ];
 
-  function matchItem(name: string): string | null {
-    const cleaned = name.replace(/[•·\-_]/g, "").trim();
-    for (const [pattern, itemName] of ITEM_MAP) {
-      if (pattern.test(cleaned)) return itemName;
+  // Peso UNITÁRIO conhecido dos itens (kg). O OCR mostra o peso TOTAL no formato
+  // "317 (63.4)", por isso usamos total / quantidade para validar/corrigir o item.
+  // Quando existirem vários pesos históricos para o mesmo item, aceitamos ambos.
+  const ITEM_WEIGHT_KG: Record<string, number[]> = {
+    "pepitas": [0.3],
+    "ouro estatal": [1.5],
+    "barras ouro": [1],
+    "perfume": [0.2],
+    "phone 7": [0.2],
+    "tv led 75": [1],
+    "computador": [0.5],
+    "pack vinhos": [0.2],
+    "arma de colecao": [1],
+    "tigre": [0.5],
+    "quadro": [0.2],
+    "documentos": [0.1],
+    "relogio ouro": [0.2, 0.1],
+    "pulseira ouro": [0.2],
+    "aguia de bronze": [2],
+    "crypto pen": [0.1],
+    "corrente": [0.1],
+    "corrente 10k": [0.15],
+    "anel": [0.1],
+    "rebarbadora": [1],
+    "estanho": [0.1],
+    "minerios": [0.5],
+    "diamante bruto": [0.1],
+    "diamante": [0.1],
+    "safiras": [0.1],
+    "niquel": [0.5],
+    "polvora": [4.7 / 31],
+    "enxofre": [0.4],
+    "polimero": [0.2],
+    "bronze": [0.2],
+    "garrafa de nitro": [1],
+    "chifres": [0.2],
+    "idolo": [0.3],
+    "bomba": [0.3],
+    "orca": [10],
+    "diario": [0.3],
+    "bau": [0.3],
+    "pacote ilegal": [0.3],
+    "tubarao martelo": [1],
+    "raia": [0.3],
+    "polvo": [0.3],
+    "tubarao branco": [1],
+    "adaga": [0.3],
+    "colete fortalecido": [1],
+    "carregador shotgun": [0.2],
+    "carregador pistola": [0.2],
+    "carregador smg": [0.2],
+    "carregador rifle": [0.2],
+    "medickits": [4],
+    "blueprint pistola": [0.1],
+    "blueprint smg": [0.1],
+    "blueprint rifle": [0.1],
+    "peca basica": [0.1],
+    "peca avancada": [0.1],
+    "arma baixo calibre": [5],
+    "arma medio calibre": [10],
+    "arma alto calibre": [15],
+  };
+
+  function parseQtyWeight(cell: string): { qty: number; totalKg: number | null } {
+    const m = cell.match(/^(\\d[\\d.,]*)\\s*\\(\\s*(\\d+(?:[.,]\\d+)?)\\s*\\)/);
+    if (!m) {
+      const q = cell.match(/^(\\d[\\d.,]*)/);
+      return {
+        qty: q ? Math.round(parseFloat(q[1].replace(/\\./g, "").replace(",", ".")) || 1) : 1,
+        totalKg: null,
+      };
     }
+    const qty = Math.round(parseFloat(m[1].replace(/\\./g, "").replace(",", ".")) || 1);
+    const totalKg = parseFloat(m[2].replace(",", "."));
+    return { qty, totalKg: Number.isFinite(totalKg) ? totalKg : null };
+  }
+
+  function weightMatches(itemName: string, qty: number, totalKg: number | null): boolean {
+    if (totalKg == null || qty <= 0) return false;
+    const weights = ITEM_WEIGHT_KG[itemName];
+    if (!weights) return false;
+    const unit = totalKg / qty;
+    return weights.some((w) => Math.abs(unit - w) <= Math.max(0.03, w * 0.08));
+  }
+
+  function matchItem(name: string, qty?: number, totalKg?: number | null): string | null {
+    const cleaned = name.replace(/[•·\\-_]/g, " ").replace(/\\s+/g, " ").trim();
+
+    // 1) Match direto pelo nome.
+    for (const [pattern, itemName] of ITEM_MAP) {
+      if (pattern.test(cleaned)) {
+        // Se o nome encaixa mas o peso não bate, não rejeitamos: OCR pode ter
+        // arredondamentos/erros. O peso serve como confirmação, não como bloqueio.
+        return itemName;
+      }
+    }
+
+    // 2) Fallback por peso quando o OCR estragou completamente o nome.
+    if (qty && totalKg != null) {
+      const candidates = Object.entries(ITEM_WEIGHT_KG)
+        .filter(([, weights]) => weights.some((w) => Math.abs((totalKg / qty) - w) <= Math.max(0.03, w * 0.08)))
+        .map(([name]) => name);
+
+      // Só usamos o peso sozinho quando é inequívoco. Ex.: 1 item de 10 kg
+      // praticamente identifica "orca"; 0.2 kg não, porque há muitos itens com 0.2.
+      if (candidates.length === 1) return candidates[0];
+    }
+
     return null;
+  }
+
+  function getWeightForItem(itemName: string): number | null {
+
+    const weights = ITEM_WEIGHT_KG[itemName];
+    return weights?.length === 1 ? weights[0] : null;
   }
 
   // Strategy 1: Parse tab-separated rows (isTable=true format)
@@ -305,18 +416,16 @@ function parseInventoryOCR(text: string): string {
     if (usedLines.has(tabRows[a].lineIdx) || usedLines.has(tabRows[b].lineIdx)) continue;
     const qCells = tabRows[a].cells;
     const nCells = tabRows[b].cells;
-    const nameMatches = nCells.map((c) => matchItem(c));
     const len = Math.min(qCells.length, nCells.length);
     let paired = 0;
     for (let j = 0; j < len; j++) {
-      const itemName = nameMatches[j];
+      const { qty, totalKg } = parseQtyWeight(qCells[j]);
+      const itemName = matchItem(nCells[j], qty, totalKg);
       if (itemName) {
-        const qtyMatch = qCells[j].match(/^(\d[\d.,]*)/);
-        if (qtyMatch) {
-          const qty = parseFloat(qtyMatch[1].replace(/\./g, "").replace(",", ".")) || 1;
-          items.push(`${Math.round(qty)} ${itemName}`);
-          paired++;
-        }
+        items.push(`${qty} ${itemName}`);
+        const kg = totalKg != null ? totalKg : (getWeightForItem(itemName) ?? 0) * qty;
+        if (kg > 0) weightTotals.set(itemName, (weightTotals.get(itemName) || 0) + kg);
+        paired++;
       }
     }
     if (paired >= 1) {
@@ -342,12 +451,21 @@ function parseInventoryOCR(text: string): string {
 
     if (!line.includes("\t") || line.split("\t").filter(Boolean).length < 2) {
       // Single cell line — check if it's "QUANTITY NAME"
-      const qtyNameMatch = line.match(/^(\d[\d.,]*)\s*\(?[\d.,]*\)?\s+(.+)/);
+      const qtyNameMatch = line.match(/^(\d[\d.,]*)\s*\(\s*(\d+(?:[.,]\d+)?)\s*\)\s+(.+)/);
       if (qtyNameMatch) {
-        const itemName = matchItem(qtyNameMatch[2]);
+        const qty = Math.round(parseFloat(qtyNameMatch[1].replace(/\./g, "").replace(",", ".")) || 1);
+        const totalKg = parseFloat(qtyNameMatch[2].replace(",", "."));
+        const itemName = matchItem(qtyNameMatch[3], qty, totalKg);
         if (itemName) {
-          const qty = parseFloat(qtyNameMatch[1].replace(/\./g, "").replace(",", ".")) || 1;
-          items.push(`${Math.round(qty)} ${itemName}`);
+          items.push(`${qty} ${itemName}`);
+          if (totalKg > 0) weightTotals.set(itemName, (weightTotals.get(itemName) || 0) + totalKg);
+        }
+      } else {
+        const simpleQtyName = line.match(/^(\d[\d.,]*)\s+(.+)/);
+        if (simpleQtyName) {
+          const qty = Math.round(parseFloat(simpleQtyName[1].replace(/\./g, "").replace(",", ".")) || 1);
+          const itemName = matchItem(simpleQtyName[2], qty, null);
+          if (itemName) items.push(`${qty} ${itemName}`);
         }
       }
     }
@@ -393,7 +511,21 @@ function parseInventoryOCR(text: string): string {
     }
   }
 
-  return Array.from(merged.entries())
+  const resultText = Array.from(merged.entries())
     .map(([name, qty]) => `${qty} ${name}`)
     .join(", ");
+
+  // Completa o peso para itens em que o OCR não trouxe o total.
+  for (const [name, qty] of merged.entries()) {
+    if (!weightTotals.has(name)) {
+      const unit = getWeightForItem(name);
+      if (unit != null) weightTotals.set(name, qty * unit);
+    }
+  }
+
+  const weights = Array.from(weightTotals.entries())
+    .map(([name, kg]) => ({ item: name, kg: Number(kg.toFixed(2)), unitKg: getWeightForItem(name) }))
+    .filter((x) => x.kg > 0);
+
+  return { text: resultText, weights };
 }

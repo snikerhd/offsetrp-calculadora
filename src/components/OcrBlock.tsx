@@ -17,11 +17,19 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   const [ocrStatus, setOcrStatus] = useState("");
   const [ocrPreview, setOcrPreview] = useState<string | null>(null);
   const [ocrRawText, setOcrRawText] = useState("");
+  const [ocrWeights, setOcrWeights] = useState<{ item: string; kg: number; unitKg: number | null }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleResult = useCallback((data: { result?: string; preview?: string; error?: string; ocrRaw?: string }) => {
+  const handleResult = useCallback((data: {
+    result?: string;
+    preview?: string;
+    error?: string;
+    ocrRaw?: string;
+    detectedWeights?: { item: string; kg: number; unitKg: number | null }[];
+  }) => {
     if (data.preview) setOcrPreview(data.preview);
     if (data.ocrRaw) setOcrRawText(data.ocrRaw);
+    setOcrWeights(data.detectedWeights || []);
 
     if (data.error && !data.result) {
       setOcrStatus(`❌ ${data.error}`);
@@ -49,6 +57,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     setOcrProcessing(true);
     setOcrPreview(null);
     setOcrRawText("");
+    setOcrWeights([]);
     setOcrStatus("🔍 A analisar imagem com OCR...");
 
     try {
@@ -74,6 +83,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       setOcrProcessing(true);
       setOcrPreview(null);
       setOcrRawText("");
+      setOcrWeights([]);
       setOcrStatus("🔍 A analisar imagem com OCR...");
 
       const reader = new FileReader();
@@ -166,6 +176,22 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
           <img src={ocrPreview} alt="Preview" className="max-h-40 rounded border border-white/10" />
         </div>
       )}
+      {ocrWeights.length > 0 && (
+        <details className="mb-2" open>
+          <summary className="cursor-pointer text-[10px] text-gray-500 hover:text-gray-300">
+            ⚖️ Pesos reconhecidos ({ocrWeights.length})
+          </summary>
+          <div className="mt-1 grid grid-cols-2 md:grid-cols-3 gap-1 rounded border border-white/10 bg-black/40 p-2">
+            {ocrWeights.map((w) => (
+              <div key={w.item} className="text-[10px] text-gray-400">
+                <span className="text-gray-200">{w.item}</span>: {w.kg} kg
+                {w.unitKg != null && <span className="text-gray-600"> ({w.unitKg} kg/un.)</span>}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
       {ocrRawText && (
         <details className="mb-2">
           <summary className="cursor-pointer text-[10px] text-gray-500 hover:text-gray-300">🔍 Ver texto OCR bruto</summary>
