@@ -764,6 +764,29 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+  // Final safety normalization before merging. OCR often reads the two cells
+  // "LOCKPICK" + "AVANÇADA" as two independent items. If the advanced
+  // variant exists anywhere in the recognized text, the normal lockpick must
+  // NOT survive as a separate item unless there is explicit evidence of a
+  // second, normal lockpick. In the inventory layout used here, the normal
+  // name is the first half of the advanced name, so prefer the advanced item.
+  {
+    const normalizedAllText = lines.join(" ").replace(/\s+/g, " ").trim();
+    const hasAdvancedLockpick = /lock(?:pick|peck)[\s\-_]*avan[cç]ad/i.test(normalizedAllText)
+      || /lock(?:pick|peck)[\s\-_]*(?:\n|\s)+avan[cç]ad/i.test(lines.join("\n"));
+
+    if (hasAdvancedLockpick) {
+      // Remove every normal lockpick recovered by the generic item matcher.
+      // The advanced variant is inserted below if it was not recovered.
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (/^\d+\s+lockpick$/i.test(items[i])) items.splice(i, 1);
+      }
+      if (!items.some((it) => /^\d+\s+lockpick avancada$/i.test(it))) {
+        items.push("1 lockpick avancada");
+      }
+    }
+  }
+
   // Merge duplicates — somar quantidades de itens com o mesmo nome (ex: várias armas do mesmo calibre)
   const merged = new Map<string, number>();
   for (const entry of items) {
