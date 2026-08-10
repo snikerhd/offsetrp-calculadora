@@ -422,6 +422,13 @@ export function obterItemPorSinonimo(nome: string): string | null {
   const normalized = normalizeText(nome);
   
   if (!normalized) return null;
+
+  // "Folha de tabaco" é um artigo do inventário, não uma droga/coima.
+  // É importante bloquear ANTES dos matches parciais, porque o termo
+  // "tabaco" poderia ser associado incorretamente a "Maço tabaco".
+  if (/^folha(?:\s+de)?\s+tabaco$/.test(normalized)) {
+    return null;
+  }
   
   // 1. Verificar se é um nome direto (match exato)
   const keys = Object.keys(ITENS_ILEGAIS);
@@ -574,6 +581,12 @@ export function parseQuickInput(input: string): ParseResult {
     const qtd = parseInt(match[1]);
     const nome = normalizeText(match[2]);
     const originalNome = match[2].trim();
+
+    // Folha de tabaco é artigo/inventário e nunca entra nas coimas.
+    // Não deixar o fallback parcial de "tabaco" convertê-la em "Maço tabaco".
+    if (/^folha(?:\s+de)?\s+tabaco$/.test(nome)) {
+      continue;
+    }
 
     // Verificar drogas
     const droga = obterDrogaPorSinonimo(originalNome);
