@@ -137,6 +137,14 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
     { pattern: /pistol\s*\.\s*50/i, item: "arma baixo calibre", ammo: "balas baixo" },
   ];
 
+  // Só é uma captura de arma quando o texto tem os marcadores próprios da
+  // janela de arma. Um simples "Revolver MK2" no inventário NÃO deve criar
+  // uma segunda arma automaticamente.
+  const isWeaponCapture = /n[uú]mero\s+de\s+s[eé]rie\s*:/i.test(flat)
+    || /muni[cç][aã]o\s*:/i.test(flat)
+    || /acess[oó]rios?\s*:/i.test(flat);
+  if (!isWeaponCapture) return null;
+
   const rule = weaponRules.find((r) => r.pattern.test(flat));
   if (!rule) return null;
 
@@ -201,7 +209,6 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     // Lockpick — avançada primeiro (mais específico)
     [/lockpick\s*avan[cç]ad/i, "lockpick avancada"],
     [/lockpeck\s*avan[cç]ad/i, "lockpick avancada"],
-    [/\bavan[cç]ad/i, "lockpick avancada"],
     [/lockpick|lockpeck/i, "lockpick"],
     [/acess[oó]rio[s]?\s*(para\s*)?arma[s]?/i, "acessorios para armas"],
     [/algema/i, "algemas"],
@@ -295,6 +302,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     // Carregadores por tipo
     // No servidor Offset RP, carregador de pistola = baixo calibre.
     [/carregador\s*(de\s*)?pistola/i, "carregador baixo calibre"],
+    [/carregador\s+de\s+pistola/i, "carregador baixo calibre"],
     [/carregador\s*(de\s*)?smg/i, "carregador medio calibre"],
     [/carregador\s*(de\s*)?rifle/i, "carregador alto calibre"],
     [/carregador\s*(de\s*)?shotgun/i, "carregador alto calibre"],
@@ -657,6 +665,31 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+  // Alguns OCRs quebram nomes em células/linhas diferentes:
+  //   LOCKPICK ... AVANÇADA
+  //   CARREGADOR DE | PISTOLA
+  // Reconhecemos estas combinações antes do fallback genérico, que não deve
+  // usar o primeiro número aleatório do inventário como quantidade.
+  {
+    const allText = lines.join(" ").replace(/\s+/g, " ").trim();
+    const advancedLockpick = /lock(?:pick|peck)[\s\S]{0,90}avan[cç]ad/i.test(allText);
+    const normalLockpick = /lock(?:pick|peck)/i.test(allText);
+
+    if (advancedLockpick && !items.some((it) => it.endsWith(" lockpick avancada"))) {
+      items.push("1 lockpick avancada");
+    }
+    if (normalLockpick && !advancedLockpick && !items.some((it) => it.endsWith(" lockpick"))) {
+      items.push("1 lockpick");
+    }
+
+    const chargerPistol = /carregador\s+de\s+pistola/i.test(allText);
+    if (chargerPistol && !items.some((it) => it.endsWith(" carregador baixo calibre"))) {
+      const m = allText.match(/(\d[\d.,]*)\s*(?:\([^)]*\))?\s*carregador\s+de\s+pistola/i);
+      const qty = m ? parseInt(m[1].replace(/[.,]/g, ""), 10) : 1;
+      if (Number.isFinite(qty) && qty > 0) items.push(`${qty} carregador baixo calibre`);
+    }
+  }
+
   // Strategy 2: Recover only items that the table pairing missed.
   // IMPORTANT: never clear items already recovered correctly. The previous
   // fallback could replace a valid "3291 maço, 3681 folha tabaco" result with
@@ -674,7 +707,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       // Se já detetámos a versão avançada, nunca criar uma lockpick normal
       // só porque o padrão genérico /lockpick/ também casa com o texto.
       if (itemName === "lockpick" && items.some((it) => it.endsWith(" lockpick avancada"))) continue;
-      if (itemName === "lockpick" && /lockpick\s*avan[cç]ad/i.test(allText)) continue;
+      if (itemName === "lockpick" && /lock(?:pick|peck)[\s\S]{0,90}avan[cç]ad/i.test(allText)) continue;
 
       // Prefer a number immediately associated with the item name.
       const before = allText.match(new RegExp(`(\\d[\\d.,]*)\\s*(?:\\([^)]*\\))?\\s*${pattern.source}`, "i"));
