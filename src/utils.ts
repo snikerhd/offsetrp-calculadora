@@ -173,6 +173,17 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "lock pick": "Lockpick",
   "lock": "Lockpick",
   "lock picks": "Lockpick",
+  // Joalharia
+  "corrente": "Corrente de Ouro",
+  "corrente de ouro": "Corrente de Ouro",
+  "corrente 10k": "Corrente de Ouro 10k",
+  "corrente de ouro 10k": "Corrente de Ouro 10k",
+  "relogio ouro": "Relógio de Ouro",
+  "relogio de ouro": "Relógio de Ouro",
+  "pulseira ouro": "Pulseira de Ouro",
+  "pulseira de ouro": "Pulseira de Ouro",
+  "anel": "Anel de Diamante",
+  "anel de diamante": "Anel de Diamante",
   // Carregadores — no Offset RP, carregador de pistola = baixo calibre
   // Mantemos vários nomes porque o OCR pode escrever "pistola", "pistola 9mm", etc.
   "carregador pistola": "Carregador Baixo Calibre",
@@ -462,25 +473,19 @@ export function obterItemPorSinonimo(nome: string): string | null {
     return synonymKey;
   }
   
-  // 3. Pesquisa parcial - nome contém o termo de busca
-  for (const key of keys) {
-    const keyNorm = normalizeText(key);
-    if (keyNorm.includes(normalized)) {
-      return key;
-    }
-  }
-  
-  // 4. Pesquisa parcial reversa - termo de busca contém parte do nome
-  for (const key of keys) {
-    const keyNorm = normalizeText(key);
-    const words = keyNorm.split(" ");
-    for (const word of words) {
-      if (normalized.includes(word) && word.length > 2) {
+  // 3. Pesquisa parcial segura — só para entradas de uma palavra.
+  // Evita que "folha tabaco" seja convertido em "Maço tabaco"
+  // apenas porque ambas contêm a palavra "tabaco".
+  if (!normalized.includes(" ")) {
+    for (const key of keys) {
+      const keyNorm = normalizeText(key);
+      if (keyNorm.includes(normalized)) {
         return key;
       }
     }
   }
-  
+
+  // 4. Não fazer reverse-partial em nomes compostos.
   return null;
 }
 
@@ -504,25 +509,19 @@ export function obterDrogaPorSinonimo(nome: string): string | null {
     return synonymKey;
   }
   
-  // 3. Pesquisa parcial - nome contém o termo de busca
-  for (const key of keys) {
-    const keyNorm = normalizeText(key);
-    if (keyNorm.includes(normalized)) {
-      return key;
-    }
-  }
-  
-  // 4. Pesquisa parcial reversa - termo de busca contém parte do nome
-  for (const key of keys) {
-    const keyNorm = normalizeText(key);
-    const words = keyNorm.split(" ");
-    for (const word of words) {
-      if (normalized.includes(word) && word.length > 2) {
+  // 3. Pesquisa parcial segura — só para entradas de uma palavra.
+  // Evita que "folha tabaco" seja convertido em "Maço tabaco"
+  // apenas porque ambas contêm a palavra "tabaco".
+  if (!normalized.includes(" ")) {
+    for (const key of keys) {
+      const keyNorm = normalizeText(key);
+      if (keyNorm.includes(normalized)) {
         return key;
       }
     }
   }
-  
+
+  // 4. Não fazer reverse-partial em nomes compostos.
   return null;
 }
 

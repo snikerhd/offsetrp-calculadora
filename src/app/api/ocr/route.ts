@@ -353,6 +353,9 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   // Quando existirem vários pesos históricos para o mesmo item, aceitamos ambos.
   const ITEM_WEIGHT_KG: Record<string, number[]> = {
     "pepitas": [0.3],
+    "algemas": [0.1],
+    "lockpick": [0.1],
+    "lockpick avancada": [0.1],
     "ouro estatal": [1.5],
     "barras ouro": [1],
     "perfume": [0.2],
@@ -370,6 +373,8 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "crypto pen": [0.1],
     "corrente": [0.1],
     "corrente 10k": [0.15],
+    "corrente de ouro": [0.1],
+    "corrente de ouro 10k": [0.15],
     "anel": [0.1],
     "rebarbadora": [1],
     "estanho": [0.1],
@@ -398,6 +403,11 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "tubarao branco": [1],
     "adaga": [0.3],
     "colete fortalecido": [1],
+    "colete": [1],
+    "bens de assalto a casa": [0.2],
+    "anel": [0.1],
+    "pulseira ouro": [0.2],
+    "relogio ouro": [0.2, 0.1],
     "carregador shotgun": [0.2],
     "carregador pistola": [0.2],
     "carregador baixo calibre": [0.2],
@@ -687,6 +697,120 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+  function normalizeForRegex(value: string): string {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+");
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // WEIGHT-LOCKED RECOVERY (último recurso, mas antes do fallback por nome)
+  //
+  // Cada item do catálogo tem peso por unidade. Quando o OCR fornece
+  // "quantidade (peso total)", essa relação é a fonte de verdade:
+  //     unidade = pesoTotal / quantidade
+  //
+  // Procuramos o nome do item em linhas próximas e escolhemos a quantidade
+  // cujo peso/unidade bate melhor. Isto evita que o parser apanhe o primeiro
+  // "1 (1.0)" que esteja perto de "CORRENTE DE OURO" quando o correto é
+  // "216 (32.4)" -> 0.15 kg/un.
+  // ─────────────────────────────────────────────────────────────────────
+  {
+    const numericCells: { line: number; idx: number; qty: number; totalKg: number; raw: string }[] = [];
+    for (let li = 0; li < lines.length; li++) {
+      const cells = splitCells(lines[li]);
+      for (let ci = 0; ci < cells.length; ci++) {
+        const parsed = parseQtyWeight(cells[ci]);
+        if (/^\d/.test(cells[ci]) && parsed.totalKg != null && parsed.qty > 0) {
+          numericCells.push({ line: li, idx: ci, qty: parsed.qty, totalKg: parsed.totalKg, raw: cells[ci] });
+        }
+      }
+    }
+
+    const canonicalWeightNames = Object.keys(ITEM_WEIGHT_KG);
+    const candidates: { item: string; qty: number; totalKg: number; score: number }[] = [];
+
+    for (const itemName of canonicalWeightNames) {
+      // Já temos uma entrada correta com quantidade? Ainda assim recalculamos
+      // abaixo apenas se houver uma correspondência de peso melhor.
+      const namePatterns: RegExp[] = [];
+      for (const [pattern, mapped] of ITEM_MAP) {
+        if (mapped === itemName) namePatterns.push(pattern);
+      }
+      if (namePatterns.length === 0) {
+        // Alguns nomes canónicos do catálogo são variantes compostas.
+        const escaped = normalizeForRegex(itemName);
+        if (escaped) namePatterns.push(new RegExp(escaped, "i"));
+      }
+
+      for (let li = 0; li < lines.length; li++) {
+        const line = lines[li];
+        const normalizedLine = line.replace(/\s+/g, " ");
+        const nameHit = namePatterns.some((p) => p.test(normalizedLine));
+        if (!nameHit) continue;
+
+        // Procurar números na própria linha, e nas linhas imediatamente
+        // acima/abaixo. Em tabelas OCR, a linha dos números costuma estar
+        // colada à linha dos nomes.
+        for (const n of numericCells) {
+          const distance = Math.abs(n.line - li);
+          if (distance > 2) continue;
+
+          const unit = n.totalKg / n.qty;
+          const known = ITEM_WEIGHT_KG[itemName] || [];
+          if (!known.length) continue;
+          const bestDiff = Math.min(...known.map((w) => Math.abs(unit - w)));
+          const tolerance = Math.max(0.025, Math.min(...known) * 0.08);
+          if (bestDiff > tolerance) continue;
+
+          let score = 1000 - distance * 120 - bestDiff * 1000;
+          if (n.line === li) score += 100;
+          // Mesmo item/coluna é uma pista útil, mas nunca vence o peso.
+          const textCells = splitCells(line);
+          const textIndex = textCells.findIndex((c) => namePatterns.some((p) => p.test(c)));
+          if (textIndex >= 0 && textIndex === n.idx) score += 20;
+
+          candidates.push({ item: itemName, qty: n.qty, totalKg: n.totalKg, score });
+        }
+      }
+    }
+
+    // Um item só pode receber a melhor célula numérica. Ordenar por confiança
+    // garante que 216 (32.4) vence 1 (1.0) para Corrente 10K.
+    candidates.sort((a, b) => b.score - a.score);
+    const chosenItems = new Set<string>();
+    const chosenNumeric = new Set<string>();
+
+    for (const c of candidates) {
+      const numericKey = `${c.qty}|${c.totalKg.toFixed(3)}`;
+      if (chosenItems.has(c.item) || chosenNumeric.has(numericKey)) continue;
+
+      // Só substituir uma quantidade já reconhecida se a nova evidência for
+      // muito mais forte. Caso contrário, evitamos duplicados.
+      const existing = items.find((x) => x.endsWith(` ${c.item}`));
+      if (existing) {
+        const oldMatch = existing.match(/^(\d+)\s+/);
+        const oldQty = oldMatch ? parseInt(oldMatch[1], 10) : 0;
+        const known = ITEM_WEIGHT_KG[c.item] || [];
+        const oldUnitCandidates = known.map((w) => Math.abs(w - c.totalKg / Math.max(oldQty, 1)));
+        const oldBest = oldUnitCandidates.length ? Math.min(...oldUnitCandidates) : Infinity;
+        const newBest = Math.min(...known.map((w) => Math.abs(w - c.totalKg / c.qty)));
+        if (oldBest <= Math.max(0.025, Math.min(...known) * 0.08) && newBest >= oldBest) continue;
+        // Remove a quantidade errada: a célula com peso é mais confiável.
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (items[i].endsWith(` ${c.item}`)) items.splice(i, 1);
+        }
+      }
+
+      items.push(`${c.qty} ${c.item}`);
+      weightTotals.set(c.item, c.totalKg);
+      chosenItems.add(c.item);
+      chosenNumeric.add(numericKey);
+    }
+  }
+
   // Strategy 2: Recover only items that the table pairing missed.
   // IMPORTANT: never clear items already recovered correctly. The previous
   // fallback could replace a valid "3291 maço, 3681 folha tabaco" result with
@@ -792,6 +916,19 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       if (!items.some((it) => /^\d+\s+lockpick avancada$/i.test(it))) {
         items.push("1 lockpick avancada");
       }
+    }
+  }
+
+  // Se a versão 10K da corrente foi confirmada pelo peso, nunca deixar uma
+  // "corrente" genérica criada pelo fallback sobreviver em paralelo. O mesmo
+  // princípio vale para nomes que são uma versão específica de outro nome.
+  {
+    const hasChain10k = items.some((it) => /\bcorrente 10k$/i.test(it));
+    if (hasChain10k) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (/^\d+\s+corrente$/i.test(items[i])) items.splice(i, 1);
+      }
+      weightTotals.delete("corrente");
     }
   }
 
