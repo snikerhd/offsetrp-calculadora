@@ -418,15 +418,15 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   };
 
   function parseQtyWeight(cell: string): { qty: number; totalKg: number | null } {
-    const m = cell.match(/^(\\d[\\d.,]*)\\s*\\(\\s*(\\d+(?:[.,]\\d+)?)\\s*\\)/);
+    const m = cell.match(/^(\d[\d.,]*)\s*\(\s*(\d+(?:[.,]\d+)?)\s*\)/);
     if (!m) {
-      const q = cell.match(/^(\\d[\\d.,]*)/);
+      const q = cell.match(/^(\d[\d.,]*)/);
       return {
-        qty: q ? Math.round(parseFloat(q[1].replace(/\\./g, "").replace(",", ".")) || 1) : 1,
+        qty: q ? Math.round(parseFloat(q[1].replace(/\./g, "").replace(",", ".")) || 1) : 1,
         totalKg: null,
       };
     }
-    const qty = Math.round(parseFloat(m[1].replace(/\\./g, "").replace(",", ".")) || 1);
+    const qty = Math.round(parseFloat(m[1].replace(/\./g, "").replace(",", ".")) || 1);
     const totalKg = parseFloat(m[2].replace(",", "."));
     return { qty, totalKg: Number.isFinite(totalKg) ? totalKg : null };
   }
@@ -440,28 +440,24 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   }
 
   function matchItem(name: string, qty?: number, totalKg?: number | null): string | null {
-    const cleaned = name.replace(/[•·\\-_]/g, " ").replace(/\\s+/g, " ").trim();
+    const cleaned = name.replace(/[•·\-_]/g, " ").replace(/\s+/g, " ").trim();
 
     // 1) Match direto pelo nome.
     for (const [pattern, itemName] of ITEM_MAP) {
       if (pattern.test(cleaned)) {
-        // Se o nome encaixa mas o peso não bate, não rejeitamos: OCR pode ter
-        // arredondamentos/erros. O peso serve como confirmação, não como bloqueio.
+        // Quando temos quantidade + peso total, o peso conhecido do item é uma
+        // trava forte. Isto evita associar, por exemplo, 1 (0.7) a REVOLVER MK2
+        // quando o verdadeiro REVOLVER MK2 é 1 (5.0).
+        if (qty != null && totalKg != null && ITEM_WEIGHT_KG[itemName]) {
+          if (!weightMatches(itemName, qty, totalKg)) continue;
+        }
         return itemName;
       }
     }
 
-    // 2) Fallback por peso quando o OCR estragou completamente o nome.
-    if (qty && totalKg != null) {
-      const candidates = Object.entries(ITEM_WEIGHT_KG)
-        .filter(([, weights]) => weights.some((w) => Math.abs((totalKg / qty) - w) <= Math.max(0.03, w * 0.08)))
-        .map(([name]) => name);
-
-      // Só usamos o peso sozinho quando é inequívoco. Ex.: 1 item de 10 kg
-      // praticamente identifica "orca"; 0.2 kg não, porque há muitos itens com 0.2.
-      if (candidates.length === 1) return candidates[0];
-    }
-
+    // 2) Não inventar o item apenas pelo peso. O peso é uma LOCK/validação
+    // quando o nome foi reconhecido; usar 2.0 kg sozinho, por exemplo, pode
+    // transformar um item legal ("BAO BUN") em "águia de bronze".
     return null;
   }
 
@@ -507,6 +503,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
         const direct = matchItem(t.cell);
         if (!direct) continue;
         let score = 100;
+        if (ITEM_WEIGHT_KG[direct] && q.totalKg != null && !weightMatches(direct, q.qty, q.totalKg)) continue;
         if (weightMatches(direct, q.qty, q.totalKg)) score += 100;
         if (Math.abs(t.idx - q.idx) === 1) score += 5;
         if (!best || score > best.score) best = { idx: t.idx, item: direct, score };
@@ -710,7 +707,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       if (itemName === "lockpick" && /lock(?:pick|peck)[\s\S]{0,90}avan[cç]ad/i.test(allText)) continue;
 
       // Prefer a number immediately associated with the item name.
-      const before = allText.match(new RegExp(`(\\d[\\d.,]*)\\s*(?:\\([^)]*\\))?\\s*${pattern.source}`, "i"));
+      const before = allText.match(new RegExp(`(\\d[\\d.,]*)\\s*(?:\([^)]*\))?\\s*${pattern.source}`, "i"));
       const after = allText.match(new RegExp(`${pattern.source}\\s*(?:\\t|\\s{2,})\\s*(\\d[\\d.,]*)`, "i"));
       const rawQty = before?.[1] ?? after?.[1];
       if (rawQty) {
@@ -731,6 +728,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       for (let i = items.length - 1; i >= 0; i--) {
         if (/^\d+\s+lockpick$/i.test(items[i])) items.splice(i, 1);
       }
+      weightTotals.delete("lockpick");
       if (!items.some((it) => /^\d+\s+lockpick avancada$/i.test(it))) {
         items.push("1 lockpick avancada");
       }
@@ -790,6 +788,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       for (let i = items.length - 1; i >= 0; i--) {
         if (/^\d+\s+lockpick$/i.test(items[i])) items.splice(i, 1);
       }
+      weightTotals.delete("lockpick");
       if (!items.some((it) => /^\d+\s+lockpick avancada$/i.test(it))) {
         items.push("1 lockpick avancada");
       }
