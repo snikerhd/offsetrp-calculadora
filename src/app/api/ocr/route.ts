@@ -772,8 +772,17 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   // name is the first half of the advanced name, so prefer the advanced item.
   {
     const normalizedAllText = lines.join(" ").replace(/\s+/g, " ").trim();
-    const hasAdvancedLockpick = /lock(?:pick|peck)[\s\-_]*avan[cç]ad/i.test(normalizedAllText)
-      || /lock(?:pick|peck)[\s\-_]*(?:\n|\s)+avan[cç]ad/i.test(lines.join("\n"));
+    // OCR.space can place "LOCKPICK" and "AVANÇADA" in different
+    // columns/lines with unrelated cells between them. In that layout the
+    // two words still describe ONE item, not two lockpicks. Treat the
+    // presence of both tokens as the advanced variant, even when they are
+    // far apart in the flattened OCR text.
+    const hasLockpickToken = /lock(?:pick|peck)/i.test(normalizedAllText);
+    const hasAdvancedToken = /avan[cç]ad/i.test(normalizedAllText);
+    const hasAdvancedLockpick =
+      /lock(?:pick|peck)[\s\-_]*avan[cç]ad/i.test(normalizedAllText)
+      || /lock(?:pick|peck)[\s\-_]*(?:\n|\s)+avan[cç]ad/i.test(lines.join("\n"))
+      || (hasLockpickToken && hasAdvancedToken);
 
     if (hasAdvancedLockpick) {
       // Remove every normal lockpick recovered by the generic item matcher.
