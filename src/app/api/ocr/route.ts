@@ -713,5 +713,5 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     .map(([name, kg]) => ({ item: name, kg: Number(kg.toFixed(2)), unitKg: getWeightForItem(name) }))
     .filter((x) => x.kg > 0);
 
-  return { text: resultText, weights };
+  return { text: resultText, weights, weaponCapture };
 }
