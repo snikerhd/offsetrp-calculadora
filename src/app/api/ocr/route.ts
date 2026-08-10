@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       result: parsed.text,
       detectedWeights: parsed.weights,
+      weaponCapture: parsed.weaponCapture ?? null,
       ocrRaw: ocrText,
       preview,
       error: parsed.text ? undefined : "Não foram identificados itens automaticamente.",
@@ -108,8 +109,86 @@ export async function POST(req: NextRequest) {
 // The game inventory grid produces OCR like:
 //   38805 (0.4)\t24 (2.4)\t9 (1.8)\t3 (0.6)     ← quantities row
 //   DINHEIRO\tPACOTE DEALER\tQUADRO\tPULSEIRA OURO  ← names row
-function parseInventoryOCR(text: string): { text: string; weights: { item: string; kg: number; unitKg: number | null }[] } {
+
+interface WeaponCapture {
+  weapon: string;
+  weaponItem: "arma baixo calibre" | "arma medio calibre" | "arma alto calibre";
+  ammo: number;
+  ammoItem: "balas baixo" | "balas medio" | "balas alto";
+  accessoryCount: number;
+}
+
+function parseWeaponCapture(text: string): WeaponCapture | null {
+  const flat = text.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
+  const weaponRules: { pattern: RegExp; item: WeaponCapture["weaponItem"]; ammo: WeaponCapture["ammoItem"] }[] = [
+    { pattern: /revolver\s*mk\s*2/i, item: "arma baixo calibre", ammo: "balas baixo" },
+    { pattern: /bullpup\s*rifle\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
+    { pattern: /bullpup\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
+    { pattern: /machine\s*pistol/i, item: "arma medio calibre", ammo: "balas medio" },
+    { pattern: /micro\s*smg/i, item: "arma medio calibre", ammo: "balas medio" },
+    { pattern: /assault\s*smg/i, item: "arma medio calibre", ammo: "balas medio" },
+    { pattern: /tactical\s*(carbine|rifle)/i, item: "arma alto calibre", ammo: "balas alto" },
+    { pattern: /double\s*barrel/i, item: "arma alto calibre", ammo: "balas alto" },
+    { pattern: /gusenberg/i, item: "arma alto calibre", ammo: "balas alto" },
+    { pattern: /compact\s*rifle/i, item: "arma alto calibre", ammo: "balas alto" },
+    { pattern: /assault\s*rifle\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
+    { pattern: /sns\s*pistol/i, item: "arma baixo calibre", ammo: "balas baixo" },
+    { pattern: /vintage\s*pistol/i, item: "arma baixo calibre", ammo: "balas baixo" },
+    { pattern: /pistol\s*\.\s*50/i, item: "arma baixo calibre", ammo: "balas baixo" },
+  ];
+
+  const rule = weaponRules.find((r) => r.pattern.test(flat));
+  if (!rule) return null;
+
+  const ammoMatch = flat.match(/muni[cç][aã]o\s*:\s*(\d{1,6})/i);
+  const ammo = ammoMatch ? parseInt(ammoMatch[1], 10) : 0;
+
+  let accessoryCount = 0;
+  const accessoriesMatch = flat.match(/acess[oó]rios?\s*:\s*(.+?)(?=\s+(?:peso|durabilidade|condi[cç][aã]o|valor|$))/i);
+  if (accessoriesMatch) {
+    const list = accessoriesMatch[1]
+      .split(/\s*,\s*/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    accessoryCount = list.length;
+  } else if (/acess[oó]rios?\s*:/i.test(flat)) {
+    // Fallback robusto para OCR que perde as vírgulas: contar acessórios conhecidos.
+    const knownAccessoryPatterns = [
+      /extended\s*clip/i,
+      /precision\s*muzzle/i,
+      /scope/i,
+      /\bgrip\b/i,
+      /flashlight/i,
+      /heavy\s*barrel/i,
+      /suppressor/i,
+      /muzzle/i,
+      /magazine/i,
+    ];
+    accessoryCount = knownAccessoryPatterns.filter((p) => p.test(flat)).length;
+  }
+
+  return {
+    weapon: rule.pattern.source.replace(/\\s\*/g, " "),
+    weaponItem: rule.item,
+    ammo,
+    ammoItem: rule.ammo,
+    accessoryCount,
+  };
+}
+
+function parseInventoryOCR(text: string): { text: string; weights: { item: string; kg: number; unitKg: number | null }[]; weaponCapture: WeaponCapture | null } {
   const items: string[] = [];
+  const weaponCapture = parseWeaponCapture(text);
+
+  // Capturas de arma têm um formato diferente do inventário:
+  // "Revolver MK2 | Número de Série | Munição: 4" e, opcionalmente,
+  // "Acessórios: ...". Transformamos munição e acessórios em itens reais
+  // para a calculadora poder aplicar a coima automaticamente.
+  if (weaponCapture) {
+    items.push(`1 ${weaponCapture.weaponItem}`);
+    if (weaponCapture.ammo > 0) items.push(`${weaponCapture.ammo} ${weaponCapture.ammoItem}`);
+    if (weaponCapture.accessoryCount > 0) items.push(`${weaponCapture.accessoryCount} acessorios para armas`);
+  }
   const weightTotals = new Map<string, number>();
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   // OCR.space can represent table columns as tabs OR as 2+ spaces.
@@ -124,6 +203,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/lockpeck\s*avan[cç]ad/i, "lockpick avancada"],
     [/\bavan[cç]ad/i, "lockpick avancada"],
     [/lockpick|lockpeck/i, "lockpick"],
+    [/acess[oó]rio[s]?\s*(para\s*)?arma[s]?/i, "acessorios para armas"],
     [/algema/i, "algemas"],
     [/medikit|medick/i, "medickits"],
     [/diamante\s*bruto/i, "diamante bruto"],
@@ -213,10 +293,15 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/tactical\s*(carbine|rifle)/i, "arma alto calibre"],
     [/military\s*rifle/i, "arma alto calibre"],
     // Carregadores por tipo
-    [/carregador\s*(de\s*)?shotgun/i, "carregador shotgun"],
-    [/carregador\s*(de\s*)?pistola/i, "carregador pistola"],
-    [/carregador\s*(de\s*)?smg/i, "carregador smg"],
-    [/carregador\s*(de\s*)?rifle/i, "carregador rifle"],
+    // No servidor Offset RP, carregador de pistola = baixo calibre.
+    [/carregador\s*(de\s*)?pistola/i, "carregador baixo calibre"],
+    [/carregador\s*(de\s*)?smg/i, "carregador medio calibre"],
+    [/carregador\s*(de\s*)?rifle/i, "carregador alto calibre"],
+    [/carregador\s*(de\s*)?shotgun/i, "carregador alto calibre"],
+    [/carregador\s*(de\s*)?baixo\s*calibre/i, "carregador baixo calibre"],
+    [/carregador\s*(de\s*)?medio\s*calibre/i, "carregador medio calibre"],
+    [/carregador\s*(de\s*)?médio\s*calibre/i, "carregador medio calibre"],
+    [/carregador\s*(de\s*)?alto\s*calibre/i, "carregador alto calibre"],
     // Blueprints / Peças
     [/blueprint\s*pistola/i, "blueprint pistola"],
     [/blueprint\s*smg/i, "blueprint smg"],
@@ -307,8 +392,11 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "colete fortalecido": [1],
     "carregador shotgun": [0.2],
     "carregador pistola": [0.2],
+    "carregador baixo calibre": [0.2],
     "carregador smg": [0.2],
+    "carregador medio calibre": [0.2],
     "carregador rifle": [0.2],
+    "carregador alto calibre": [0.2],
     "medickits": [4],
     "blueprint pistola": [0.1],
     "blueprint smg": [0.1],
@@ -318,6 +406,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "arma baixo calibre": [5],
     "arma medio calibre": [10],
     "arma alto calibre": [15],
+    "acessorios para armas": [0.1],
   };
 
   function parseQtyWeight(cell: string): { qty: number; totalKg: number | null } {
@@ -576,6 +665,16 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     const allText = lines.join(" ");
     for (const [pattern, itemName] of ITEM_MAP) {
       if (items.some((it) => it.endsWith(` ${itemName}`))) continue;
+      if (itemName === "acessorios para armas" && weaponCapture?.accessoryCount) continue;
+      if (weaponCapture && [
+        "arma baixo calibre", "arma medio calibre", "arma alto calibre",
+        "balas baixo", "balas medio", "balas alto"
+      ].includes(itemName)) continue;
+
+      // Se já detetámos a versão avançada, nunca criar uma lockpick normal
+      // só porque o padrão genérico /lockpick/ também casa com o texto.
+      if (itemName === "lockpick" && items.some((it) => it.endsWith(" lockpick avancada"))) continue;
+      if (itemName === "lockpick" && /lockpick\s*avan[cç]ad/i.test(allText)) continue;
 
       // Prefer a number immediately associated with the item name.
       const before = allText.match(new RegExp(`(\\d[\\d.,]*)\\s*(?:\\([^)]*\\))?\\s*${pattern.source}`, "i"));

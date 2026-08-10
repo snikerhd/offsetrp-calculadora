@@ -18,6 +18,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   const [ocrPreview, setOcrPreview] = useState<string | null>(null);
   const [ocrRawText, setOcrRawText] = useState("");
   const [ocrWeights, setOcrWeights] = useState<{ item: string; kg: number; unitKg: number | null }[]>([]);
+  const [ocrWeapon, setOcrWeapon] = useState<{ weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleResult = useCallback((data: {
@@ -26,10 +27,12 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     error?: string;
     ocrRaw?: string;
     detectedWeights?: { item: string; kg: number; unitKg: number | null }[];
+    weaponCapture?: { weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null;
   }) => {
     if (data.preview) setOcrPreview(data.preview);
     if (data.ocrRaw) setOcrRawText(data.ocrRaw);
     setOcrWeights(data.detectedWeights || []);
+    setOcrWeapon(data.weaponCapture || null);
 
     if (data.error && !data.result) {
       setOcrStatus(`❌ ${data.error}`);
@@ -58,6 +61,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     setOcrPreview(null);
     setOcrRawText("");
     setOcrWeights([]);
+    setOcrWeapon(null);
     setOcrStatus("🔍 A analisar imagem com OCR...");
 
     try {
@@ -176,6 +180,17 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
           <img src={ocrPreview} alt="Preview" className="max-h-40 rounded border border-white/10" />
         </div>
       )}
+      {ocrWeapon && (
+        <div className="mb-2 rounded border border-amber-500/20 bg-amber-500/5 p-2">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">🔫 Captura da arma</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-[10px] text-gray-300">
+            <div>Arma: <span className="text-gray-100">{ocrWeapon.weaponItem.replace("arma ", "").replace("calibre", "calibre")}</span></div>
+            <div>Munição: <span className="text-gray-100">{ocrWeapon.ammo} {ocrWeapon.ammoItem}</span></div>
+            <div>Acessórios: <span className="text-amber-300 font-bold">{ocrWeapon.accessoryCount}</span></div>
+          </div>
+        </div>
+      )}
+
       {ocrWeights.length > 0 && (
         <details className="mb-2" open>
           <summary className="cursor-pointer text-[10px] text-gray-500 hover:text-gray-300">

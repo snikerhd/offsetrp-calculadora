@@ -159,12 +159,38 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "algema": "Algemas",
   "handcuffs": "Algemas",
   "cuffs": "Algemas",
-  // Lockpick
+  // Lockpick — avançada tem de vir ANTES da básica
+  // para "lockpick avancada" nunca cair no alias genérico "lockpick".
+  "lockpick avancada": "Lockpick Avançada",
+  "lockpick avançada": "Lockpick Avançada",
+  "lock pick avancada": "Lockpick Avançada",
+  "lock pick avançada": "Lockpick Avançada",
+  "lockpeck avancada": "Lockpick Avançada",
+  "lockpeck avançada": "Lockpick Avançada",
+  // Lockpick normal
   "lockpick": "Lockpick",
   "lockpicks": "Lockpick",
   "lock pick": "Lockpick",
   "lock": "Lockpick",
   "lock picks": "Lockpick",
+  // Carregadores — no Offset RP, carregador de pistola = baixo calibre
+  // Mantemos vários nomes porque o OCR pode escrever "pistola", "pistola 9mm", etc.
+  "carregador pistola": "Carregador Baixo Calibre",
+  "carregador de pistola": "Carregador Baixo Calibre",
+  "carregador pistola 9mm": "Carregador Baixo Calibre",
+  "carregador baixo": "Carregador Baixo Calibre",
+  "carregador de baixo calibre": "Carregador Baixo Calibre",
+  "carregador baixo calibre": "Carregador Baixo Calibre",
+  "carregador smg": "Carregador Médio Calibre",
+  "carregador de smg": "Carregador Médio Calibre",
+  "carregador medio calibre": "Carregador Médio Calibre",
+  "carregador de medio calibre": "Carregador Médio Calibre",
+  "carregador rifle": "Carregador Alto Calibre",
+  "carregador de rifle": "Carregador Alto Calibre",
+  "carregador shotgun": "Carregador Alto Calibre",
+  "carregador de shotgun": "Carregador Alto Calibre",
+  "carregador alto calibre": "Carregador Alto Calibre",
+  "carregador de alto calibre": "Carregador Alto Calibre",
   // C4
   "c4": "C4",
   "c-4": "C4",
@@ -584,21 +610,29 @@ export function parseQuickInput(input: string): ParseResult {
       continue;
     }
 
-    // Verificar itens
-    const item = obterItemPorSinonimo(originalNome);
-    if (item) {
-      const preco = ITENS_ILEGAIS[item];
-      const subtotal = qtd * preco;
-      result.itens.resultados.push(`  ${qtd}x ${item} x ${fmt(preco)} = ${fmt(subtotal)}`);
-      result.itens.subtotal += subtotal;
-      continue;
-    }
+    // Verificar armas ANTES dos itens.
+    // "arma baixo calibre" contém a palavra "arma" e o antigo match parcial
+    // podia classificá-la erradamente como "Peças Arma".
 
     // Verificar armas
     let tipoArma: string | null = null;
     let caliberArma: string | null = null;
 
-    for (const baixo of ARMAS_BAIXO) {
+    // O OCR pode já devolver a classe em vez do nome da arma.
+    // Estes nomes são classes de arma e NUNCA devem ser confundidos com
+    // "Peças Arma" pelo match parcial de itens.
+    if (nome.includes("arma baixo calibre") || nome === "baixo calibre") {
+      tipoArma = "baixo";
+      caliberArma = "baixo";
+    } else if (nome.includes("arma medio calibre") || nome.includes("arma médio calibre") || nome === "medio calibre" || nome === "médio calibre") {
+      tipoArma = "medio";
+      caliberArma = "medio";
+    } else if (nome.includes("arma alto calibre") || nome === "alto calibre") {
+      tipoArma = "alto";
+      caliberArma = "alto";
+    }
+
+    if (!tipoArma) for (const baixo of ARMAS_BAIXO) {
       if (nome.includes(baixo)) {
         tipoArma = "baixo";
         caliberArma = baixo;
@@ -637,7 +671,37 @@ export function parseQuickInput(input: string): ParseResult {
       continue;
     }
 
-    // Verificar munição
+    // Verificar itens só depois de excluir armas.
+    const item = obterItemPorSinonimo(originalNome);
+    if (item) {
+      const preco = ITENS_ILEGAIS[item];
+      const subtotal = qtd * preco;
+      result.itens.resultados.push(`  ${qtd}x ${item} x ${fmt(preco)} = ${fmt(subtotal)}`);
+      result.itens.subtotal += subtotal;
+      continue;
+    }
+
+    // Verificar carregadores ANTES das balas.
+    // Um "carregador pistola" é munição de baixo calibre no servidor.
+    if (nome.includes("carregador")) {
+      let tipoCarregador: "baixo" | "medio" | "alto" = "baixo";
+      if (nome.includes("smg") || nome.includes("medio") || nome.includes("médio")) tipoCarregador = "medio";
+      else if (nome.includes("rifle") || nome.includes("shotgun") || nome.includes("alto")) tipoCarregador = "alto";
+
+      const precoUnit = tipoCarregador === "baixo" ? 2000 : tipoCarregador === "medio" ? 4000 : 6000;
+      const subtotal = qtd * precoUnit;
+      const nomeCarregador = tipoCarregador === "baixo"
+        ? "Carregador Baixo Calibre"
+        : tipoCarregador === "medio"
+          ? "Carregador Médio Calibre"
+          : "Carregador Alto Calibre";
+
+      result.municao.resultados.push(`  ${qtd}x ${nomeCarregador} x ${fmt(precoUnit)} = ${fmt(subtotal)}`);
+      result.municao.total += subtotal;
+      continue;
+    }
+
+    // Verificar munição (balas)
     let tipoMun: string | null = null;
     for (const baixo of MUN_BAIXO) {
       if (nome.includes(baixo) || nome === "balas" || nome === "ammo" || nome === "municao") {
@@ -670,20 +734,6 @@ export function parseQuickInput(input: string): ParseResult {
 
       const subtotal = qtd * precoUnit;
       result.municao.resultados.push(`  ${qtd}x Balas ${tipoMun} calibre x ${fmt(precoUnit)} = ${fmt(subtotal)}`);
-      result.municao.total += subtotal;
-      continue;
-    }
-
-    // Verificar carregadores
-    if (nome.includes("carregador")) {
-      let precoUnit = 0;
-      if (tipoMun === "baixo" || nome.includes("baixo")) precoUnit = 2000;
-      else if (tipoMun === "medio" || nome.includes("medio")) precoUnit = 4000;
-      else if (tipoMun === "alto" || nome.includes("alto")) precoUnit = 6000;
-      else precoUnit = 2000; // Default
-
-      const subtotal = qtd * precoUnit;
-      result.municao.resultados.push(`  ${qtd}x Carregador x ${fmt(precoUnit)} = ${fmt(subtotal)}`);
       result.municao.total += subtotal;
       continue;
     }
