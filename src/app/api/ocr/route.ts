@@ -719,6 +719,51 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       }
     }
   }
+  // Normalizações finais para casos em que o OCR separa/desloca células especiais.
+  // 1) "LOCKPICK" + "AVANÇADA" é UM único item: Lockpick Avançada.
+  // 2) Para "CARREGADOR DE PISTOLA", a quantidade deve vir do par quantidade/peso
+  //    que realmente bate com 0.2 kg/un. (ex.: 9 (1.8)), e não de um número
+  //    vizinho como 1 (1.0) de outro item.
+  {
+    const allText = lines.join(" ").replace(/\s+/g, " ").trim();
+
+    if (/lock(?:pick|peck)[\s\-_]*avan[cç]ad/i.test(allText)) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (/^\d+\s+lockpick$/i.test(items[i])) items.splice(i, 1);
+      }
+      if (!items.some((it) => /^\d+\s+lockpick avancada$/i.test(it))) {
+        items.push("1 lockpick avancada");
+      }
+    }
+
+    const chargerMatch = allText.match(/(.{0,100})carregador\s+de\s+pistola/i);
+    if (chargerMatch) {
+      const prefix = chargerMatch[1];
+      const candidates: { qty: number; totalKg: number; score: number }[] = [];
+      const re = /(\d[\d.,]*)\s*\(\s*(\d+(?:[.,]\d+)?)\s*\)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(prefix))) {
+        const qty = Math.round(parseFloat(m[1].replace(/\./g, "").replace(",", ".")) || 0);
+        const totalKg = parseFloat(m[2].replace(",", "."));
+        if (qty > 0 && Number.isFinite(totalKg)) {
+          const unit = totalKg / qty;
+          const score = Math.abs(unit - 0.2);
+          candidates.push({ qty, totalKg, score });
+        }
+      }
+      if (candidates.length) {
+        candidates.sort((a, b) => a.score - b.score);
+        const best = candidates[0];
+        if (best.score <= 0.04) {
+          for (let i = items.length - 1; i >= 0; i--) {
+            if (/^\d+\s+carregador baixo calibre$/i.test(items[i])) items.splice(i, 1);
+          }
+          items.push(`${best.qty} carregador baixo calibre`);
+        }
+      }
+    }
+  }
+
   // Merge duplicates — somar quantidades de itens com o mesmo nome (ex: várias armas do mesmo calibre)
   const merged = new Map<string, number>();
   for (const entry of items) {
