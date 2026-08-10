@@ -111,7 +111,10 @@ export async function POST(req: NextRequest) {
 function parseInventoryOCR(text: string): { text: string; weights: { item: string; kg: number; unitKg: number | null }[] } {
   const items: string[] = [];
   const weightTotals = new Map<string, number>();
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  // OCR.space can represent table columns as tabs OR as 2+ spaces.
+  // Keep item names such as "MAÇO TABACO" intact (single spaces).
+  const splitCells = (line: string) => line.split(/\t+|\s{2,}/).map((c) => c.trim()).filter(Boolean);
 
   // SÓ ITENS ILEGAIS — nada de bandagem, knife, carta condução, kit, rádio, telemovel, etc.
   // ORDEM IMPORTA: patterns mais específicos primeiro!
@@ -380,7 +383,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   // where the weight is the safest confirmation.
   const tabRows: { cells: string[]; lineIdx: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const cells = lines[i].split("\t").map((c) => c.trim()).filter(Boolean);
+    const cells = splitCells(lines[i]);
     if (cells.length >= 2) tabRows.push({ cells, lineIdx: i });
   }
 
@@ -433,6 +436,54 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     let score = 100;
     if (weightMatches(direct, qty, totalKg)) score += 50;
     return { item: direct, score };
+  }
+
+  // First pass: the normal OCR table is usually two adjacent rows:
+  //   3291 (987.3)  3681 (736.2)
+  //   MACO TABACO   FOLHA TABACO
+  // Pair adjacent numeric/text rows by column, but let the known unit weight
+  // override the column when OCR shifted a cell.
+  for (let i = 0; i + 1 < tabRows.length; i++) {
+    if (usedLines.has(tabRows[i].lineIdx) || usedLines.has(tabRows[i + 1].lineIdx)) continue;
+    const a = tabRows[i];
+    const b = tabRows[i + 1];
+    const aNums = a.cells.map((c, idx) => ({ ...parseQtyWeight(c), idx, raw: c })).filter(x => /^\d/.test(x.raw));
+    const bNums = b.cells.map((c, idx) => ({ ...parseQtyWeight(c), idx, raw: c })).filter(x => /^\d/.test(x.raw));
+    const aText = a.cells.map((c, idx) => ({ cell: c, idx })).filter(x => !/^\d/.test(x.cell));
+    const bText = b.cells.map((c, idx) => ({ cell: c, idx })).filter(x => !/^\d/.test(x.cell));
+    const aNum = aNums.length >= 1 && aText.length === 0;
+    const bNum = bNums.length >= 1 && bText.length === 0;
+    const aName = aText.length >= 1 && aNums.length === 0;
+    const bName = bText.length >= 1 && bNums.length === 0;
+    if (!((aNum && bName) || (bNum && aName))) continue;
+
+    const nums = aNum ? aNums : bNums;
+    const texts = aNum ? bText : aText;
+    const used = new Set<number>();
+    let recovered = 0;
+    for (const q of nums) {
+      let best: { idx: number; item: string; score: number } | null = null;
+      for (const t of texts) {
+        if (used.has(t.idx)) continue;
+        const item = matchItem(t.cell, q.qty, q.totalKg);
+        if (!item) continue;
+        let score = 100;
+        if (weightMatches(item, q.qty, q.totalKg)) score += 200;
+        if (t.idx === q.idx) score += 20;
+        if (!best || score > best.score) best = { idx: t.idx, item, score };
+      }
+      if (best) {
+        used.add(best.idx);
+        items.push(`${q.qty} ${best.item}`);
+        const kg = q.totalKg ?? ((getWeightForItem(best.item) ?? 0) * q.qty);
+        if (kg > 0) weightTotals.set(best.item, (weightTotals.get(best.item) || 0) + kg);
+        recovered++;
+      }
+    }
+    if (recovered > 0) {
+      usedLines.add(a.lineIdx);
+      usedLines.add(b.lineIdx);
+    }
   }
 
   // Pair quantity rows with name rows. For each pair, use the best assignment
@@ -502,7 +553,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   for (let i = 0; i < lines.length; i++) {
     if (usedLines.has(i)) continue;
     const line = lines[i];
-    const cells = line.split("\t").map((c) => c.trim()).filter(Boolean);
+    const cells = splitCells(line);
     if (cells.length < 2) continue;
 
     for (let j = 0; j < cells.length; j++) {
@@ -517,35 +568,25 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
-  // Strategy 2: If table parsing didn't find much, try line-by-line
-  if (items.length < 2) {
-    items.length = 0; // Clear
+  // Strategy 2: Recover only items that the table pairing missed.
+  // IMPORTANT: never clear items already recovered correctly. The previous
+  // fallback could replace a valid "3291 maço, 3681 folha tabaco" result with
+  // "1 maço, 1 folha tabaco" because it matched the first unrelated number.
+  {
     const allText = lines.join(" ");
-    
-    // Try to find patterns like "NUMBER ITEM_NAME" or "ITEM_NAME NUMBER"
     for (const [pattern, itemName] of ITEM_MAP) {
-      // Only illegal items are in ITEM_MAP now
-      
-      const match = allText.match(new RegExp(`(\\d[\\d.,]*)\\s*\\(?[\\d.,]*\\)?\\s*(?:\\t|\\n|\\s{2,})*(${pattern.source})`, "i"));
-      if (match) {
-        const qty = parseFloat(match[1].replace(/\./g, "").replace(",", ".")) || 1;
-        if (!items.some(it => it.endsWith(` ${itemName}`))) {
-          items.push(`${Math.round(qty)} ${itemName}`);
-        }
-        continue;
-      }
-      
-      // Try reverse: name then number
-      const matchRev = allText.match(new RegExp(`(${pattern.source})\\s*(?:\\t|\\n|\\s{2,})*(\\d[\\d.,]*)`, "i"));
-      if (matchRev) {
-        const qty = parseFloat(matchRev[2].replace(/\./g, "").replace(",", ".")) || 1;
-        if (!items.some(it => it.endsWith(` ${itemName}`))) {
-          items.push(`${Math.round(qty)} ${itemName}`);
-        }
+      if (items.some((it) => it.endsWith(` ${itemName}`))) continue;
+
+      // Prefer a number immediately associated with the item name.
+      const before = allText.match(new RegExp(`(\\d[\\d.,]*)\\s*(?:\\([^)]*\\))?\\s*${pattern.source}`, "i"));
+      const after = allText.match(new RegExp(`${pattern.source}\\s*(?:\\t|\\s{2,})\\s*(\\d[\\d.,]*)`, "i"));
+      const rawQty = before?.[1] ?? after?.[1];
+      if (rawQty) {
+        const qty = parseInt(rawQty.replace(/[.,]/g, ""), 10);
+        if (Number.isFinite(qty) && qty > 0) items.push(`${qty} ${itemName}`);
       }
     }
   }
-
   // Merge duplicates — somar quantidades de itens com o mesmo nome (ex: várias armas do mesmo calibre)
   const merged = new Map<string, number>();
   for (const entry of items) {
