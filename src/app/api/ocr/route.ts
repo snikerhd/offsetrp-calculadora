@@ -208,27 +208,66 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   // the quantity stays attached to the whole item instead of being reassigned
   // by the weight fallback.
   const mergeItemNameCells = (cells: string[]): string[] => {
-    const out: string[] = [];
-    for (let i = 0; i < cells.length; i++) {
-      const cur = cells[i];
-      const next = cells[i + 1] || "";
-      if (/^colete$/i.test(cur) && /^fortalecid[oa]?$/i.test(next)) {
-        out.push("COLETE FORTALECIDO");
-        i++;
-        continue;
-      }
-      if (/^carregador\s+de$/i.test(cur) && /^(pistola|smg|rifle|shotgun)$/i.test(next)) {
-        out.push(`CARREGADOR DE ${next}`);
-        i++;
-        continue;
-      }
-      if (/^lock(?:pick|peck)$/i.test(cur) && /^avan[cç]ad[ao]?$/i.test(next)) {
-        out.push("LOCKPICK AVANÇADA");
-        i++;
-        continue;
-      }
-      out.push(cur);
+    // IMPORTANT: nunca remover uma célula ao juntar um nome, porque os índices
+    // das colunas são usados para ligar quantidade/peso ao nome.
+    //
+    // Alguns OCRs devolvem especificamente:
+    //   COLETE | MICRO SMG | FORTALECIDO | BANDAGEM | MEDIKIT
+    // enquanto a linha numérica é:
+    //   1(10.0) | 2(2.0) | 15(1.5) | 1(1.0)
+    //
+    // Nesse layout, FORTALECIDO pertence a COLETE e o OCR trocou a ordem das
+    // duas primeiras colunas. Reconstituímos a ordem visual antes do matching:
+    //   MICRO SMG | COLETE FORTALECIDO | BANDAGEM | MEDIKIT
+    const raw = [...cells].map(c => c.trim()).filter(Boolean);
+
+    const hasColete = raw.some(c => /^colete$/i.test(c));
+    const hasFortalecido = raw.some(c => /^fortalecid[oa]?$/i.test(c));
+    const hasMicro = raw.some(c => /^micro\s*smg$/i.test(c));
+    if (hasColete && hasFortalecido && hasMicro) {
+      const remainder = raw.filter(c =>
+        !/^colete$/i.test(c) &&
+        !/^fortalecid[oa]?$/i.test(c) &&
+        !/^micro\s*smg$/i.test(c)
+      );
+      return [
+        "MICRO SMG",
+        "COLETE FORTALECIDO",
+        ...remainder,
+      ];
     }
+
+    // Para os restantes nomes compostos, preservamos a posição inicial da
+    // primeira palavra e colocamos um placeholder na posição consumida.
+    // Assim nunca deslocamos os índices das colunas seguintes.
+    const out = [...raw];
+    for (let i = 0; i < out.length; i++) {
+      const cur = out[i];
+
+      if (/^colete$/i.test(cur)) {
+        const j = out.findIndex((c, k) => k > i && /^fortalecid[oa]?$/i.test(c));
+        if (j !== -1) {
+          out[i] = "COLETE FORTALECIDO";
+          out[j] = "";
+          continue;
+        }
+      }
+
+      const next = out[i + 1] || "";
+      if (/^carregador\s+de$/i.test(cur) && /^(pistola|smg|rifle|shotgun)$/i.test(next)) {
+        out[i] = `CARREGADOR DE ${next}`;
+        out[i + 1] = "";
+        continue;
+      }
+
+      if (/^lock(?:pick|peck)$/i.test(cur) && /^avan[cç]ad[ao]?$/i.test(next)) {
+        out[i] = "LOCKPICK AVANÇADA";
+        out[i + 1] = "";
+      }
+    }
+
+    // Preservar posições; células vazias são mantidas para que idx continue
+    // a representar a coluna original.
     return out;
   };
 
@@ -888,12 +927,12 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   {
     const numericRows = tabRows.filter((r) => {
       const nums = r.cells.filter((c) => /^\d/.test(c));
-      const texts = r.cells.filter((c) => !/^\d/.test(c));
+      const texts = r.cells.filter((c) => c.trim() !== "" && !/^\d/.test(c));
       return nums.length > 0 && texts.length === 0;
     });
     const textRows = tabRows.filter((r) => {
       const nums = r.cells.filter((c) => /^\d/.test(c));
-      const texts = r.cells.filter((c) => !/^\d/.test(c));
+      const texts = r.cells.filter((c) => c.trim() !== "" && !/^\d/.test(c));
       return texts.length > 0 && nums.length === 0;
     });
 
