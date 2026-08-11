@@ -254,12 +254,12 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/cristal\s*processado/i, "cristal processado"],
     [/cristal/i, "cristal"],
     [/folha\s*tabaco/i, "folha tabaco"],
+    // "SEMENTE TABACO" é um artigo normal e não deve ser confundido com "SEMENTE ERVA".
     [/ma[cç]o\s*tabaco/i, "maço"],
     [/ma[cç]o/i, "maço"],
     [/estimulante/i, "estimulante"],
     [/semente\s*(de\s*)?(erva|cannabis)/i, "semente erva"],
     [/sementes?\s*(de\s*)?(erva|cannabis)/i, "semente erva"],
-    [/sementes?/i, "semente erva"],
     [/cabe[cç]o\s*(de\s*)?(erva|cannabis)/i, "cabeco erva"],
     [/cabe[cç]o/i, "cabeco erva"],
     [/[oó]leo\s*medicinal/i, "oleo medicinal"],
@@ -747,6 +747,26 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
         const normalizedLine = line.replace(/\s+/g, " ");
         const nameHit = namePatterns.some((p) => p.test(normalizedLine));
         if (!nameHit) continue;
+
+        // PRIMEIRO: alinhamento por coluna. Em inventários OCR como:
+        //   1 (1.0) | 273 (27.3) | 1339 (267.8) | 274 (27.4)
+        //   PETROL CAN | ESTANHO | FOLHA TABACO | CARTÃO
+        // a posição da célula é a evidência mais forte. Isto impede, por
+        // exemplo, que ESTANHO roube o 274 da coluna CARTÃO.
+        const nameCells = splitCells(line);
+        const nameCellIndex = nameCells.findIndex((c) => namePatterns.some((p) => p.test(c)));
+        if (nameCellIndex >= 0) {
+          for (const n of numericCells) {
+            if (Math.abs(n.line - li) > 2 || n.idx !== nameCellIndex) continue;
+            const unit = n.totalKg / n.qty;
+            const known = ITEM_WEIGHT_KG[itemName] || [];
+            if (!known.length) continue;
+            const bestDiff = Math.min(...known.map((w) => Math.abs(unit - w)));
+            const tolerance = Math.max(0.025, Math.min(...known) * 0.08);
+            if (bestDiff > tolerance) continue;
+            candidates.push({ item: itemName, qty: n.qty, totalKg: n.totalKg, score: 1400 - Math.abs(n.line - li) * 80 - bestDiff * 1000 });
+          }
+        }
 
         // Procurar números na própria linha, e nas linhas imediatamente
         // acima/abaixo. Em tabelas OCR, a linha dos números costuma estar
