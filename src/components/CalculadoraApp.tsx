@@ -27,6 +27,17 @@ function normalizeImageName(name: string): string {
     .trim();
 }
 
+
+// Imagens dos itens: uma única pasta pública com nomes normalizados.
+// O nome do ficheiro é derivado do nome do item, sem acentos e sem caracteres especiais.
+function itemImageSlug(name: string): string {
+  return normalizeText(name).replace(/\\s+/g, "-");
+}
+
+function itemImageSrc(name: string): string {
+  return `/items/${itemImageSlug(name)}.png`;
+}
+
 // ==================== TIPOS ====================
 interface CadEntry { desc: string; meses: number; multa: number; }
 interface ExtraEntry { desc: string; valor: number; }
@@ -873,7 +884,7 @@ export default function CalculadoraApp() {
               {Object.entries(ITENS_ILEGAIS)
                 .filter(([item]) => !searchItens || normalizeText(item).includes(normalizeText(searchItens)))
                 .map(([item, preco]) => {
-                  const imgSrc = `/items/${encodeURIComponent(item)}.png`;
+                  const imgSrc = itemImageSrc(item);
                   return (
                     <div key={item} className="bg-black/40 rounded-lg border border-white/10 p-3">
                       <div className="flex justify-between items-start gap-2">
@@ -914,7 +925,7 @@ export default function CalculadoraApp() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
               {Object.keys(PRECOS_DROGAS).map(droga => {
-                const imgSrc = `/items/${encodeURIComponent(droga)}.png`;
+                const imgSrc = itemImageSrc(droga);
                 return (
                   <div key={droga} className="bg-black/40 rounded-lg border border-white/10 p-3">
                     <div className="flex items-center gap-3">
