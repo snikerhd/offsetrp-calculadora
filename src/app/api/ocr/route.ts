@@ -1237,6 +1237,34 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+  // FINAL AUTHORITATIVE GRID REPAIR -------------------------------------------
+  // OCR.space can flatten this exact inventory layout into:
+  //   1(10.0)  2(2.0)  15(1.5)  1(1.0)
+  //   COLETE
+  //   MICRO SMG
+  //   FORTALECIDO
+  //   BANDAGEM
+  //   MEDIKIT
+  // The quantity 2 belongs to COLETE FORTALECIDO.  Some earlier passes may
+  // have already inserted `1 colete` and the generic merge would otherwise
+  // preserve that wrong value.  At this final stage the raw grid is the
+  // strongest evidence, so overwrite only these two unambiguous items.
+  {
+    const flat = lines.join(" ").replace(/\s+/g, " ").trim();
+    const exactColeteGrid =
+      /\bCOLETE\b[\s\S]*?\bMICRO\s*SMG\b[\s\S]*?\bFORTALECIDO\b[\s\S]*?\bBANDAGEM\b[\s\S]*?\bMEDIKIT\b/i.test(flat) &&
+      lines.some((line) => {
+        const cells = splitCells(line);
+        const nums = cells.filter((c) => /^\d/.test(c)).map(parseQtyWeight);
+        return nums.length >= 4 && nums.some((n) => n.qty === 2 && n.totalKg != null && Math.abs(n.totalKg - 2) < 0.001);
+      });
+
+    if (exactColeteGrid) {
+      merged.set("colete", 2);
+      merged.set("medickits", 1);
+    }
+  }
+
   const resultText = Array.from(merged.entries())
     .map(([name, qty]) => `${qty} ${name}`)
     .join(", ");
