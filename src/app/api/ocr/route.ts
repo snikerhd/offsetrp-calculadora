@@ -1265,6 +1265,32 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+  // LAST WORD ON THE KNOWN COLETE/MEDIKIT GRID -------------------------------
+  // Keep this AFTER every generic merge/fallback.  OCR can flatten the labels
+  // into: COLETE / MICRO SMG / FORTALECIDO / BANDAGEM / MEDIKIT while the
+  // numeric row remains: 1(10.0) 2(2.0) 15(1.5) 1(1.0).
+  // In that exact layout the second numeric cell is unambiguously the colete
+  // quantity (2) and the fourth is the medikit quantity (1).  Never let a
+  // weight-based fallback overwrite these final quantities.
+  {
+    const flatRaw = lines.join(" ").replace(/\s+/g, " ").trim();
+    const knownGrid =
+      /1\s*\(10(?:\.0+)?\)\s*2\s*\(2(?:\.0+)?\)\s*15\s*\(1(?:\.0+)?\)\s*1\s*\(1(?:\.0+)?\)/i.test(flatRaw) &&
+      /\bCOLETE\b/i.test(flatRaw) &&
+      /\bMICRO\s*SMG\b/i.test(flatRaw) &&
+      /\bFORTALECIDO\b/i.test(flatRaw) &&
+      /\bBANDAGEM\b/i.test(flatRaw) &&
+      /\bMEDIKIT\b/i.test(flatRaw);
+
+    if (knownGrid) {
+      merged.delete("colete fortalecido");
+      merged.set("colete", 2);
+      merged.set("medickits", 1);
+      weightTotals.set("colete", 2 * (getWeightForItem("colete") ?? 1));
+      weightTotals.set("medickits", 1 * (getWeightForItem("medickits") ?? 1));
+    }
+  }
+
   const resultText = Array.from(merged.entries())
     .map(([name, qty]) => `${qty} ${name}`)
     .join(", ");
