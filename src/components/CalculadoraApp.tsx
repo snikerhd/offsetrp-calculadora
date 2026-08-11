@@ -16,26 +16,85 @@ import {
 import EntriesPanel from "@/components/EntriesPanel";
 import OcrBlock from "@/components/OcrBlock";
 
-// ==================== IMPORTS DINÂMICOS DE IMAGENS ====================
+// ==================== IMAGENS DOS ITENS ====================
+// Fonte visual: commit 99a5cf1 do repositório original.
+// Usamos os ficheiros desse commit como fonte de verdade para evitar as
+// imagens incorretas/renomeadas que foram introduzidas nas versões posteriores.
+const ORIGINAL_IMAGE_COMMIT = "99a5cf1bba3403477362cca2607d5231b2ae4a95";
+const ORIGINAL_IMAGE_BASE = `https://raw.githubusercontent.com/snikerhd/offsetrp-calculadora/${ORIGINAL_IMAGE_COMMIT}/src/assets/items`;
 
+const ORIGINAL_IMAGE_FILES: Record<string, string> = {
+  "acessorios-para-armas": 'Acessórios para armas.png',
+  "adaga-templaria": 'Adaga templária.png',
+  "algemas": 'Algemas.png',
+  "alto-1": 'Alto (1).png',
+  "alto": 'Alto.png',
+  "anel-de-diamante": 'Anel de Diamante.png',
+  "baixo-1": 'Baixo (1).png',
+  "baixo": 'Baixo.png',
+  "baleia": 'Baleia.png',
+  "barras-ouro": 'Barras Ouro.png',
+  "bau-especiarias": 'Baú Especiarias.png',
+  "bens-de-assalto-a-casa": 'Bens de assalto a casa.png',
+  "bomba-2-guerra": 'Bomba 2ª Guerra.png',
+  "c4": 'C4.png',
+  "cabecos-de-cannabis": 'Cabeços de Cannabis.png',
+  "charros": 'Charros.png',
+  "chifres": 'Chifres.png',
+  "civil": 'Civil.png',
+  "colete": 'Colete.png',
+  "corrente-de-ouro-10k": 'Corrente de Ouro 10k.png',
+  "corrente-de-ouro": 'Corrente de Ouro.png',
+  "cristal-processado": 'Cristal Processado.png',
+  "cristal": 'Cristal.png',
+  "diamante": 'Diamante.png',
+  "dinheirosujo": 'Dinheirosujo.png',
+  "diario-de-bordo": 'Diário de Bordo.png',
+  "enxofre": 'Enxofre.png',
+  "esquemas-de-armas": 'Esquemas de armas.png',
+  "estanho": 'Estanho.png',
+  "estimulante": 'Estimulante.png',
+  "lockpick": 'Lockpick.png',
+  "maco-tabaco": 'Maço tabaco.png',
+  "medickits": 'Medickits.png',
+  "minerios": 'Minérios.png',
+  "nitro": 'Nitro.png',
+  "niquel": 'Níquel.png',
+  "pack-safira": 'Pack Safira.png',
+  "pacote-ilegal": 'Pacote Ilegal.png',
+  "pacote-de-droga": 'Pacote de Droga.png',
+  "pager": 'Pager.png',
+  "pepitas-de-ouro": 'Pepitas de ouro.png',
+  "pecas-arma": 'Peças Arma.png',
+  "policia": 'Policia.png',
+  "polvora": 'Polvora.png',
+  "rebarbadora": 'Rebarbadora.png',
+  "relogio-de-ouro": 'Relógio de Ouro.png',
+  "saco-de-cannabis": 'Saco de Cannabis.png',
+  "safiras": 'Safiras.png',
+  "sementes-de-cannabis": 'Sementes de Cannabis.png',
+  "tubarao-branco": 'Tubarão Branco.png',
+  "tubarao-martelo": 'Tubarão Martelo.png',
+  "medio": 'medio.png',
+  "orca": 'orca.png',
+  "polvo": 'polvo.png',
+  "raia": 'raia.png',
+  "idolo-inca": 'Ídolo Inca.png',
+  "oleo-de-cannabis": 'Óleo de Cannabis.png',
+};
 
-function normalizeImageName(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-
-// Imagens dos itens: uma única pasta pública com nomes normalizados.
-// O nome do ficheiro é derivado do nome do item, sem acentos e sem caracteres especiais.
 function itemImageSlug(name: string): string {
-  return normalizeText(name).replace(/\\s+/g, "-");
+  return normalizeText(name).replace(/\s+/g, "-");
 }
 
 function itemImageSrc(name: string): string {
-  return `/items/${itemImageSlug(name)}.png`;
+  const slug = itemImageSlug(name);
+  const originalFile = ORIGINAL_IMAGE_FILES[slug];
+  if (originalFile) {
+    return `${ORIGINAL_IMAGE_BASE}/${encodeURIComponent(originalFile)}`;
+  }
+  // Fallback para itens que não existiam no commit original.
+  return `/items/${slug}.png`;
 }
 
 // ==================== TIPOS ====================
