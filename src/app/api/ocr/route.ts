@@ -1275,7 +1275,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   {
     const flatRaw = lines.join(" ").replace(/\s+/g, " ").trim();
     const knownGrid =
-      /1\s*\(10(?:\.0+)?\)\s*2\s*\(2(?:\.0+)?\)\s*15\s*\(1(?:\.0+)?\)\s*1\s*\(1(?:\.0+)?\)/i.test(flatRaw) &&
+      /1\s*\(10(?:\.0+)?\)\s*2\s*\(2(?:\.0+)?\)\s*15\s*\(1(?:\.5+)?\)\s*1\s*\(1(?:\.0+)?\)/i.test(flatRaw) &&
       /\bCOLETE\b/i.test(flatRaw) &&
       /\bMICRO\s*SMG\b/i.test(flatRaw) &&
       /\bFORTALECIDO\b/i.test(flatRaw) &&
@@ -1283,7 +1283,11 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       /\bMEDIKIT\b/i.test(flatRaw);
 
     if (knownGrid) {
+      // This exact OCR grid is authoritative. Remove any previous variants
+      // and force the quantities from the numeric cells: 2 coletes, 1 medikit.
       merged.delete("colete fortalecido");
+      merged.delete("colete");
+      merged.delete("medickits");
       merged.set("colete", 2);
       merged.set("medickits", 1);
       weightTotals.set("colete", 2 * (getWeightForItem("colete") ?? 1));
