@@ -848,6 +848,73 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+  // STRICT POSITIONAL RECOVERY -------------------------------------------------
+  // Alguns OCRs devolvem a grelha em linhas separadas, mas perdem tabs/espacos
+  // suficientes para o parser acima considerar as duas linhas como um par.
+  // Quando isso acontece, NÃO devemos procurar a primeira quantidade global.
+  // Procuramos a linha numérica mais próxima com pelo menos a mesma coluna e
+  // ligamos nome[i] -> quantidade[i]. Isto é especialmente importante quando
+  // dois itens têm o mesmo peso/unidade (ex.: COLETE e MEDIKIT, ambos 1 kg).
+  {
+    const numericRows = tabRows.filter((r) => {
+      const nums = r.cells.filter((c) => /^\d/.test(c));
+      const texts = r.cells.filter((c) => !/^\d/.test(c));
+      return nums.length > 0 && texts.length === 0;
+    });
+    const textRows = tabRows.filter((r) => {
+      const nums = r.cells.filter((c) => /^\d/.test(c));
+      const texts = r.cells.filter((c) => !/^\d/.test(c));
+      return texts.length > 0 && nums.length === 0;
+    });
+
+    for (const nr of numericRows) {
+      const nums = nr.cells.map((c, idx) => ({ ...parseQtyWeight(c), idx, raw: c }))
+        .filter((x) => /^\d/.test(x.raw) && x.qty > 0);
+      if (!nums.length) continue;
+
+      // Escolher a linha textual não usada mais próxima, desde que tenha
+      // alguma célula reconhecível na mesma coluna.
+      const candidates = textRows
+        .filter((tr) => !usedLines.has(tr.lineIdx))
+        .map((tr) => {
+          let matches = 0;
+          for (const q of nums) {
+            const cell = tr.cells[q.idx];
+            if (!cell) continue;
+            if (matchItem(cell, q.qty, q.totalKg) != null) matches++;
+          }
+          return { tr, matches, distance: Math.abs(tr.lineIdx - nr.lineIdx) };
+        })
+        .filter((x) => x.matches > 0)
+        .sort((a, b) => b.matches - a.matches || a.distance - b.distance);
+
+      const bestRow = candidates[0];
+      if (!bestRow) continue;
+
+      let recovered = 0;
+      for (const q of nums) {
+        const cell = bestRow.tr.cells[q.idx];
+        if (!cell) continue;
+        const item = matchItem(cell, q.qty, q.totalKg);
+        if (!item) continue;
+
+        // Nunca substituir uma quantidade já associada explicitamente ao mesmo
+        // item. O objetivo deste bloco é apenas recuperar o que ainda falta.
+        if (items.some((it) => it.endsWith(` ${item}`))) continue;
+
+        items.push(`${q.qty} ${item}`);
+        const kg = q.totalKg ?? ((getWeightForItem(item) ?? 0) * q.qty);
+        if (kg > 0) weightTotals.set(item, (weightTotals.get(item) || 0) + kg);
+        recovered++;
+      }
+
+      if (recovered > 0) {
+        usedLines.add(nr.lineIdx);
+        usedLines.add(bestRow.tr.lineIdx);
+      }
+    }
+  }
+
   // Strategy 2: Recover only items that the table pairing missed.
   // IMPORTANT: never clear items already recovered correctly. The previous
   // fallback could replace a valid "3291 maço, 3681 folha tabaco" result with
@@ -867,10 +934,18 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       if (itemName === "lockpick" && items.some((it) => it.endsWith(" lockpick avancada"))) continue;
       if (itemName === "lockpick" && /lock(?:pick|peck)[\s\S]{0,90}avan[cç]ad/i.test(allText)) continue;
 
-      // Prefer a number immediately associated with the item name.
-      const before = allText.match(new RegExp(`(\\d[\\d.,]*)\\s*(?:\([^)]*\))?\\s*${pattern.source}`, "i"));
-      const after = allText.match(new RegExp(`${pattern.source}\\s*(?:\\t|\\s{2,})\\s*(\\d[\\d.,]*)`, "i"));
-      const rawQty = before?.[1] ?? after?.[1];
+      // Prefer a quantity recovered from the actual table column. A global
+      // regex over flattened OCR text is only the final fallback because it can
+      // swap equal-weight items such as 2 COLETE vs 1 MEDIKIT.
+      let rawQty: string | undefined;
+      const positional = tabRows.find((tr) =>
+        tr.cells.some((c) => pattern.test(c)) && !tr.cells.some((c) => /^\d/.test(c))
+      );
+      if (!positional) {
+        const before = allText.match(new RegExp(`(\\d[\\d.,]*)\\s*(?:\\([^)]*\\))?\\s*${pattern.source}`, "i"));
+        const after = allText.match(new RegExp(`${pattern.source}\\s*(?:\\t|\\s{2,})\\s*(\\d[\\d.,]*)`, "i"));
+        rawQty = before?.[1] ?? after?.[1];
+      }
       if (rawQty) {
         const qty = parseInt(rawQty.replace(/[.,]/g, ""), 10);
         if (Number.isFinite(qty) && qty > 0) items.push(`${qty} ${itemName}`);
@@ -966,6 +1041,64 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
         if (/^\d+\s+corrente$/i.test(items[i])) items.splice(i, 1);
       }
       weightTotals.delete("corrente");
+    }
+  }
+
+  // AUTORIDADE FINAL DA GRELHA -------------------------------------------------
+  // Se o OCR preservou uma linha só de quantidades/pesos e uma linha só de
+  // nomes, a coluna é a fonte de verdade para a quantidade. Isto acontece
+  // exatamente em capturas como:
+  //   1 (10.0) | 2 (2.0) | 15 (1.5) | 1 (1.0)
+  //   MICRO SMG | COLETE FORTALECIDO | BANDAGEM | MEDIKIT
+  // O peso apenas valida a associação. Nunca devemos deixar um fallback global
+  // trocar 2 COLETE por 2 MEDIKIT porque ambos pesam 1 kg/un.
+  {
+    const numericRows = tabRows.filter((r) =>
+      r.cells.some((c) => /^\d/.test(c)) && !r.cells.some((c) => !/^\d/.test(c))
+    );
+    const textRows = tabRows.filter((r) =>
+      r.cells.some((c) => !/^\d/.test(c)) && !r.cells.some((c) => /^\d/.test(c))
+    );
+
+    const authoritative = new Map<string, number>();
+    for (const tr of textRows) {
+      const nr = numericRows
+        .filter((n) => Math.abs(n.lineIdx - tr.lineIdx) <= 2)
+        .map((n) => {
+          let hits = 0;
+          for (let i = 0; i < Math.min(n.cells.length, tr.cells.length); i++) {
+            const q = parseQtyWeight(n.cells[i]);
+            if (!/^\d/.test(n.cells[i])) continue;
+            if (matchItem(tr.cells[i], q.qty, q.totalKg)) hits++;
+          }
+          return { n, hits, distance: Math.abs(n.lineIdx - tr.lineIdx) };
+        })
+        .filter((x) => x.hits > 0)
+        .sort((a, b) => b.hits - a.hits || a.distance - b.distance)[0];
+
+      if (!nr) continue;
+      for (let i = 0; i < Math.min(nr.n.cells.length, tr.cells.length); i++) {
+        const q = parseQtyWeight(nr.n.cells[i]);
+        if (!/^\d/.test(nr.n.cells[i])) continue;
+        const item = matchItem(tr.cells[i], q.qty, q.totalKg);
+        if (!item) continue;
+        // Se o peso também não bate, não usamos a coluna para corrigir.
+        if (q.totalKg != null && ITEM_WEIGHT_KG[item] && !weightMatches(item, q.qty, q.totalKg)) continue;
+        authoritative.set(item, q.qty);
+      }
+    }
+
+    if (authoritative.size > 0) {
+      // Reescrever apenas a quantidade dos itens que têm uma associação de
+      // coluna inequívoca. Itens sem associação continuam intactos.
+      for (let i = items.length - 1; i >= 0; i--) {
+        const m = items[i].match(/^\d+\s+(.+)$/);
+        if (!m || !authoritative.has(m[1])) continue;
+        items.splice(i, 1);
+      }
+      for (const [item, qty] of authoritative) {
+        items.push(`${qty} ${item}`);
+      }
     }
   }
 
