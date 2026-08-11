@@ -822,65 +822,82 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   }
 
 
-  // JEWELLERY GRID RECOVERY: map quantities to jewellery names by visual order,
-  // even when OCR wraps the item names over multiple lines.
-  // Example:
-  //   297 (29.7) 1069 (160.3) 93 (9.3) 37 (3.7)
-  //   CORRENTE DE OURO
-  //   CORRENTE DE OURO 10K  RELOGIO DE OURO  ANEL DE DIAMANTE
-  // The second quantity is ALWAYS corrente de ouro 10K and the third is ALWAYS
-  // relogio de ouro. Never infer the item from the weight alone.
-  {
-    const jewelleryNames = (s: string) =>
-      /^(?:corrente\s+de\s+ouro|corrente\s+de\s+ouro\s*10k|corrente\s+10k|relogio(?:\s+de)?\s+ouro|relogio|anel(?:\s+de)?\s+diamante|anel|diamante)$/i.test(s.trim());
+ // JEWELLERY GRID RECOVERY: map quantities to jewellery names by visual order,
+ // even when OCR wraps the item names over multiple lines.
+ // Example:
+ // 297 (29.7) 1069 (160.3) 93 (9.3) 37 (3.7)
+ // CORRENTE DE OURO
+ // CORRENTE DE OURO 10K RELOGIO DE OURO ANEL DE DIAMANTE
+ // The second quantity is ALWAYS corrente de ouro 10K and the third is ALWAYS
+ // relogio de ouro. Never infer the item from the weight alone.
+ {
+   const jewelleryNames = (s) =>
+     /^(?:corrente\s+de\s+ouro|corrente\s+de\s+ouro\s*10k|corrente\s+10k|relogio(?:\s+de)?\s+ouro|relogio|anel(?:\s+de)?\s+diamante|anel|diamante)$/i.test(s.trim());
 
-    for (let li = 0; li < lines.length; li++) {
-      const nums = splitCells(lines[li]);
-      const parsedNums = nums
-        .map((c, idx) => ({ idx, c, p: parseQtyWeight(c) }))
-        .filter(x => /^\d/.test(x.c) && x.p.qty > 0 && x.p.totalKg != null);
-      if (parsedNums.length < 2) continue;
+   // Extrai nomes de joalharia mesmo quando vários aparecem na mesma linha
+   // separados por espaços simples (ex.: "CORRENTE DE OURO 10K RELOGIO DE OURO
+   // ANEL DE DIAMANTE"). A ordem das alternativas importa: as variantes mais
+   // específicas (10K, "de ouro") têm de vir ANTES das genéricas.
+   const JEWELLERY_EXTRACT =
+     /(?:corrente\s+de\s+ouro\s*10k|corrente\s+10k|corrente\s+de\s+ouro|relogio(?:\s+de)?\s+ouro|anel(?:\s+de)?\s+diamante|relogio|anel|diamante)/gi;
 
-      // Collect jewellery names from the following OCR lines. OCR frequently
-      // wraps the first name onto one line and the remaining names onto the next.
-      const collected: { name: string; sourceLine: number }[] = [];
-      for (let lj = li + 1; lj <= Math.min(lines.length - 1, li + 3); lj++) {
-        for (const cell of splitCells(lines[lj])) {
-          if (jewelleryNames(cell)) collected.push({ name: cell, sourceLine: lj });
-        }
-      }
-      if (collected.length < 2) continue;
-      if (collected.length > parsedNums.length) continue;
+   for (let li = 0; li < lines.length; li++) {
+     const nums = splitCells(lines[li]);
+     const parsedNums = nums
+       .map((c, idx) => ({ idx, c, p: parseQtyWeight(c) }))
+       .filter(x => /^\d/.test(x.c) && x.p.qty > 0 && x.p.totalKg != null);
+     if (parsedNums.length < 2) continue;
 
-      // Only use this recovery when the number of columns can be matched in
-      // order. This prevents unrelated jewellery names elsewhere in the OCR
-      // from being paired with the wrong quantity.
-      if (collected.length !== parsedNums.length) continue;
+     // Collect jewellery names from the following OCR lines. OCR frequently
+     // wraps the first name onto one line and the remaining names onto the next.
+     const collected: { name: string; sourceLine: number }[] = [];
+     for (let lj = li + 1; lj <= Math.min(lines.length - 1, li + 3); lj++) {
+       for (const cell of splitCells(lines[lj])) {
+         // 1) Célula é exatamente um nome de joalharia (comportamento original).
+         if (jewelleryNames(cell)) {
+           collected.push({ name: cell, sourceLine: lj });
+           continue;
+         }
+         // 2) Célula contém vários nomes colados por espaços simples.
+         //    Extraímos cada um, preservando a ordem visual.
+         const matches = cell.match(JEWELLERY_EXTRACT);
+         if (matches) {
+           for (const m of matches) collected.push({ name: m, sourceLine: lj });
+         }
+       }
+     }
+     if (collected.length < 2) continue;
+     if (collected.length > parsedNums.length) continue;
 
-      for (let j = 0; j < collected.length; j++) {
-        const n = collected[j].name.trim();
-        const cell = parsedNums[j];
-        const q = cell.p.qty;
-        const total = cell.p.totalKg!;
-        let canonical: string | null = null;
+     // Only use this recovery when the number of columns can be matched in
+     // order. This prevents unrelated jewellery names elsewhere in the OCR
+     // from being paired with the wrong quantity.
+     if (collected.length !== parsedNums.length) continue;
 
-        if (/^corrente\s+de\s+ouro\s*10k$/i.test(n) || /^corrente\s+10k$/i.test(n)) canonical = 'corrente de ouro 10k';
-        else if (/^corrente\s+de\s+ouro$/i.test(n)) canonical = 'corrente de ouro';
-        else if (/^relogio(?:\s+de)?\s+ouro$/i.test(n) || /^relogio$/i.test(n)) canonical = 'relogio ouro';
-        else if (/^anel(?:\s+de)?\s+diamante$/i.test(n) || /^anel$/i.test(n)) canonical = 'anel';
-        else if (/^diamante$/i.test(n)) canonical = 'diamante';
-        if (!canonical) continue;
+     for (let j = 0; j < collected.length; j++) {
+       const n = collected[j].name.trim();
+       const cell = parsedNums[j];
+       const q = cell.p.qty;
+       const total = cell.p.totalKg!;
+       let canonical: string | null = null;
 
-        const canonNorm = normalizeText(canonical);
-        for (let k = items.length - 1; k >= 0; k--) {
-          const normItem = normalizeText(items[k]);
-          if (normItem.endsWith(' ' + canonNorm) || normItem === canonNorm) items.splice(k, 1);
-        }
-        items.push(`${q} ${canonical}`);
-        weightTotals.set(canonical, total);
-      }
-    }
-  }
+       if (/^corrente\s+de\s+ouro\s*10k$/i.test(n) || /^corrente\s+10k$/i.test(n)) canonical = 'corrente de ouro 10k';
+       else if (/^corrente\s+de\s+ouro$/i.test(n)) canonical = 'corrente de ouro';
+       else if (/^relogio(?:\s+de)?\s+ouro$/i.test(n) || /^relogio$/i.test(n)) canonical = 'relogio ouro';
+       else if (/^anel(?:\s+de)?\s+diamante$/i.test(n) || /^anel$/i.test(n)) canonical = 'anel';
+       else if (/^diamante$/i.test(n)) canonical = 'diamante';
+       if (!canonical) continue;
+
+       const canonNorm = normalizeText(canonical);
+       for (let k = items.length - 1; k >= 0; k--) {
+         const normItem = normalizeText(items[k]);
+         if (normItem.endsWith(' ' + canonNorm) || normItem === canonNorm) items.splice(k, 1);
+       }
+       items.push(`${q} ${canonical}`);
+       weightTotals.set(canonical, total);
+     }
+   }
+ }
 
   // ─────────────────────────────────────────────────────────────────────
   // WEIGHT-LOCKED RECOVERY (último recurso, mas antes do fallback por nome)
