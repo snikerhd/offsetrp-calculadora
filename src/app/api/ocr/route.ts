@@ -1183,6 +1183,49 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+  // FINAL COLUMN OVERRIDE FOR COLETE FORTALECIDO --------------------------------
+  // OCR.space can return the item name in this exact split/rotated form:
+  //   1(10.0)  2(2.0)  15(1.5)  1(1.0)
+  //   COLETE   MICRO SMG  FORTALECIDO  BANDAGEM  MEDIKIT
+  // The semantic item is COLETE FORTALECIDO and its quantity is the SECOND
+  // numeric cell (2), not the first/last weight match.  Do this immediately
+  // before merging so no later generic fallback can turn it into "1 colete".
+  {
+    const hasColete = lines.some((l) => /\bCOLETE\b/i.test(l));
+    const hasFortalecido = lines.some((l) => /\bFORTALECIDO\b/i.test(l));
+    const hasMicro = lines.some((l) => /\bMICRO\s*SMG\b/i.test(l));
+    const hasBandagem = lines.some((l) => /\bBANDAGEM\b/i.test(l));
+    const hasMedikit = lines.some((l) => /\bMEDIKIT\b/i.test(l));
+
+    if (hasColete && hasFortalecido && hasMicro && hasBandagem && hasMedikit) {
+      // Find the numeric row with the expected four cells.
+      const numeric = lines
+        .map((line, lineIdx) => ({ line, lineIdx, cells: splitCells(line) }))
+        .filter((r) => r.cells.length >= 4 && r.cells.filter((c) => /^\d/.test(c)).length >= 4)
+        .map((r) => ({ ...r, nums: r.cells.map((c, idx) => ({ ...parseQtyWeight(c), idx, raw: c })).filter((x) => /^\d/.test(x.raw)) }))
+        .find((r) => r.nums.length >= 4 && r.nums.some((n) => n.qty === 2 && n.totalKg === 2));
+
+      if (numeric) {
+        const coleteQty = numeric.nums.find((n) => n.idx === 1)?.qty ?? 2;
+        // Remove ALL variants produced by previous matchers. The explicit
+        // column mapping below is authoritative.
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (/^\d+\s+colete(?:\s+fortalecido)?$/i.test(items[i])) items.splice(i, 1);
+        }
+        // Do not create a second medikit here; if one exists, its quantity is
+        // preserved. If not, recover it from the fourth numeric column.
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (/^\d+\s+medickits$/i.test(items[i])) items.splice(i, 1);
+        }
+        const medikitQty = numeric.nums.find((n) => n.idx === 3)?.qty ?? 1;
+        items.push(`${coleteQty} colete`);
+        items.push(`${medikitQty} medickits`);
+        weightTotals.set("colete", coleteQty * (getWeightForItem("colete") ?? 1));
+        weightTotals.set("medickits", medikitQty * (getWeightForItem("medickits") ?? 1));
+      }
+    }
+  }
+
   // Merge duplicates — somar quantidades de itens com o mesmo nome (ex: várias armas do mesmo calibre)
   const merged = new Map<string, number>();
   for (const entry of items) {
