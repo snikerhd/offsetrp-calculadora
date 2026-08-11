@@ -481,7 +481,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "carregador medio calibre": [0.2],
     "carregador rifle": [0.2],
     "carregador alto calibre": [0.2],
-    "medickits": [1, 4],
+    "medickits": [1],
     "blueprint pistola": [0.1],
     "blueprint smg": [0.1],
     "blueprint rifle": [0.1],
@@ -1206,8 +1206,26 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
-  const weights = Array.from(weightTotals.entries())
-    .map(([name, kg]) => ({ item: name, kg: Number(kg.toFixed(2)), unitKg: getWeightForItem(name) }))
+  // Build the displayed weights from the FINAL merged quantities.
+  // weightTotals is only raw OCR evidence and can contain stale/duplicate
+  // contributions when the same item was seen in more than one OCR pass.
+  // For items with a known unit weight, the final quantity is authoritative:
+  //   finalQty * unitKg
+  // This prevents cases such as 1 medium-calibre weapon being displayed as
+  // 11 kg because another OCR pass contributed an extra 1 kg.
+  // Preserve OCR-only totals for items without a known unit weight (e.g. money).
+  const weights = Array.from(merged.entries())
+    .map(([name, qty]) => {
+      const unitKg = getWeightForItem(name);
+      const kg = unitKg != null
+        ? qty * unitKg
+        : (weightTotals.get(name) || 0);
+      return {
+        item: name,
+        kg: Number(kg.toFixed(2)),
+        unitKg,
+      };
+    })
     .filter((x) => x.kg > 0);
 
   return { text: resultText, weights, weaponCapture };
