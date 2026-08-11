@@ -810,6 +810,18 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       .replace(/\s+/g, "\\s+");
   }
 
+  // Text-only normalizer used for comparing already-parsed item names.
+  // Unlike normalizeForRegex, this does not escape regex characters.
+  function normalizeText(value: string): string {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+
   // JEWELLERY GRID RECOVERY: keep quantities attached to the visual column.
   // OCR example:
   //   297 (29.7) | 1069 (160.3) | 93 (9.3) | 37 (3.7)
