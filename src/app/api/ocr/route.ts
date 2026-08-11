@@ -830,22 +830,16 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       const numericKey = `${c.qty}|${c.totalKg.toFixed(3)}`;
       if (chosenItems.has(c.item) || chosenNumeric.has(numericKey)) continue;
 
-      // Só substituir uma quantidade já reconhecida se a nova evidência for
-      // muito mais forte. Caso contrário, evitamos duplicados.
-      const existing = items.find((x) => x.endsWith(` ${c.item}`));
-      if (existing) {
-        const oldMatch = existing.match(/^(\d+)\s+/);
-        const oldQty = oldMatch ? parseInt(oldMatch[1], 10) : 0;
-        const known = ITEM_WEIGHT_KG[c.item] || [];
-        const oldUnitCandidates = known.map((w) => Math.abs(w - c.totalKg / Math.max(oldQty, 1)));
-        const oldBest = oldUnitCandidates.length ? Math.min(...oldUnitCandidates) : Infinity;
-        const newBest = Math.min(...known.map((w) => Math.abs(w - c.totalKg / c.qty)));
-        if (oldBest <= Math.max(0.025, Math.min(...known) * 0.08) && newBest >= oldBest) continue;
-        // Remove a quantidade errada: a célula com peso é mais confiável.
-        for (let i = items.length - 1; i >= 0; i--) {
-          if (items[i].endsWith(` ${c.item}`)) items.splice(i, 1);
-        }
-      }
+      // Se o item já foi reconhecido por uma associação explícita de coluna
+      // (quantidade/peso <-> nome), NÃO o substituímos com uma segunda célula
+      // encontrada apenas pelo peso. Isto é crucial quando dois itens têm o
+      // mesmo peso/unidade, por exemplo:
+      //   2 (2.0) COLETE FORTALECIDO
+      //   1 (1.0) MEDIKIT
+      // Ambos podem dar 1 kg/un. A coluna é a evidência correta; o recovery
+      // por peso é apenas fallback para itens que ainda não foram encontrados.
+      const existing = items.some((x) => x.endsWith(` ${c.item}`));
+      if (existing) continue;
 
       items.push(`${c.qty} ${c.item}`);
       weightTotals.set(c.item, c.totalKg);
