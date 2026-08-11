@@ -203,6 +203,35 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   // Keep item names such as "MAÇO TABACO" intact (single spaces).
   const splitCells = (line: string) => line.split(/\t+|\s{2,}/).map((c) => c.trim()).filter(Boolean);
 
+  // OCR.space can split a single item name across adjacent cells/lines, e.g.
+  // "COLETE" + "FORTALECIDO". Build a normalized view before matching so
+  // the quantity stays attached to the whole item instead of being reassigned
+  // by the weight fallback.
+  const mergeItemNameCells = (cells: string[]): string[] => {
+    const out: string[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      const cur = cells[i];
+      const next = cells[i + 1] || "";
+      if (/^colete$/i.test(cur) && /^fortalecid[oa]?$/i.test(next)) {
+        out.push("COLETE FORTALECIDO");
+        i++;
+        continue;
+      }
+      if (/^carregador\s+de$/i.test(cur) && /^(pistola|smg|rifle|shotgun)$/i.test(next)) {
+        out.push(`CARREGADOR DE ${next}`);
+        i++;
+        continue;
+      }
+      if (/^lock(?:pick|peck)$/i.test(cur) && /^avan[cç]ad[ao]?$/i.test(next)) {
+        out.push("LOCKPICK AVANÇADA");
+        i++;
+        continue;
+      }
+      out.push(cur);
+    }
+    return out;
+  };
+
   // SÓ ITENS ILEGAIS — nada de bandagem, knife, carta condução, kit, rádio, telemovel, etc.
   // ORDEM IMPORTA: patterns mais específicos primeiro!
   const ITEM_MAP: [RegExp, string][] = [
@@ -314,6 +343,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/blueprint\s*pistola/i, "blueprint pistola"],
     [/blueprint\s*smg/i, "blueprint smg"],
     [/blueprint\s*rifle/i, "blueprint rifle"],
+    [/esquemas?\s+de\s+armas/i, "esquemas"],
     [/pe[cç]a\s*avan[cç]ada/i, "peca avancada"],
     [/pe[cç]a\s*b[aá]sica/i, "peca basica"],
     // Outros ilegais
@@ -483,7 +513,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   // where the weight is the safest confirmation.
   const tabRows: { cells: string[]; lineIdx: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const cells = splitCells(lines[i]);
+    const cells = mergeItemNameCells(splitCells(lines[i]));
     if (cells.length >= 2) tabRows.push({ cells, lineIdx: i });
   }
 
@@ -779,7 +809,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
         //   PETROL CAN | ESTANHO | FOLHA TABACO | CARTÃO
         // a posição da célula é a evidência mais forte. Isto impede, por
         // exemplo, que ESTANHO roube o 274 da coluna CARTÃO.
-        const nameCells = splitCells(line);
+        const nameCells = mergeItemNameCells(splitCells(line));
         const nameCellIndex = nameCells.findIndex((c) => namePatterns.some((p) => p.test(c)));
         if (nameCellIndex >= 0) {
           for (const n of numericCells) {
@@ -811,7 +841,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
           let score = 1000 - distance * 120 - bestDiff * 1000;
           if (n.line === li) score += 100;
           // Mesmo item/coluna é uma pista útil, mas nunca vence o peso.
-          const textCells = splitCells(line);
+          const textCells = mergeItemNameCells(splitCells(line));
           const textIndex = textCells.findIndex((c) => namePatterns.some((p) => p.test(c)));
           if (textIndex >= 0 && textIndex === n.idx) score += 20;
 
@@ -952,6 +982,18 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       }
     }
   }
+  // A versão multi-célula é autoritativa: "COLETE" + "FORTALECIDO" é um
+  // único item. Nunca deixar o matcher genérico voltar a criar "colete" em
+  // paralelo. O mesmo vale para carregadores compostos.
+  {
+    const flatNormalized = lines.join(" ").replace(/\s+/g, " ").trim();
+    if (/\bcolete\s+fortalecid[oa]?\b/i.test(flatNormalized)) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (/^\d+\s+colete$/i.test(items[i])) items.splice(i, 1);
+      }
+    }
+  }
+
   // Normalizações finais para casos em que o OCR separa/desloca células especiais.
   // 1) "LOCKPICK" + "AVANÇADA" é UM único item: Lockpick Avançada.
   // 2) Para "CARREGADOR DE PISTOLA", a quantidade deve vir do par quantidade/peso
