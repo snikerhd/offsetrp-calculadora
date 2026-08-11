@@ -831,15 +831,15 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
  // The second quantity is ALWAYS corrente de ouro 10K and the third is ALWAYS
  // relogio de ouro. Never infer the item from the weight alone.
  {
-   const jewelleryNames = (s) =>
-     /^(?:corrente\s+de\s+ouro|corrente\s+de\s+ouro\s*10k|corrente\s+10k|relogio(?:\s+de)?\s+ouro|relogio|anel(?:\s+de)?\s+diamante|anel|diamante)$/i.test(s.trim());
+   const jewelleryNames = (s: string) =>
+  /^(?:corrente\s+de\s+ouro|corrente\s+de\s+ouro\s*10k|corrente\s+10k|relogio(?:\s+de)?\s+ouro|relogio|anel(?:\s+de)?\s+diamante|anel|diamante)$/i.test(s.trim());
 
    // Extrai nomes de joalharia mesmo quando vários aparecem na mesma linha
    // separados por espaços simples (ex.: "CORRENTE DE OURO 10K RELOGIO DE OURO
    // ANEL DE DIAMANTE"). A ordem das alternativas importa: as variantes mais
    // específicas (10K, "de ouro") têm de vir ANTES das genéricas.
    const JEWELLERY_EXTRACT =
-     /(?:corrente\s+de\s+ouro\s*10k|corrente\s+10k|corrente\s+de\s+ouro|relogio(?:\s+de)?\s+ouro|anel(?:\s+de)?\s+diamante|relogio|anel|diamante)/gi;
+  /(?:corrente\s+de\s+ouro\s*10k|corrente\s+10k|corrente\s+de\s+ouro|relogio(?:\s+de)?\s+ouro|anel(?:\s+de)?\s+diamante|relogio|anel|diamante)/gi;
 
    for (let li = 0; li < lines.length; li++) {
      const nums = splitCells(lines[li]);
