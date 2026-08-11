@@ -257,7 +257,6 @@ export const ITENS_ILEGAIS: Record<string, number> = {
   "Estanho": 50,
   "Ídolo Inca": 80000,
   "Lockpick": 22500,
-  "Lockpick Avançada": 22500,
   "Medickits": 12500,
   "Minérios": 500,
   "Níquel": 300,

@@ -160,7 +160,7 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "handcuffs": "Algemas",
   "cuffs": "Algemas",
   // Lockpick
-  "lockpick avancada": "Lockpick Avançada", "lockpick avançada": "Lockpick Avançada", "lock pick avancada": "Lockpick Avançada",
+  "lockpick avancada": "Lockpick", "lockpick avançada": "Lockpick", "lock pick avancada": "Lockpick",
   "lockpick": "Lockpick",
   "lockpicks": "Lockpick",
   "lock pick": "Lockpick",

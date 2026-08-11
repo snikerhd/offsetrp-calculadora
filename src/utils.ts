@@ -165,8 +165,8 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "lockpick avançada": "Lockpick Avançada",
   "lock pick avancada": "Lockpick Avançada",
   "lock pick avançada": "Lockpick Avançada",
-  "lockpeck avancada": "Lockpick Avançada",
-  "lockpeck avançada": "Lockpick Avançada",
+  "lockpeck avancada": "Lockpick",
+  "lockpeck avançada": "Lockpick",
   // Lockpick normal
   "lockpick": "Lockpick",
   "lockpicks": "Lockpick",
