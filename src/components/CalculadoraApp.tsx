@@ -798,7 +798,28 @@ export default function CalculadoraApp() {
   };
 
   const inputCls = `w-full px-3 py-2 bg-black/40 border border-white/10 rounded text-white text-sm focus:outline-none focus:border-white/30 font-mono`;
-  const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1";
+  const BENS_ASSALTO_CASA_OCULTOS = new Set([
+  "perfume",
+  "phone 7",
+  "tv led 75",
+  "computador",
+  "pack vinhos",
+  "ouro estatal",
+  "arma de colecao",
+  "tigre",
+  "quadro",
+  "documentos",
+  "relogio ouro",
+  "pulseira ouro",
+  "aguia de bronze",
+  "crypto pen",
+  "cripto pen",
+  "coroa",
+  "barra de ouro",
+  "barras ouro",
+]);
+
+const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1";
 
   const totalExtra = (extraPorCC[getCc()] || []).reduce((s, e) => s + e.valor, 0);
   const totalCAD = (cadPorCC[getCc()] || []).reduce((s, e) => s + e.multa, 0);
@@ -1011,6 +1032,9 @@ export default function CalculadoraApp() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-4">
               {Object.entries(ITENS_ILEGAIS)
+                // Estes artigos continuam válidos para o cálculo/coimas rápidas,
+                // mas não devem aparecer individualmente na grelha "Itens Ilegais".
+                .filter(([item]) => !BENS_ASSALTO_CASA_OCULTOS.has(normalizeText(item)))
                 .filter(([item]) => !searchItens || normalizeText(item).includes(normalizeText(searchItens)))
                 .map(([item, preco]) => {
                   const imgSrc = itemImageSrc(item);
