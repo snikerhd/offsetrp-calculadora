@@ -1195,7 +1195,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     const hasFortalecido = lines.some((l) => /\bFORTALECIDO\b/i.test(l));
     const hasMicro = lines.some((l) => /\bMICRO\s*SMG\b/i.test(l));
     const hasBandagem = lines.some((l) => /\bBANDAGEM\b/i.test(l));
-    const hasMedikit = lines.some((l) => /\bMEDIKIT\b/i.test(l));
+    const hasMedikit = lines.some((l) => /\bMEDIC?KIT\b/i.test(l));
 
     if (hasColete && hasFortalecido && hasMicro && hasBandagem && hasMedikit) {
       // Find the numeric row with the expected four cells.
@@ -1252,7 +1252,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   {
     const flat = lines.join(" ").replace(/\s+/g, " ").trim();
     const exactColeteGrid =
-      /\bCOLETE\b[\s\S]*?\bMICRO\s*SMG\b[\s\S]*?\bFORTALECIDO\b[\s\S]*?\bBANDAGEM\b[\s\S]*?\bMEDIKIT\b/i.test(flat) &&
+      /\bCOLETE\b[\s\S]*?\bMICRO\s*SMG\b[\s\S]*?\bFORTALECIDO\b[\s\S]*?\bBANDAGEM\b[\s\S]*?\bMEDIC?KIT\b/i.test(flat) &&
       lines.some((line) => {
         const cells = splitCells(line);
         const nums = cells.filter((c) => /^\d/.test(c)).map(parseQtyWeight);
@@ -1280,7 +1280,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       /\bMICRO\s*SMG\b/i.test(flatRaw) &&
       /\bFORTALECIDO\b/i.test(flatRaw) &&
       /\bBANDAGEM\b/i.test(flatRaw) &&
-      /\bMEDIKIT\b/i.test(flatRaw);
+      /\bMEDIC?KIT\b/i.test(flatRaw);
 
     if (knownGrid) {
       // This exact OCR grid is authoritative. Remove any previous variants
