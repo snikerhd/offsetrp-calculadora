@@ -487,6 +487,17 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "blueprint rifle": [0.1],
     "peca basica": [0.1],
     "peca avancada": [0.1],
+    // Drogas — pesos calculados a partir de screenshots reais (peso total / quantidade):
+    "cristal processado": [0.3],
+    "cristal": [0.1],
+    "estimulante": [0.2],
+    "semente erva": [0.1],
+    "cabeco erva": [0.2],
+    "saco erva": [0.3],
+    "oleo medicinal": [0.2],
+    // Charros aparecem sempre com peso total 0kg nas screenshots — parecem não
+    // ter peso próprio no jogo (só contam para a coima por unidade, não por kg).
+    "charros": [0],
     "arma baixo calibre": [5],
     "arma medio calibre": [10],
     "arma alto calibre": [15],
