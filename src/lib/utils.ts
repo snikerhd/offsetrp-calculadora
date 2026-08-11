@@ -183,9 +183,7 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "crypto pen": "Bens de assalto a casa",
   "cripto pen": "Bens de assalto a casa",
   "barra de ouro": "Bens de assalto a casa",
-  "barras de ouro": "Bens de assalto a casa",
   "barra ouro": "Bens de assalto a casa",
-  "barras ouro": "Bens de assalto a casa",
   "coroa": "Bens de assalto a casa",
   // Algemas
   "algemas": "Algemas",
