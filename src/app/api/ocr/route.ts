@@ -310,8 +310,11 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/documento/i, "documentos"],
     [/[aá]guia\s*(de\s*)?bronze/i, "aguia de bronze"],
     [/crypto?\s*pen/i, "crypto pen"],
+    [/coroa/i, "coroa"],
     [/cripto?\s*pen/i, "crypto pen"],
     [/pol[ií]mero/i, "polimero"],
+    [/coroa/i, "coroa"],
+    [/barra[s]?\s*(de\s*)?(ouro|outro)/i, "barras ouro"],
     [/bronze/i, "bronze"],
     [/garrafa\s*(de\s*)?nitro/i, "garrafa de nitro"],
     // Drogas
