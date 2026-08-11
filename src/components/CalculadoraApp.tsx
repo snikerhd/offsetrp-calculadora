@@ -30,10 +30,13 @@ const ORIGINAL_IMAGE_FILES: Record<string, string> = {
   "alto-1": 'Alto (1).png',
   "alto": 'Alto.png',
   "anel-de-diamante": 'Anel de Diamante.png',
+  "anel": 'Anel de Diamante.png',
   "baixo-1": 'Baixo (1).png',
   "baixo": 'Baixo.png',
   "baleia": 'Baleia.png',
   "barras-ouro": 'Barras Ouro.png',
+  "barra-de-ouro": 'Barras Ouro.png',
+  "barras-de-ouro": 'Barras Ouro.png',
   "bau-especiarias": 'Baú Especiarias.png',
   "bens-de-assalto-a-casa": 'Bens de assalto a casa.png',
   "bomba-2-guerra": 'Bomba 2ª Guerra.png',
@@ -70,6 +73,7 @@ const ORIGINAL_IMAGE_FILES: Record<string, string> = {
   "polvora": 'Polvora.png',
   "rebarbadora": 'Rebarbadora.png',
   "relogio-de-ouro": 'Relógio de Ouro.png',
+  "relogio-ouro": 'Relógio de Ouro.png',
   "saco-de-cannabis": 'Saco de Cannabis.png',
   "safiras": 'Safiras.png',
   "sementes-de-cannabis": 'Sementes de Cannabis.png',
@@ -87,13 +91,79 @@ function itemImageSlug(name: string): string {
   return normalizeText(name).replace(/\s+/g, "-");
 }
 
+// As imagens da aplicação estão em public/items.
+// IMPORTANTE: no browser, public/ NÃO faz parte do URL; o caminho é /items/... .
+const LOCAL_IMAGE_FILES: Record<string, string> = {
+  "anel": "anel-de-diamante.png",
+  "anel-de-diamante": "anel-de-diamante.png",
+  "barras-ouro": "barras-ouro.png",
+  "barra-de-ouro": "barras-ouro.png",
+  "barras-de-ouro": "barras-ouro.png",
+  "corrente-de-ouro": "corrente-de-ouro.png",
+  "corrente-de-ouro-10k": "corrente-de-ouro-10k.png",
+  "relogio-ouro": "relogio-de-ouro.png",
+  "relogio-de-ouro": "relogio-de-ouro.png",
+  "polvora": "polvora.png",
+  "tubarao-branco": "tubarao-branco.png",
+  "tubarao-martelo": "tubarao-martelo.png",
+  "bens-de-assalto-a-casa": "bens-de-assalto-a-casa.png",
+  "pepitas-de-ouro": "pepitas-de-ouro.png",
+  "diamante": "diamante.png",
+  "safiras": "safiras.png",
+  "polvo": "polvo.png",
+  "raia": "raia.png",
+  "orca": "orca.png",
+  "idolo-inca": "idolo-inca.png",
+  "oleo-de-cannabis": "oleo-de-cannabis.png",
+  "saco-de-cannabis": "saco-de-cannabis.png",
+  "sementes-de-cannabis": "sementes-de-cannabis.png",
+  "cabecos-de-cannabis": "cabecos-de-cannabis.png",
+  "cristal-processado": "cristal-processado.png",
+  "cristal": "cristal.png",
+  "estimulante": "estimulante.png",
+  "estanho": "estanho.png",
+  "niquel": "niquel.png",
+  "enxofre": "enxofre.png",
+  "minerios": "minerios.png",
+  "nitro": "nitro.png",
+  "bomba-2-guerra": "bomba-2-guerra.png",
+  "adaga-templaria": "adaga-templaria.png",
+  "chifres": "chifres.png",
+  "diario-de-bordo": "diario-de-bordo.png",
+  "bau-especiarias": "bau-especiarias.png",
+  "pacote-ilegal": "pacote-ilegal.png",
+  "pacote-de-droga": "pacote-de-droga.png",
+  "maco-tabaco": "maco-tabaco.png",
+  "charros": "charros.png",
+  "pager": "pager.png",
+  "pecas-arma": "pecas-arma.png",
+  "algemas": "algemas.png",
+  "rebarbadora": "rebarbadora.png",
+  "lockpick": "lockpick.png",
+  "colete": "colete.png",
+  "medickits": "medickits.png",
+  "esquemas-de-armas": "esquemas-de-armas.png",
+  "acessorios-para-armas": "acessorios-para-armas.png",
+  "c4": "c4.png",
+  "baleia": "baleia.png",
+  "pack-safira": "pack-safira.png",
+  "civil": "civil.png",
+  "policia": "policia.png",
+  "alto": "alto.png",
+  "alto-1": "alto-1.png",
+  "baixo": "baixo.png",
+  "baixo-1": "baixo-1.png",
+  "medio": "medio.png",
+};
+
 function itemImageSrc(name: string): string {
   const slug = itemImageSlug(name);
-  const originalFile = ORIGINAL_IMAGE_FILES[slug];
-  if (originalFile) {
-    return `${ORIGINAL_IMAGE_BASE}/${encodeURIComponent(originalFile)}`;
-  }
-  // Fallback para itens que não existiam no commit original.
+  // Primeiro procura SEMPRE na pasta pública local.
+  // Em Next.js, public/items/foo.png é servido como /items/foo.png.
+  const localFile = LOCAL_IMAGE_FILES[slug];
+  if (localFile) return `/items/${localFile}`;
+
+  // Se o nome já coincide com um ficheiro público normalizado, usa-o diretamente.
   return `/items/${slug}.png`;
 }
 
