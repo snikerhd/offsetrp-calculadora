@@ -810,6 +810,51 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       .replace(/\s+/g, "\\s+");
   }
 
+  // JEWELLERY GRID RECOVERY: keep quantities attached to the visual column.
+  // OCR example:
+  //   297 (29.7) | 1069 (160.3) | 93 (9.3) | 37 (3.7)
+  //   CORRENTE DE OURO | CORRENTE DE OURO 10K | RELOGIO DE OURO | ANEL DE DIAMANTE
+  // The generic weight matcher can otherwise assign 1069 to the watch because
+  // 1069*0.15 happens to look like a historical weight. Column position wins.
+  {
+    const jewelleryNames = (s: string) => /^(?:corrente\s+de\s+ouro|corrente\s+de\s+ouro\s*10k|corrente\s+10k|relogio(?:\s+de)?\s+ouro|relogio|anel(?:\s+de)?\s+diamante|anel|diamante)$/i.test(s.trim());
+    for (let li = 0; li < lines.length - 1; li++) {
+      const nums = splitCells(lines[li]);
+      const names = splitCells(lines[li + 1]);
+      if (nums.length < 2 || names.length < 2) continue;
+      const parsedNums = nums.map((c, idx) => ({ idx, c, p: parseQtyWeight(c) }))
+        .filter(x => /^\d/.test(x.c) && x.p.qty > 0 && x.p.totalKg != null);
+      if (!parsedNums.length) continue;
+      const jewelleryIdx = names.map((n, idx) => ({ idx, n })).filter(x => jewelleryNames(x.n));
+      if (jewelleryIdx.length < 2) continue;
+
+      for (const {idx, n} of jewelleryIdx) {
+        const cell = parsedNums.find(x => x.idx === idx);
+        if (!cell) continue;
+        const q = cell.p.qty;
+        const total = cell.p.totalKg!;
+        const nn = normalizeForRegex(n);
+        let canonical: string | null = null;
+        if (/^corrente\s+de\s+ouro\s*10k$/i.test(n) || /^corrente\s+10k$/i.test(n)) canonical = 'corrente de ouro 10k';
+        else if (/^corrente\s+de\s+ouro$/i.test(n)) canonical = 'corrente de ouro';
+        else if (/^relogio(?:\s+de)?\s+ouro$/i.test(n) || /^relogio$/i.test(n)) canonical = 'relogio ouro';
+        else if (/^anel(?:\s+de)?\s+diamante$/i.test(n) || /^anel$/i.test(n)) canonical = 'anel';
+        else if (/^diamante$/i.test(n)) canonical = 'diamante';
+        if (!canonical) continue;
+
+        // Remove any quantity previously assigned to this canonical item and
+        // replace it with the quantity from the matching visual column.
+        const re = new RegExp('^\\d+[\\s]+(?:' + normalizeForRegex(canonical).replace(/\\s\+/g,'\\s+') + ')$', 'i');
+        for (let i = items.length - 1; i >= 0; i--) {
+          const normItem = normalizeText(items[i]);
+          if (normItem.endsWith(' ' + normalizeText(canonical))) items.splice(i, 1);
+        }
+        items.push(`${q} ${canonical}`);
+        weightTotals.set(canonical, total);
+      }
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────
   // WEIGHT-LOCKED RECOVERY (último recurso, mas antes do fallback por nome)
   //
