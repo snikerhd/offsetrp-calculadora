@@ -600,6 +600,38 @@ export function parseQuickInput(input: string): ParseResult {
       continue;
     }
 
+    // Verificar armas (classes genéricas produzidas pelo parser do OCR, ex.:
+    // "arma alto calibre"). Isto tem de correr ANTES da pesquisa de itens
+    // (obterItemPorSinonimo), porque essa pesquisa faz correspondência
+    // parcial por palavra e "arma alto calibre" batia por engano com
+    // "Peças Arma" (ambos contêm a palavra "arma"), fazendo desaparecer a
+    // coima de posse de arma (80 000€ no caso do alto calibre) do resumo.
+    let tipoArma: string | null = null;
+    let caliberArma: string | null = null;
+
+    if (/\barma\s+baixo\s+calibre\b/.test(nome)) {
+      tipoArma = "baixo";
+      caliberArma = "genérica";
+    } else if (/\barma\s+medio\s+calibre\b/.test(nome)) {
+      tipoArma = "medio";
+      caliberArma = "genérica";
+    } else if (/\barma\s+alto\s+calibre\b/.test(nome)) {
+      tipoArma = "alto";
+      caliberArma = "genérica";
+    }
+
+    if (tipoArma) {
+      let precoBase = 0;
+      if (tipoArma === "baixo") precoBase = 20000;
+      else if (tipoArma === "medio") precoBase = 30000;
+      else precoBase = 80000;
+
+      const subtotal = qtd * precoBase;
+      result.armas.resultados.push(`  ${qtd}x Arma ${tipoArma} calibre (${caliberArma}) x ${fmt(precoBase)} = ${fmt(subtotal)}`);
+      result.armas.total += subtotal;
+      continue;
+    }
+
     // Verificar drogas
     const droga = obterDrogaPorSinonimo(originalNome);
     if (droga) {
@@ -620,10 +652,8 @@ export function parseQuickInput(input: string): ParseResult {
       continue;
     }
 
-    // Verificar armas
-    let tipoArma: string | null = null;
-    let caliberArma: string | null = null;
-
+    // Verificar armas por modelo específico (ex.: "rifle", "ak", "gusenberg")
+    // — caso o texto não use a classe genérica acima.
     for (const baixo of ARMAS_BAIXO) {
       if (nome.includes(baixo)) {
         tipoArma = "baixo";

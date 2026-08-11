@@ -333,7 +333,6 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/[oó]leo\s*medicinal/i, "oleo medicinal"],
     [/[oó]leo/i, "oleo medicinal"],
     [/saco\s*(de\s*)?(erva|cannabis)/i, "saco erva"],
-    [/saco\b/i, "saco erva"],
     // ══ ARMAS — Classes Offset RP ══
     // Classe 0 ilegal (armas brancas ilegais — 15.000€)
     [/taco\s*(de\s*)?baseball/i, "arma branca ilegal"],
@@ -1087,6 +1086,43 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
           items.push(`${best.qty} carregador baixo calibre`);
         }
       }
+    }
+  }
+
+  // RECOVERY: "CARREGADOR DE" pode ficar numa linha separada de "RIFLE".
+  // Exemplo real:
+  //   3 (2.1) | 5 (1.0) | 1 (1.0) | 1 (1.5)
+  //   CARREGADOR DE
+  //   TELEMÓVEL | RIFLE | KNIFE | SACO DO GINÁSIO
+  // A coluna de RIFLE é a coluna 2, portanto são 5 carregadores de rifle.
+  {
+    for (let li = 0; li < lines.length; li++) {
+      if (!/^carregador\s+de$/i.test(lines[li])) continue;
+
+      const nameLine = lines[li + 1];
+      const numericLine = lines[li - 1];
+      if (!nameLine || !numericLine) continue;
+
+      const names = splitCells(nameLine);
+      const nums = splitCells(numericLine);
+      const rifleIdx = names.findIndex((c) => /^rifle$/i.test(c));
+      if (rifleIdx < 0 || rifleIdx >= nums.length) continue;
+
+      const parsed = parseQtyWeight(nums[rifleIdx]);
+      if (parsed.qty <= 0 || parsed.totalKg == null) continue;
+
+      // Carregador de rifle pesa 0.2 kg/un.
+      const unit = parsed.totalKg / parsed.qty;
+      if (Math.abs(unit - 0.2) > 0.04) continue;
+
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (/^\d+\s+carregador\s+(?:alto\s+calibre|rifle)$/i.test(items[i])) {
+          items.splice(i, 1);
+        }
+      }
+
+      items.push(`${parsed.qty} carregador alto calibre`);
+      weightTotals.set("carregador alto calibre", parsed.totalKg);
     }
   }
 
