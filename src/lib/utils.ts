@@ -212,6 +212,13 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "esquema": "Esquemas de armas",
   "blueprints": "Esquemas de armas",
   "blueprint": "Esquemas de armas",
+  "blueprint pistola": "Esquemas de armas",
+  "blueprint smg": "Esquemas de armas",
+  "blueprint rifle": "Esquemas de armas",
+  "blueprints pistola": "Esquemas de armas",
+  "blueprints smg": "Esquemas de armas",
+  "blueprints rifle": "Esquemas de armas",
+  "esquemas de armas": "Esquemas de armas",
   "schema": "Esquemas de armas",
   // Peças
   "pecas": "Peças Arma",

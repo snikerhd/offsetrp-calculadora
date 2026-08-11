@@ -412,7 +412,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "carregador medio calibre": [0.2],
     "carregador rifle": [0.2],
     "carregador alto calibre": [0.2],
-    "medickits": [4],
+    "medickits": [1, 4],
     "blueprint pistola": [0.1],
     "blueprint smg": [0.1],
     "blueprint rifle": [0.1],
