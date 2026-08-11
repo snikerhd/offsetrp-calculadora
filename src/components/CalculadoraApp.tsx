@@ -500,7 +500,10 @@ export default function CalculadoraApp() {
     if (r.crimes.resultados.length) {
       msg += "--- CRIMES ---\n" + r.crimes.resultados.join("\n") + `\nTOTAL: ${fmt2(r.crimes.totalMulta)} € (meses: ${r.crimes.totalMeses.toFixed(0)})\n\n`;
     }
-    if (r.drogas.resultados.length || r.itens.resultados.length || r.municao.resultados.length || r.armas.resultados.length || r.dinheiro.resultados.length || r.sequestro.resultados.length || r.crimes.resultados.length) {
+    if (r.materiaPrima.resultados.length) {
+      msg += "--- MATÉRIA PRIMA ---\n" + r.materiaPrima.resultados.join("\n") + `\nTOTAL MATÉRIA PRIMA: ${fmt2(r.materiaPrima.total)} €\n\n`;
+    }
+    if (r.drogas.resultados.length || r.itens.resultados.length || r.municao.resultados.length || r.armas.resultados.length || r.dinheiro.resultados.length || r.sequestro.resultados.length || r.crimes.resultados.length || r.materiaPrima.resultados.length) {
       msg += `TOTAL GERAL: ${fmt2(r.totalGeral)} €`;
     } else {
       msg = "Nenhum item válido foi reconhecido.";

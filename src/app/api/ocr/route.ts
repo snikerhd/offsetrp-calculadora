@@ -562,15 +562,41 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     const texts = aNum ? bText : aText;
     const used = new Set<number>();
     let recovered = 0;
+
+    // IMPORTANT: quando o OCR preserva o número de colunas, a posição é a
+    // evidência mais forte. O peso só valida a célula. Isto evita trocas como:
+    //   1 (10.0) | 2 (2.0) | 15 (1.5) | 1 (1.0)
+    //   MICRO SMG | COLETE | BANDAGEM | MEDIKIT
+    // onde COLETE e MEDIKIT têm ambos 1 kg/un e um matcher por peso podia
+    // trocar 2 colete por 2 medickits.
+    //
+    // Primeiro tentamos a mesma coluna; só se essa associação for impossível
+    // (nome não reconhecido ou peso incompatível) procuramos outra coluna.
     for (const q of nums) {
+      const sameColumn = texts.find((t) => !used.has(t.idx) && t.idx === q.idx);
+      if (sameColumn) {
+        const sameItem = matchItem(sameColumn.cell, q.qty, q.totalKg);
+        if (sameItem) {
+          used.add(sameColumn.idx);
+          items.push(`${q.qty} ${sameItem}`);
+          const kg = q.totalKg ?? ((getWeightForItem(sameItem) ?? 0) * q.qty);
+          if (kg > 0) weightTotals.set(sameItem, (weightTotals.get(sameItem) || 0) + kg);
+          recovered++;
+          continue;
+        }
+      }
+
       let best: { idx: number; item: string; score: number } | null = null;
       for (const t of texts) {
         if (used.has(t.idx)) continue;
         const item = matchItem(t.cell, q.qty, q.totalKg);
         if (!item) continue;
         let score = 100;
-        if (weightMatches(item, q.qty, q.totalKg)) score += 200;
-        if (t.idx === q.idx) score += 20;
+        if (weightMatches(item, q.qty, q.totalKg)) score += 120;
+        // A column displacement is allowed, but it must beat a weak fallback.
+        const distance = Math.abs(t.idx - q.idx);
+        score -= distance * 25;
+        if (t.idx === q.idx) score += 500;
         if (!best || score > best.score) best = { idx: t.idx, item, score };
       }
       if (best) {

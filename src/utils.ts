@@ -558,6 +558,10 @@ interface ParseResult {
     totalMulta: number;
     totalMeses: number;
   };
+  materiaPrima: {
+    resultados: string[];
+    total: number;
+  };
   totalGeral: number;
   erros: string[];
 }
@@ -582,6 +586,7 @@ export function parseQuickInput(input: string): ParseResult {
     dinheiro: { resultados: [], total: 0 },
     sequestro: { resultados: [], total: 0 },
     crimes: { resultados: [], totalMulta: 0, totalMeses: 0 },
+    materiaPrima: { resultados: [], total: 0 },
     totalGeral: 0,
     erros: [],
   };
@@ -762,6 +767,30 @@ export function parseQuickInput(input: string): ParseResult {
     result.erros.push(`Não reconhecido: '${originalNome}'`);
   }
 
+  // Matéria-prima para fins ilegais:
+  // 500+ folhas de tabaco ativam uma única coima de 30.000€.
+  // A folha de tabaco continua reconhecida no inventário, mas não é uma droga
+  // nem um item ilegal por unidade. A regra é baseada exclusivamente na quantidade.
+  const folhaTabacoQtd = Object.entries(
+    partes.reduce<Record<string, number>>((acc, parte) => {
+      const m = parte.match(/^(\d+)\s+(.+)$/);
+      if (!m) return acc;
+      const nomeParte = normalizeText(m[2]);
+      if (nomeParte === "folha tabaco" || nomeParte === "folha de tabaco") {
+        acc["folha tabaco"] = (acc["folha tabaco"] || 0) + parseInt(m[1], 10);
+      }
+      return acc;
+    }, {})
+  ).reduce((sum, [, qtd]) => sum + qtd, 0);
+
+  if (folhaTabacoQtd >= 500) {
+    const multaMateriaPrima = 30000;
+    result.materiaPrima.resultados.push(
+      `  Posse de Matéria Prima para Fins Ilegais x ${fmt(multaMateriaPrima)} = ${fmt(multaMateriaPrima)}`
+    );
+    result.materiaPrima.total = multaMateriaPrima;
+  }
+
   // Calcular totals - só adicionar base se houver itens nessa categoria
   const totalDrogas = result.drogas.subtotal > 0 ? result.drogas.subtotal : 0;
   const totalItens = result.itens.subtotal > 0 ? 30000 + result.itens.subtotal : 0;
@@ -775,7 +804,8 @@ export function parseQuickInput(input: string): ParseResult {
     totalArmas +
     result.dinheiro.total +
     result.sequestro.total +
-    result.crimes.totalMulta;
+    result.crimes.totalMulta +
+    result.materiaPrima.total;
 
   return result;
 }
