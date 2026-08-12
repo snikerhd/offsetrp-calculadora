@@ -109,6 +109,7 @@ const LOCAL_IMAGE_FILES: Record<string, string> = {
   "bens-de-assalto-a-casa": "bens-de-assalto-a-casa.png",
   "pepitas-de-ouro": "pepitas-de-ouro.png",
   "diamante": "diamante.png",
+  "diamante-bruto": "diamante.png",
   "safiras": "safiras.png",
   "polvo": "polvo.png",
   "raia": "raia.png",

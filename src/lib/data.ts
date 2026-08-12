@@ -265,7 +265,7 @@ export const ITENS_ILEGAIS: Record<string, number> = {
   "Colete": 5000,
   "Corrente de Ouro": 600,
   "Corrente de Ouro 10k": 1200,
-  "Diamante": 6000,
+  "Diamante Bruto": 6000,
   "Diário de Bordo": 2400,
   "Enxofre": 1400,
   "Esquemas de armas": 200,
