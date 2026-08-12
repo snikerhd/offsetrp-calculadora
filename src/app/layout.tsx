@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Calculadora Offset-RP | Coimas & Análise de Foto",
-  description: "Calculadora de coimas para Offset RP com análise OCR de screenshots do inventário.",
+  title: "Calculadora Offset-RP | SniKeRSKR",
+  description: "Calculadora de coimas para Offset RP",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
