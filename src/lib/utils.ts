@@ -264,6 +264,10 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "pecas arma": "Peças Arma",
   "peças arma": "Peças Arma",
   "peça": "Peças Arma",
+  "peça avançada": "Peça Avançada",
+  "peca avancada": "Peça Avançada",
+  "peça básica": "Peça Básica",
+  "peca basica": "Peça Básica",
   // Bomba
   "bomba": "Bomba 2ª Guerra",
   "bomba 2ª": "Bomba 2ª Guerra",

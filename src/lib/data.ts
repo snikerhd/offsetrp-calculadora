@@ -281,6 +281,8 @@ export const ITENS_ILEGAIS: Record<string, number> = {
   "Pacote Ilegal": 1800,
   "Pager": 16000,
   "Peças Arma": 2500,
+  "Peça Avançada": 2500,
+  "Peça Básica": 2500,
   "Pepitas de ouro": 500,
   "Polvo": 1200,
   "Pólvora": 750,
