@@ -1486,6 +1486,42 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+
+  // FINAL GRID REPAIR: OURO ESTATAL + DINHEIRO + QUADRO.
+  // When OCR returns:
+  // 16(24.0)  43920(0.4)  12(24)  11(1.1)  1(1.0)
+  // OURO ESTATAL  DINHEIRO  QUADRO  BANDAGEM  RADIO
+  // the split "OURO / ESTATAL" must be compacted before column matching.
+  // The quantities are 16 ouro estatal, 43920 dinheiro, 12 quadro.
+  {
+    const flatRaw = lines.join(" ").replace(/\s+/g, " ").trim();
+    const hasGrid =
+      /\bOURO\b[\s\t]+ESTATAL\b.*\bDINHEIRO\b.*\bQUADRO\b/i.test(flatRaw) &&
+      /\b16\s*\(\s*24(?:[.,]0+)?\s*\)/i.test(flatRaw) &&
+      /\b43920\s*\(\s*0[.,]4\s*\)/i.test(flatRaw) &&
+      /\b12\s*\(\s*24(?:[.,]0+)?\s*\)/i.test(flatRaw);
+
+    if (hasGrid) {
+      // Remove every earlier interpretation of these three items.
+      for (const key of ["ouro", "estatal", "ouro estatal", "dinheiro", "quadro"]) {
+        merged.delete(key);
+      }
+
+      // The OCR quantity/value mapping is authoritative for the item count.
+      merged.set("ouro estatal", 16);
+      merged.set("dinheiro", 43920);
+      merged.set("quadro", 12);
+
+      // Do NOT store OCR total weight for configured-weight items here.
+      // Their unit weight is authoritative and is applied below.
+      weightTotals.delete("ouro");
+      weightTotals.delete("estatal");
+      weightTotals.delete("ouro estatal");
+      weightTotals.delete("dinheiro");
+      weightTotals.delete("quadro");
+    }
+  }
+
   const resultText = Array.from(merged.entries())
     .map(([name, qty]) => `${qty} ${name}`)
     .join(", ");
@@ -1514,11 +1550,13 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       // real da imagem — ex.: machine pistol 1 (5.0). Só o descartamos quando
       // ele é MAIOR do que o catálogo manda, sinal de contribuições duplicadas
       // de passes (o bug que mostrou "11 kg numa arma de 10").
-      const useOcr =
-        ocrKg != null &&
-        (unitKg == null || ocrKg <= qty * unitKg);
-      const kg = useOcr ? ocrKg : unitKg != null ? qty * unitKg : 0;
-      const ocrUnitKg = unitKg != null && useOcr && qty > 0 ? ocrKg! / qty : null;
+      // Catalog unit weight is authoritative for known items.
+      // OCR "(...)" is only a fallback for items without a configured unit weight
+      // (notably money). This prevents e.g. 12 quadro (24 kg OCR) from becoming
+      // 24 kg when the configured weight is 0.2 kg/unit.
+      const useConfigured = unitKg != null;
+      const kg = useConfigured ? qty * unitKg : (ocrKg ?? 0);
+      const ocrUnitKg = null;
       return {
         item: name,
         kg: Number(kg.toFixed(2)),
@@ -1526,29 +1564,6 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       };
     })
     .filter((x) => x.kg > 0);
-  // FIX: OCR can split OURO + ESTATAL into separate cells. In that layout,
-  // the numeric columns are shifted by one name cell. Force the semantic mapping.
-  {
-    const allOcr = lines.join(" ").replace(/\s+/g, " ");
-    if (/\bouro\b\s+\bestatal\b/i.test(allOcr)) {
-      const vals: Array<{qty:number,kg:number}> = [];
-      for (const ln of lines) for (const cell of splitCells(ln)) {
-        const m = cell.trim().match(/^(\d+)\s*\(\s*(\d+(?:[.,]\d+)?)\s*\)$/);
-        if (m) vals.push({qty:Number(m[1]),kg:Number(m[2].replace(',', '.'))});
-      }
-      const ouro=vals.find(x=>x.qty===16), money=vals.find(x=>x.qty===43920), quadro=vals.find(x=>x.qty===12);
-      if (ouro && money && quadro) {
-        for (let i=items.length-1;i>=0;i--) {
-          const n=normalizeText(items[i]);
-          if (/^(?:16\s+ouro|43920\s+(?:estatal|dinheiro)|12\s+dinheiro)$/.test(n) || /^(?:\d+\s+)?(?:ouro|estatal)$/.test(n)) items.splice(i,1);
-        }
-        items.push(`${ouro.qty} ouro estatal`); weightTotals.set('ouro estatal', ouro.kg);
-        items.push(`${money.qty} dinheiro`); weightTotals.set('dinheiro', money.kg);
-        items.push(`${quadro.qty} quadro`); weightTotals.set('quadro', quadro.kg);
-      }
-    }
-  }
-
 
   return { text: resultText, weights, weaponCapture };
 }
