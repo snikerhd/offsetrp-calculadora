@@ -312,10 +312,10 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/crypto?\s*pen/i, "crypto pen"],
     [/coroa/i, "coroa"],
     [/cripto?\s*pen/i, "crypto pen"],
-    [/pol[ií]mero/i, "polimero"],
+    
     [/coroa/i, "coroa"],
     [/barra[s]?\s*(de\s*)?(ouro|outro)/i, "barras ouro"],
-    [/bronze/i, "bronze"],
+    
     [/garrafa\s*(de\s*)?nitro/i, "garrafa de nitro"],
     // Drogas
     [/pacote\s*dealer/i, "pacote dealer"],
@@ -458,8 +458,6 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     "niquel": [0.5],
     "polvora": [4.7 / 31],
     "enxofre": [0.4],
-    "polimero": [0.2],
-    "bronze": [0.2],
     "maço": [0.3],
     "folha tabaco": [0.2],
     "garrafa de nitro": [1],

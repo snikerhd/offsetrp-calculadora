@@ -222,6 +222,8 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "anel de diamante": "Anel de Diamante",
   // Diamante
   "diamante": "Diamante",
+  "diamante bruto": "Diamante Bruto",
+  "diamante raw": "Diamante Bruto",
   "diamantes": "Diamante",
   "diamond": "Diamante",
   "diamonds": "Diamante",
