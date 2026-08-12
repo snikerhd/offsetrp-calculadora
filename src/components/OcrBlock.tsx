@@ -120,7 +120,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   return (
     <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
       <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-3 flex items-center gap-2">
-        <Camera className={`w-5 h-5 ${accentColor}`} /> Análise de Foto (OCR Automático — Grátis)
+        <Camera className={`w-5 h-5 ${accentColor}`} /> Análise de Foto
       </h2>
       <p className="text-xs text-gray-500 mb-3">
         Cola um link do Gyazo ou faz upload de screenshot do inventário — o sistema extrai automaticamente os itens e quantidades.
