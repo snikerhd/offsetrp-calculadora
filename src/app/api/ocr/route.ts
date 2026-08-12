@@ -320,7 +320,9 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     // Drogas
     [/pacote\s*dealer/i, "pacote dealer"],
     [/pacote\s*(de\s*)?droga/i, "pacote dealer"],
-    [/dinheiro/i, "dinheiro"],
+    // A OCR lê frequentemente "DINHETRO" (sem o I) ou "DINEIRO" (sem o H).
+    // O dinheiro não tem peso unitário no catálogo: usa-se o total do jogo.
+    [/dinheiro|dinhetro|dineiro|dinheirr?o/i, "dinheiro"],
     [/charro/i, "charros"],
     [/cristal\s*processado/i, "cristal processado"],
     [/cristal/i, "cristal"],
@@ -657,7 +659,13 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     for (const q of nums) {
       const sameColumn = texts.find((t) => !used.has(t.idx) && t.idx === q.idx);
       if (sameColumn) {
-        const sameItem = matchItem(sameColumn.cell, q.qty, q.totalKg);
+        // Quando o nome está EXATAMENTE na coluna da quantidade, a coluna é a
+        // evidência mais forte e o peso que o jogo mostra manda (ex.: machine
+        // pistol 1 (5.0) embora o catálogo diga 10 kg/un). Se a trava do
+        // catálogo rejeitar, tentamos só pelo nome na mesma coluna.
+        const sameItem =
+          matchItem(sameColumn.cell, q.qty, q.totalKg) ??
+          matchItem(sameColumn.cell);
         if (sameItem) {
           used.add(sameColumn.idx);
           items.push(`${q.qty} ${sameItem}`);
@@ -1263,7 +1271,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       r.cells.some((c) => !/^\d/.test(c)) && !r.cells.some((c) => /^\d/.test(c))
     );
 
-    const authoritative = new Map<string, number>();
+    const authoritative = new Map<string, { qty: number; totalKg: number | null }>();
     for (const tr of textRows) {
       const nr = numericRows
         .filter((n) => Math.abs(n.lineIdx - tr.lineIdx) <= 2)
@@ -1287,7 +1295,10 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
         if (!item) continue;
         // Se o peso também não bate, não usamos a coluna para corrigir.
         if (q.totalKg != null && ITEM_WEIGHT_KG[item] && !weightMatches(item, q.qty, q.totalKg)) continue;
-        authoritative.set(item, q.qty);
+        // Guarda também o peso da célula: a mesma coluna que é autoritativa
+        // para a quantidade é autoritativa para o peso (ex.: 90000 (0.9) ->
+        // dinheiro com 0.9 kg, e não o 9.4 que uma passagem cruzada inventou).
+        authoritative.set(item, { qty: q.qty, totalKg: q.totalKg });
       }
     }
 
@@ -1299,8 +1310,11 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
         if (!m || !authoritative.has(m[1])) continue;
         items.splice(i, 1);
       }
-      for (const [item, qty] of authoritative) {
+      for (const [item, { qty, totalKg }] of authoritative) {
         items.push(`${qty} ${item}`);
+        // set (sobrescreve) em vez de acumular: elimina o peso sujo 9.4.
+        const kg = totalKg != null ? totalKg : (getWeightForItem(item) ?? 0) * qty;
+        if (kg > 0) weightTotals.set(item, kg);
       }
     }
   }
@@ -1440,13 +1454,20 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   const weights = Array.from(merged.entries())
     .map(([name, qty]) => {
       const unitKg = getWeightForItem(name);
-      const kg = unitKg != null
-        ? qty * unitKg
-        : (weightTotals.get(name) || 0);
+      const ocrKg = weightTotals.get(name);
+      // O total que a OCR leu junto à coluna (quantidade <> nome) é o peso
+      // real da imagem — ex.: machine pistol 1 (5.0). Só o descartamos quando
+      // ele é MAIOR do que o catálogo manda, sinal de contribuições duplicadas
+      // de passes (o bug que mostrou "11 kg numa arma de 10").
+      const useOcr =
+        ocrKg != null &&
+        (unitKg == null || ocrKg <= qty * unitKg);
+      const kg = useOcr ? ocrKg : unitKg != null ? qty * unitKg : 0;
+      const ocrUnitKg = unitKg != null && useOcr && qty > 0 ? ocrKg! / qty : null;
       return {
         item: name,
         kg: Number(kg.toFixed(2)),
-        unitKg,
+        unitKg: ocrUnitKg ?? unitKg,
       };
     })
     .filter((x) => x.kg > 0);
