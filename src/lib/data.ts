@@ -182,7 +182,7 @@ export const CRIMES_CATALOGO: Crime[] = [
   { nome: "Venda de Itens Ilegais", categoria: "Atividades Ilícitas", multa: 30000, meses: 7, observacoes: "Quem vender itens ilegais" },
 
   // Peças Arma (substitui Peça Avançada e Peça Básica)
-  "Peças Arma": 2500,
+  { nome: "Peças Arma", categoria: "Peças Arma", multa: 2500, meses: 0, observacoes: "Substitui Peça Avançada e Peça Básica" },
 
   // ========== CRIMES DPSA ==========
   { nome: "Veículo Apreendido num Assalto", categoria: "Crimes DPSA", multa: 45000, meses: 0 },
