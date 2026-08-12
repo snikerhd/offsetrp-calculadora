@@ -1108,9 +1108,19 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
         const after = allText.match(new RegExp(`${pattern.source}\\s*(?:\\t|\\s{2,})\\s*(\\d[\\d.,]*)`, "i"));
         rawQty = before?.[1] ?? after?.[1];
       }
+      // Se a variante MAIS ESPECÍFICA do mesmo artigo já está nos itens com a
+      // MESMA quantidade (ex.: "5 diamante bruto" já detetado), o padrão
+      // genérico ("diamante") apanhou a MESMA célula OCR — nunca criar dup.
       if (rawQty) {
         const qty = parseInt(rawQty.replace(/[.,]/g, ""), 10);
-        if (Number.isFinite(qty) && qty > 0) items.push(`${qty} ${itemName}`);
+        const specific = items.some((it) => {
+          const m = it.match(/^(\d+)\s+(.+)$/);
+          return !!m &&
+            m[2] !== itemName &&
+            m[2].startsWith(itemName + " ") &&
+            parseInt(m[1], 10) === qty;
+        });
+        if (!specific && Number.isFinite(qty) && qty > 0) items.push(`${qty} ${itemName}`);
       }
     }
   }
@@ -1428,6 +1438,32 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       merged.set("medickits", 1);
       weightTotals.set("colete", 2 * (getWeightForItem("colete") ?? 1));
       weightTotals.set("medickits", 1 * (getWeightForItem("medickits") ?? 1));
+    }
+  }
+
+  // VARIANTE GENÉRICA vs ESPECÍFICA DA MESMA CÉLULA --------------------------
+  // Quando a OCR lê a variante específica (ex.: "DIAMANTE BRUTO") e um fallback
+  // criou a genérica ("diamante") a partir da MESMA célula (mesma quantidade E
+  // mesmo peso total), a genérica é um duplicado — remover.
+  // Artigos legítimos de células DIFERENTES (pesos/quantidades diferentes)
+  // nunca são afetados.
+  {
+    const snap = Array.from(merged.entries());
+    for (const [name, qty] of snap) {
+      const total = weightTotals.get(name);
+      if (total == null) continue;
+      for (const [other, oqty] of snap) {
+        if (other === name) continue;
+        if (
+          other.startsWith(name + " ") &&
+          weightTotals.get(other) === total &&
+          oqty === qty
+        ) {
+          merged.delete(name);
+          weightTotals.delete(name);
+          break;
+        }
+      }
     }
   }
 
