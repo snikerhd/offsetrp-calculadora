@@ -260,6 +260,20 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       }
 
       const next = out[i + 1] || "";
+
+      // OCR pode separar "OURO ESTATAL" em duas células:
+      //   OURO | ESTATAL | DINHEIRO | QUADRO | ...
+      // enquanto a linha numérica tem uma única coluna para OURO ESTATAL:
+      //   16 (24.0) | 43920 (0.4) | 12 (24) | 11 (1.1) | ...
+      // Unir estas duas células é obrigatório para não deslocar todas as
+      // colunas seguintes (e, principalmente, não transformar 43920 dinheiro
+      // em 12 dinheiro).
+      if (/^ouro$/i.test(cur) && /^estatal$/i.test(next)) {
+        out[i] = "OURO ESTATAL";
+        out[i + 1] = "";
+        continue;
+      }
+
       if (/^carregador\s+de$/i.test(cur) && /^(pistola|smg|rifle|shotgun)$/i.test(next)) {
         out[i] = `CARREGADOR DE ${next}`;
         out[i + 1] = "";
