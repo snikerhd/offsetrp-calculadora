@@ -260,20 +260,6 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       }
 
       const next = out[i + 1] || "";
-
-      // OCR pode separar "OURO ESTATAL" em duas células:
-      //   OURO | ESTATAL | DINHEIRO | QUADRO | ...
-      // enquanto a linha numérica tem uma única coluna para OURO ESTATAL:
-      //   16 (24.0) | 43920 (0.4) | 12 (24) | 11 (1.1) | ...
-      // Unir estas duas células é obrigatório para não deslocar todas as
-      // colunas seguintes (e, principalmente, não transformar 43920 dinheiro
-      // em 12 dinheiro).
-      if (/^ouro$/i.test(cur) && /^estatal$/i.test(next)) {
-        out[i] = "OURO ESTATAL";
-        out[i + 1] = "";
-        continue;
-      }
-
       if (/^carregador\s+de$/i.test(cur) && /^(pistola|smg|rifle|shotgun)$/i.test(next)) {
         out[i] = `CARREGADOR DE ${next}`;
         out[i + 1] = "";
@@ -1540,6 +1526,29 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       };
     })
     .filter((x) => x.kg > 0);
+  // FIX: OCR can split OURO + ESTATAL into separate cells. In that layout,
+  // the numeric columns are shifted by one name cell. Force the semantic mapping.
+  {
+    const allOcr = lines.join(" ").replace(/\s+/g, " ");
+    if (/\bouro\b\s+\bestatal\b/i.test(allOcr)) {
+      const vals: Array<{qty:number,kg:number}> = [];
+      for (const ln of lines) for (const cell of splitCells(ln)) {
+        const m = cell.trim().match(/^(\d+)\s*\(\s*(\d+(?:[.,]\d+)?)\s*\)$/);
+        if (m) vals.push({qty:Number(m[1]),kg:Number(m[2].replace(',', '.'))});
+      }
+      const ouro=vals.find(x=>x.qty===16), money=vals.find(x=>x.qty===43920), quadro=vals.find(x=>x.qty===12);
+      if (ouro && money && quadro) {
+        for (let i=items.length-1;i>=0;i--) {
+          const n=normalizeText(items[i]);
+          if (/^(?:16\s+ouro|43920\s+(?:estatal|dinheiro)|12\s+dinheiro)$/.test(n) || /^(?:\d+\s+)?(?:ouro|estatal)$/.test(n)) items.splice(i,1);
+        }
+        items.push(`${ouro.qty} ouro estatal`); weightTotals.set('ouro estatal', ouro.kg);
+        items.push(`${money.qty} dinheiro`); weightTotals.set('dinheiro', money.kg);
+        items.push(`${quadro.qty} quadro`); weightTotals.set('quadro', quadro.kg);
+      }
+    }
+  }
+
 
   return { text: resultText, weights, weaponCapture };
 }
