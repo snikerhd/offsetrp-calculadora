@@ -181,6 +181,9 @@ export const CRIMES_CATALOGO: Crime[] = [
   { nome: "Venda de Itens de Pesca Illegal", categoria: "Atividades Ilícitas", multa: 15000, meses: 2, observacoes: "Verificar tabela" },
   { nome: "Venda de Itens Ilegais", categoria: "Atividades Ilícitas", multa: 30000, meses: 7, observacoes: "Quem vender itens ilegais" },
 
+  // Peças Arma (substitui Peça Avançada e Peça Básica)
+  "Peças Arma": 2500,
+
   // ========== CRIMES DPSA ==========
   { nome: "Veículo Apreendido num Assalto", categoria: "Crimes DPSA", multa: 45000, meses: 0 },
   { nome: "Veículo Apreendido no Decorrer de Investigação", categoria: "Crimes DPSA", multa: 0, meses: 0 },
@@ -281,8 +284,6 @@ export const ITENS_ILEGAIS: Record<string, number> = {
   "Pacote Ilegal": 1800,
   "Pager": 16000,
   "Peças Arma": 2500,
-  "Peça Avançada": 2500,
-  "Peça Básica": 2500,
   "Pepitas de ouro": 500,
   "Polvo": 1200,
   "Pólvora": 750,
