@@ -125,6 +125,7 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
     { pattern: /bullpup\s*rifle\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
     { pattern: /bullpup\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
     { pattern: /machine\s*pistol/i, item: "arma medio calibre", ammo: "balas medio" },
+    { pattern: /hk\s*2|hk2/i, item: "arma medio calibre", ammo: "balas medio" },
     { pattern: /micro\s*smg/i, item: "arma medio calibre", ammo: "balas medio" },
     { pattern: /assault\s*smg/i, item: "arma medio calibre", ammo: "balas medio" },
     { pattern: /tactical\s*(carbine|rifle)/i, item: "arma alto calibre", ammo: "balas alto" },
@@ -148,7 +149,12 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
   const rule = weaponRules.find((r) => r.pattern.test(flat));
   if (!rule) return null;
 
-  const ammoMatch = flat.match(/muni[cç][aã]o\s*:\s*(\d{1,6})/i);
+  // Extrair munição: formato "Munição: 100" ou "BALAS: 100" ou número simples
+  // antes do nome da arma. O OCR pode ler "100 BULLPUP RIFLE" onde 100 = munição.
+  const ammoMatch = flat.match(/muni[cç][aã]o\s*:\s*(\d{1,6})/i)
+    || flat.match(/\bbalas?\s*:\s*(\d{1,6})/i)
+    || (flat.match(/^(\d{1,4})\s+(?:bullpup|rifle|machine|sns|vintage|revolver|hk|ap|gusenberg|micro|combat|assault|double|compact|advanced|spas|tactical|military)/i)
+        && flat.match(/^(\d{1,4})\s+/));
   const ammo = ammoMatch ? parseInt(ammoMatch[1], 10) : 0;
 
   let accessoryCount = 0;
@@ -350,6 +356,9 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/canivete/i, "arma branca"],
     [/martelo/i, "arma branca"],
     // Classe 1 — Baixo calibre (20.000€)
+    // "SNS PISTOL HK2" é uma combinação de 2 armas — tratada explicitamente
+    // no bloco de pós-processamento para criar ambas (SNS Pistol + HK2).
+    [/sns\s*pistol\s+hk\s*2/i, "arma sns hk2 dupla"],
     [/sns\s*pistol/i, "arma baixo calibre"],
     [/sns/i, "arma baixo calibre"],
     [/vintage\s*pistol/i, "arma baixo calibre"],
@@ -358,6 +367,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     [/ap\s*pistol/i, "arma baixo calibre"],
     // Classe 2 — Médio calibre (30.000€)
     [/machine\s*pistol/i, "arma medio calibre"],
+    [/hk\s*2|hk2/i, "arma medio calibre"],
     [/micro\s*smg/i, "arma medio calibre"],
     [/combat\s*pdw/i, "arma medio calibre"],
     [/assault\s*smg/i, "arma medio calibre"],
@@ -501,7 +511,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     // ter peso próprio no jogo (só contam para a coima por unidade, não por kg).
     "charros": [0],
     "arma baixo calibre": [5],
-    "arma medio calibre": [10],
+    "arma medio calibre": [7.5, 5],
     "arma alto calibre": [15],
     "acessorios para armas": [0.1],
   };
@@ -1367,6 +1377,17 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
         weightTotals.set("colete", coleteQty * (getWeightForItem("colete") ?? 1));
         weightTotals.set("medickits", medikitQty * (getWeightForItem("medickits") ?? 1));
       }
+    }
+  }
+
+  // POST-PROCESSING: "SNS PISTOL HK2" é UMA célula OCR mas DUAS armas.
+  // Substituímos o marcador especial por 2 itens reais (SNS Pistol = baixo, HK2 = médio).
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (/^\d+\s+arma sns hk2 dupla$/i.test(items[i])) {
+      const qty = parseInt(items[i].match(/^(\d+)/)?.[1] || "1", 10) || 1;
+      items.splice(i, 1);
+      items.push(`${qty} arma baixo calibre`);
+      items.push(`${qty} arma medio calibre`);
     }
   }
 
