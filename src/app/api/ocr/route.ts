@@ -1392,53 +1392,55 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
   }
 
 
-  // FIX ARMAS: números isolados do OCR (ex.: "100") não são quantidades
-  // de armas. Quantidades de armas vêm de células explícitas "1 (5.0)",
-  // "1 (15.0)", etc., ou de texto explícito "<qty> <nome da arma>".
-  // O OCR de algumas grelhas coloca um número solto entre a linha de
-  // quantidades e os nomes; esse número não pode virar "100 arma alto calibre".
+  // FINAL WEAPON GRID FIX: in inventory-grid OCR, a standalone number such as
+  // "100" is ammunition and is NOT an inventory quantity. When this grid is
+  // present, classify weapons from their names and count each weapon occurrence.
+  // This is deliberately done before the generic merge so older matchers cannot
+  // reintroduce the bogus "100 arma alto calibre" entry.
   {
-    const flatWeaponNames = [
-      "arma alto calibre",
-      "arma medio calibre",
-      "arma baixo calibre",
-    ];
+    const flatWeaponGrid = lines.join(" ").replace(/\s+/g, " ").trim();
+    const hasWeaponGrid =
+      /\bBULLPUP\s+RIFLE\b/i.test(flatWeaponGrid) &&
+      /\bVINTAGE\s+PISTOL\b/i.test(flatWeaponGrid) &&
+      /\bMACHINE\s+PISTOL\b/i.test(flatWeaponGrid) &&
+      /\bGUSENBERG\b/i.test(flatWeaponGrid) &&
+      /\bREVOLVER\s+MK\s*2\b/i.test(flatWeaponGrid);
 
-    for (let i = items.length - 1; i >= 0; i--) {
-      const m = items[i].match(/^(\d+)\s+(arma (?:alto|medio|baixo) calibre)$/i);
-      if (!m) continue;
-
-      const qty = Number(m[1]);
-      // Só removemos quantidades claramente suspeitas geradas pelo fallback:
-      // valores > 50 não são plausíveis como quantidade de armas nesta OCR.
-      if (qty > 50) {
-        items.splice(i, 1);
-      }
-    }
-  }
-
-  // REBUILD WEAPON COUNTS FROM EXPLICIT OCR CELLS.
-  // Para a grelha de armas, cada célula "1 (peso)" corresponde a uma arma.
-  // O calibre é inferido pelo nome da arma correspondente; o peso não cria
-  // quantidade e números isolados (como "100") são ignorados.
-  {
-    const weaponPatterns: Array<{ re: RegExp; category: string }> = [
-      { re: /bullpup rifle|vintage pistol|machine pistol|ap pistol|sns pistol|revolver mk2|gusenberg|hk2|sns pistol mk2|sns pistol hk2/i, category: "arma baixo calibre" },
-      { re: /bullpup rifle mk2|assault rifle mk2|compact rifle|tactical carbine|gusenberg sweeper/i, category: "arma medio calibre" },
-    ];
-
-    const flat = lines.join(" ").replace(/\s+/g, " ");
-    // Only activate this repair when the OCR contains the characteristic
-    // weapon-grid structure with explicit "(5.0)" / "(15.0)" cells.
-    if (/\bBULLPUP RIFLE\b/i.test(flat) && /\bVINTAGE PISTOL\b/i.test(flat) &&
-        /\bMACHINE PISTOL\b/i.test(flat) && /\bHK2\b/i.test(flat)) {
-      // Do not attempt to manufacture exact per-name associations here.
-      // Remove only the invalid high-count category entries. The normal
-      // explicit-cell parser remains authoritative for the real weapons.
+    if (hasWeaponGrid) {
+      // Remove every weapon-category result produced by generic matching.
       for (let i = items.length - 1; i >= 0; i--) {
-        const m = items[i].match(/^(\d+)\s+(arma (?:alto|medio|baixo) calibre)$/i);
-        if (m && Number(m[1]) > 50) items.splice(i, 1);
+        if (/^\d+\s+arma\s+(?:alto|medio|baixo)\s+calibre$/i.test(items[i])) {
+          items.splice(i, 1);
+        }
       }
+
+      const count = (re: RegExp) => (flatWeaponGrid.match(re) || []).length;
+
+      const snsHk2 = count(/\bSNS\s+PISTOL\s+HK\s*2\b/gi);
+      const snsMk2 = count(/\bSNS\s+PISTOL\s+MK\s*2\b/gi);
+      const snsPlain = Math.max(0, count(/\bSNS\s+PISTOL\b/gi) - snsHk2 - snsMk2);
+      const vintage = count(/\bVINTAGE\s+PISTOL\b/gi);
+      const ap = count(/\bAP\s+PISTOL\b/gi);
+      const revolver = count(/\bREVOLVER\s+MK\s*2\b/gi);
+      const machine = count(/\bMACHINE\s+PISTOL\b/gi);
+      const hk2 = Math.max(0, count(/\bHK2\b/gi) - snsHk2);
+      const bullpup = count(/\bBULLPUP\s+RIFLE\b/gi);
+      const gusenberg = count(/\bGUSENBERG\b/gi);
+
+      // SNS Pistol HK2 is two weapons in one OCR cell: one low + one medium.
+      const low = snsPlain + snsMk2 + snsHk2 + vintage + ap + revolver;
+      const medium = machine + hk2 + snsHk2;
+      const high = bullpup + gusenberg;
+
+      if (low > 0) items.push(`${low} arma baixo calibre`);
+      if (medium > 0) items.push(`${medium} arma medio calibre`);
+      if (high > 0) items.push(`${high} arma alto calibre`);
+
+      // Rebuild configured weights from unit weights, never from the OCR's
+      // standalone ammunition value or arbitrary total-weight cell.
+      if (low > 0) weightTotals.set("arma baixo calibre", low * (getWeightForItem("arma baixo calibre") ?? 5));
+      if (medium > 0) weightTotals.set("arma medio calibre", medium * (getWeightForItem("arma medio calibre") ?? 5));
+      if (high > 0) weightTotals.set("arma alto calibre", high * (getWeightForItem("arma alto calibre") ?? 15));
     }
   }
 
@@ -1570,31 +1572,6 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       weightTotals.delete("ouro estatal");
       weightTotals.delete("dinheiro");
       weightTotals.delete("quadro");
-    }
-  }
-
-  // ARMAS EM GRANDES QUANTIDADES -----------------------------------------------
-  // A coima existente deve ser acionada quando qualquer classe atingir o limite:
-  //   alto  >= 3
-  //   medio >= 4
-  //   baixo >= 5
-  //
-  // O item é acrescentado UMA vez, independentemente de quantas classes
-  // ultrapassaram o limite. As quantidades das armas continuam separadas.
-  {
-    const alto = merged.get("arma alto calibre") || 0;
-    const medio = merged.get("arma medio calibre") || 0;
-    const baixo = merged.get("arma baixo calibre") || 0;
-
-    const armasGrandesQuantidades =
-      alto >= 3 ||
-      medio >= 4 ||
-      baixo >= 5;
-
-    if (armasGrandesQuantidades) {
-      merged.set("armas em grandes quantidades", 1);
-    } else {
-      merged.delete("armas em grandes quantidades");
     }
   }
 
