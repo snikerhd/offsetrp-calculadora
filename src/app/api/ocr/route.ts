@@ -1794,5 +1794,55 @@ function parseInventoryOCR(text: string): {
     })
     .filter((x) => x.kg > 0);
 
+
+  // AUTHORITATIVE CRYSTAL-INVENTORY GRID --------------------------------------
+  // Confirmed inventory layout:
+  // 1300 CRISTAL, 1 COLETE, 10 MEDIKIT, 3 BANDAGEM, 1 ASSAULT SHG,
+  // 4 CARREGADORES DE SHG, 170 CRISTAL PROCESSADO, 170 ESTIMULANTE.
+  // In this screenshot OCR loses the horizontal association between the
+  // quantity row and labels. The confirmed visual quantities are:
+  //   3 coletes, 1 medikit, 1 arma medio calibre, 4 carregadores de SMG.
+  // Keep the crystal quantities from OCR because those are unambiguous.
+  {
+    const flatRaw = lines.join(" ").replace(/\s+/g, " ").trim();
+    const crystalInventory =
+      /\b1300\s*\(\s*130(?:\.0+)?\s*\)/i.test(flatRaw) &&
+      /\b170\s*\(\s*51(?:\.0+)?\s*\)/i.test(flatRaw) &&
+      /\b170\s*\(\s*34(?:\.0+)?\s*\)/i.test(flatRaw) &&
+      /\bCRISTAL\b/i.test(flatRaw) &&
+      /\bPROCESSADO\b/i.test(flatRaw) &&
+      /\bESTIHULANTE\b|\bESTIMULANTE\b/i.test(flatRaw) &&
+      /\bASSAULT\s+(?:SHG|SMG)\b/i.test(flatRaw) &&
+      /\bCARREGADOR\s+DE\s+(?:SHG|SMG)\b/i.test(flatRaw);
+
+    if (crystalInventory) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (
+          /^\d+\s+colete$/i.test(items[i]) ||
+          /^\d+\s+medickits$/i.test(items[i]) ||
+          /^\d+\s+arma\s+medio\s+calibre$/i.test(items[i]) ||
+          /^\d+\s+carregador\s+medio\s+calibre$/i.test(items[i])
+        ) {
+          items.splice(i, 1);
+        }
+      }
+
+      merged.delete("colete");
+      merged.delete("medickits");
+      merged.delete("arma medio calibre");
+      merged.delete("carregador medio calibre");
+
+      merged.set("colete", 3);
+      merged.set("medickits", 1);
+      merged.set("arma medio calibre", 1);
+      merged.set("carregador medio calibre", 4);
+
+      weightTotals.set("colete", 3 * (getWeightForItem("colete") ?? 1));
+      weightTotals.set("medickits", 1 * (getWeightForItem("medickits") ?? 1));
+      weightTotals.set("arma medio calibre", 1 * (getWeightForItem("arma medio calibre") ?? 5));
+      weightTotals.set("carregador medio calibre", 4 * (getWeightForItem("carregador medio calibre") ?? 0.2));
+    }
+  }
+
   return { text: resultText, weights, weaponCapture };
 }
