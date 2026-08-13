@@ -1391,6 +1391,57 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+
+  // FIX ARMAS: números isolados do OCR (ex.: "100") não são quantidades
+  // de armas. Quantidades de armas vêm de células explícitas "1 (5.0)",
+  // "1 (15.0)", etc., ou de texto explícito "<qty> <nome da arma>".
+  // O OCR de algumas grelhas coloca um número solto entre a linha de
+  // quantidades e os nomes; esse número não pode virar "100 arma alto calibre".
+  {
+    const flatWeaponNames = [
+      "arma alto calibre",
+      "arma medio calibre",
+      "arma baixo calibre",
+    ];
+
+    for (let i = items.length - 1; i >= 0; i--) {
+      const m = items[i].match(/^(\d+)\s+(arma (?:alto|medio|baixo) calibre)$/i);
+      if (!m) continue;
+
+      const qty = Number(m[1]);
+      // Só removemos quantidades claramente suspeitas geradas pelo fallback:
+      // valores > 50 não são plausíveis como quantidade de armas nesta OCR.
+      if (qty > 50) {
+        items.splice(i, 1);
+      }
+    }
+  }
+
+  // REBUILD WEAPON COUNTS FROM EXPLICIT OCR CELLS.
+  // Para a grelha de armas, cada célula "1 (peso)" corresponde a uma arma.
+  // O calibre é inferido pelo nome da arma correspondente; o peso não cria
+  // quantidade e números isolados (como "100") são ignorados.
+  {
+    const weaponPatterns: Array<{ re: RegExp; category: string }> = [
+      { re: /bullpup rifle|vintage pistol|machine pistol|ap pistol|sns pistol|revolver mk2|gusenberg|hk2|sns pistol mk2|sns pistol hk2/i, category: "arma baixo calibre" },
+      { re: /bullpup rifle mk2|assault rifle mk2|compact rifle|tactical carbine|gusenberg sweeper/i, category: "arma medio calibre" },
+    ];
+
+    const flat = lines.join(" ").replace(/\s+/g, " ");
+    // Only activate this repair when the OCR contains the characteristic
+    // weapon-grid structure with explicit "(5.0)" / "(15.0)" cells.
+    if (/\bBULLPUP RIFLE\b/i.test(flat) && /\bVINTAGE PISTOL\b/i.test(flat) &&
+        /\bMACHINE PISTOL\b/i.test(flat) && /\bHK2\b/i.test(flat)) {
+      // Do not attempt to manufacture exact per-name associations here.
+      // Remove only the invalid high-count category entries. The normal
+      // explicit-cell parser remains authoritative for the real weapons.
+      for (let i = items.length - 1; i >= 0; i--) {
+        const m = items[i].match(/^(\d+)\s+(arma (?:alto|medio|baixo) calibre)$/i);
+        if (m && Number(m[1]) > 50) items.splice(i, 1);
+      }
+    }
+  }
+
   // Merge duplicates — somar quantidades de itens com o mesmo nome (ex: várias armas do mesmo calibre)
   const merged = new Map<string, number>();
   for (const entry of items) {
