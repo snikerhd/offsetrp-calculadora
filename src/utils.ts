@@ -593,6 +593,12 @@ export function parseQuickInput(input: string): ParseResult {
 
   const partes = input.split(",").map((p) => p.trim()).filter(Boolean);
 
+  // Apenas para as COIMAS RÁPIDAS / OCR: acumular armas por calibre.
+  // Não altera a tabela/aba de "Armas em Grande Quantidade".
+  let ocrArmasBaixo = 0;
+  let ocrArmasMedio = 0;
+  let ocrArmasAlto = 0;
+
   for (const parte of partes) {
     const match = parte.match(/^(\d+)\s+(.+)$/);
     if (!match) {
@@ -663,7 +669,11 @@ export function parseQuickInput(input: string): ParseResult {
     }
 
     if (tipoArma && (nome.includes("arma") || nome.includes("weapon") || nome.includes("gun"))) {
-      // Verificar se é posse ou grande quantidade
+      // COIMAS RÁPIDAS / OCR: guardar a quantidade por calibre.
+      if (tipoArma === "baixo") ocrArmasBaixo += qtd;
+      else if (tipoArma === "medio") ocrArmasMedio += qtd;
+      else ocrArmasAlto += qtd;
+
       let precoBase = 0;
       if (tipoArma === "baixo") precoBase = 20000; // Posse arma ilegal baixo calibre
       else if (tipoArma === "medio") precoBase = 30000; // Posse arma ilegal médio calibre
@@ -789,6 +799,43 @@ export function parseQuickInput(input: string): ParseResult {
       `  Posse de Matéria Prima para Fins Ilegais x ${fmt(multaMateriaPrima)} = ${fmt(multaMateriaPrima)}`
     );
     result.materiaPrima.total = multaMateriaPrima;
+  }
+
+  // COIMAS RÁPIDAS / OCR — aplicar grande quantidade POR CALIBRE.
+  // Isto é deliberadamente feito aqui, e não na função da tabela de
+  // "Armas em Grande Quantidade", para não alterar essa aba.
+  const baixoGrande = ocrArmasBaixo >= 5;
+  const medioGrande = ocrArmasMedio >= 4;
+  const altoGrande = ocrArmasAlto >= 3;
+
+  if (baixoGrande || medioGrande || altoGrande) {
+    let totalArmasNormal = 0;
+
+    // Só continuam a pagar por unidade os calibres abaixo do limite.
+    if (!baixoGrande) totalArmasNormal += ocrArmasBaixo * 20000;
+    if (!medioGrande) totalArmasNormal += ocrArmasMedio * 30000;
+    if (!altoGrande) totalArmasNormal += ocrArmasAlto * 80000;
+
+    if (baixoGrande) {
+      const multa = 150000 + (ocrArmasBaixo - 5) * 20000;
+      result.armas.resultados = result.armas.resultados.filter((l) => !l.includes("Arma baixo calibre"));
+      result.armas.resultados.push(`  5+ Armas Baixo Calibre (${ocrArmasBaixo}x): ${fmt(multa)} €`);
+    }
+    if (medioGrande) {
+      const multa = 200000 + (ocrArmasMedio - 4) * 30000;
+      result.armas.resultados = result.armas.resultados.filter((l) => !l.includes("Arma medio calibre"));
+      result.armas.resultados.push(`  4+ Armas Médio Calibre (${ocrArmasMedio}x): ${fmt(multa)} €`);
+    }
+    if (altoGrande) {
+      const multa = 250000 + (ocrArmasAlto - 3) * 80000;
+      result.armas.resultados = result.armas.resultados.filter((l) => !l.includes("Arma alto calibre"));
+      result.armas.resultados.push(`  3+ Armas Alto Calibre (${ocrArmasAlto}x): ${fmt(multa)} €`);
+    }
+
+    result.armas.total = totalArmasNormal
+      + (baixoGrande ? 150000 + (ocrArmasBaixo - 5) * 20000 : 0)
+      + (medioGrande ? 200000 + (ocrArmasMedio - 4) * 30000 : 0)
+      + (altoGrande ? 250000 + (ocrArmasAlto - 3) * 80000 : 0);
   }
 
   // Calcular totals - só adicionar base se houver itens nessa categoria
