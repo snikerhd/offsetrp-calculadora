@@ -190,7 +190,7 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
   };
 }
 
-function parseInventoryOCR(text: string): { text: string; weights: { item: string; qty: number; kg: number; unitKg: number | null }[]; weaponCapture: WeaponCapture | null } {
+function parseInventoryOCR(text: string): { text: string; weights: { item: string; kg: number; unitKg: number | null }[]; weaponCapture: WeaponCapture | null } {
   const items: string[] = [];
   const weaponCapture = parseWeaponCapture(text);
 
@@ -804,27 +804,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     const normalLockpick = /lock(?:pick|peck)/i.test(allText);
 
     if (advancedLockpick && !items.some((it) => it.endsWith(" lockpick avancada"))) {
-      // OCR pode separar o nome em linhas:
-      // 2 (1.0)  9 (1.8)  6 (1.2)
-      // LOCKPICK
-      // AVANÇADA ...
-      // A primeira quantidade corresponde à primeira coluna/nome.
-      let lockpickQty = 0;
-      const lockpickLine = lines.findIndex((line) => /lock(?:pick|peck)/i.test(line));
-      if (lockpickLine >= 0) {
-        for (let back = lockpickLine - 1; back >= Math.max(0, lockpickLine - 3); back--) {
-          const nums = splitCells(lines[back])
-            .filter((cell) => /^\d/.test(cell))
-            .map((cell) => parseQtyWeight(cell))
-            .filter((p) => p.qty > 0);
-          if (nums.length > 0) {
-            lockpickQty = nums[0].qty;
-            break;
-          }
-        }
-      }
-      if (lockpickQty <= 0) lockpickQty = 1;
-      items.push(`${lockpickQty} lockpick avancada`);
+      items.push("1 lockpick avancada");
     }
     if (normalLockpick && !advancedLockpick && !items.some((it) => it.endsWith(" lockpick"))) {
       items.push("1 lockpick");
@@ -1632,7 +1612,6 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       const ocrUnitKg = null;
       return {
         item: name,
-        qty,
         kg: Number(kg.toFixed(2)),
         unitKg: ocrUnitKg ?? unitKg,
       };
