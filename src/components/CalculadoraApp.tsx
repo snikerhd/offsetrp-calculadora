@@ -833,6 +833,11 @@ export default function CalculadoraApp() {
     for (const cc of ccs) {
       const cadEntries = cadPorCC[cc] || [];
       const extraEntries = extraPorCC[cc] || [];
+      const ocrTexto = relOcrPorCC[cc] || "";
+      const ocrParsed = ocrTexto ? parseQuickInput(ocrTexto) : null;
+      const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
+      const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
+      const ocrExtraTotal = ocrItensExtra + ocrDinheiroExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       const totalExtras = extraEntries.reduce((s, e) => s + e.valor, 0) + ocrExtraTotal;
       const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + totalExtras + sequestroMultaRel;
