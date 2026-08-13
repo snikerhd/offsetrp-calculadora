@@ -1444,6 +1444,33 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     }
   }
 
+  // FINAL SANITIZATION — OCR pode ler "ASSAULT SMG" como "ASSAULT SHG".
+  // "ASSAULT SHG" nesta grelha é um falso positivo e não deve transformar
+  // o 1 (10.0) da coluna numa "arma medio calibre".
+  // Só removemos a arma médio calibre quando NÃO existe outro nome de arma
+  // médio reconhecido na mesma captura.
+  {
+    const flatOcr = lines.join(" ").replace(/\s+/g, " ").trim();
+    const hasAssaultShg = /\bassault\s+shg\b/i.test(flatOcr);
+
+    const hasRealMediumWeapon = [
+      /\bmachine\s+pistol\b/i,
+      /\bhk\s*2\b/i,
+      /\bmicro\s+smg\b/i,
+      /\bcombat\s+pdw\b/i,
+      /\bassault\s+smg\b/i,
+    ].some((re) => re.test(flatOcr));
+
+    if (hasAssaultShg && !hasRealMediumWeapon) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (/^\d+\s+arma\s+medio\s+calibre$/i.test(items[i])) {
+          items.splice(i, 1);
+        }
+      }
+      weightTotals.delete("arma medio calibre");
+    }
+  }
+
   // Merge duplicates — somar quantidades de itens com o mesmo nome (ex: várias armas do mesmo calibre)
   const merged = new Map<string, number>();
   for (const entry of items) {
