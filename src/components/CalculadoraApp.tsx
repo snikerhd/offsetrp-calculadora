@@ -766,8 +766,9 @@ export default function CalculadoraApp() {
       const ocrTexto = relOcrPorCC[cc];
       const ocrParsed = ocrTexto ? parseQuickInput(ocrTexto) : null;
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
+      const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
-      const ocrExtraTotal = ocrItensExtra + ocrDinheiroExtra;
+      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       if (extraEntries.length || ocrExtraTotal > 0 || sequestroMultaRel > 0) {
         for (const entry of extraEntries) {
@@ -776,6 +777,12 @@ export default function CalculadoraApp() {
         if (ocrParsed?.itens.resultados.length) {
           linhas.push("  Itens Ilegais:");
           for (const linha of ocrParsed.itens.resultados) {
+            linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
+          }
+        }
+        if (ocrParsed?.municao.resultados.length) {
+          linhas.push("  Munição:");
+          for (const linha of ocrParsed.municao.resultados) {
             linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
           }
         }
@@ -816,8 +823,9 @@ export default function CalculadoraApp() {
       const ocrTexto = relOcrPorCC[cc] || "";
       const ocrParsed = ocrTexto ? parseQuickInput(ocrTexto) : null;
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
+      const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
-      const ocrExtraTotal = ocrItensExtra + ocrDinheiroExtra;
+      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       const totalExtras = extraEntries.reduce((s, e) => s + e.valor, 0) + ocrExtraTotal;
       const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + totalExtras + sequestroMultaRel;
@@ -1356,7 +1364,10 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                     return;
                   }
                   const parsed = parseQuickInput(txt);
-                  setRelOcrPorCC(prev => ({ ...prev, [cc]: txt }));
+                  setRelOcrPorCC(prev => ({
+                    ...prev,
+                    [cc]: prev[cc] ? `${prev[cc]}, ${txt}` : txt,
+                  }));
                   const detected: string[] = [];
                   if (parsed.itens.resultados.length) detected.push(...parsed.itens.resultados.map(x => x.trim()));
                   if (parsed.armas.resultados.length) detected.push(...parsed.armas.resultados.map(x => x.trim()));
