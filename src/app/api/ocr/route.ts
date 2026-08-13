@@ -190,7 +190,7 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
   };
 }
 
-function parseInventoryOCR(text: string): { text: string; weights: { item: string; kg: number; unitKg: number | null }[]; weaponCapture: WeaponCapture | null } {
+function parseInventoryOCR(text: string): { text: string; weights: { item: string; qty: number; kg: number; unitKg: number | null }[]; weaponCapture: WeaponCapture | null } {
   const items: string[] = [];
   const weaponCapture = parseWeaponCapture(text);
 
@@ -1612,6 +1612,7 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
       const ocrUnitKg = null;
       return {
         item: name,
+        qty,
         kg: Number(kg.toFixed(2)),
         unitKg: ocrUnitKg ?? unitKg,
       };

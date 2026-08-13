@@ -17,7 +17,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   const [ocrStatus, setOcrStatus] = useState("");
   const [ocrPreview, setOcrPreview] = useState<string | null>(null);
   const [ocrRawText, setOcrRawText] = useState("");
-  const [ocrWeights, setOcrWeights] = useState<{ item: string; kg: number; unitKg: number | null }[]>([]);
+  const [ocrWeights, setOcrWeights] = useState<{ item: string; qty: number; kg: number; unitKg: number | null }[]>([]);
   const [ocrWeapon, setOcrWeapon] = useState<{ weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -26,7 +26,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     preview?: string;
     error?: string;
     ocrRaw?: string;
-    detectedWeights?: { item: string; kg: number; unitKg: number | null }[];
+    detectedWeights?: { item: string; qty: number; kg: number; unitKg: number | null }[];
     weaponCapture?: { weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null;
   }) => {
     if (data.preview) setOcrPreview(data.preview);
@@ -199,7 +199,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
           <div className="mt-1 grid grid-cols-2 md:grid-cols-3 gap-1 rounded border border-white/10 bg-black/40 p-2">
             {ocrWeights.map((w) => (
               <div key={w.item} className="text-[10px] text-gray-400">
-                <span className="text-gray-200">{w.item}</span>: {w.kg} kg
+                <span className="text-gray-200">{w.qty}x {w.item}</span>: {w.kg} kg
                 {w.unitKg != null && <span className="text-gray-600"> ({w.unitKg} kg/un.)</span>}
               </div>
             ))}
