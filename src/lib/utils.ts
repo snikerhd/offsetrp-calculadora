@@ -860,7 +860,7 @@ export function parseQuickInput(input: string): ParseResult {
 
     if (baixoGrande) {
       const valor = 150000 + (ocrArmasBaixo - 5) * 20000;
-      novosDetalhes.push(`  5+ Armas Baixo Calibre (${ocrArmasBaixo}x): ${fmt(valor)} €`);
+      novosDetalhes.push(`  5+ Armas Baixo Calibre (${ocrArmasBaixo}x) — GRANDE QUANTIDADE: ${fmt(valor)} €`);
       novoTotal += valor;
       novosMeses = Math.max(novosMeses, 15);
     } else if (ocrArmasBaixo > 0) {
@@ -871,7 +871,7 @@ export function parseQuickInput(input: string): ParseResult {
 
     if (medioGrande) {
       const valor = 200000 + (ocrArmasMedio - 4) * 30000;
-      novosDetalhes.push(`  4+ Armas Médio Calibre (${ocrArmasMedio}x): ${fmt(valor)} €`);
+      novosDetalhes.push(`  4+ Armas Médio Calibre (${ocrArmasMedio}x) — GRANDE QUANTIDADE: ${fmt(valor)} €`);
       novoTotal += valor;
       novosMeses = Math.max(novosMeses, 20);
     } else if (ocrArmasMedio > 0) {
@@ -882,7 +882,7 @@ export function parseQuickInput(input: string): ParseResult {
 
     if (altoGrande) {
       const valor = 250000 + (ocrArmasAlto - 3) * 80000;
-      novosDetalhes.push(`  3+ Armas Alto Calibre (${ocrArmasAlto}x): ${fmt(valor)} €`);
+      novosDetalhes.push(`  3+ Armas Alto Calibre (${ocrArmasAlto}x) — GRANDE QUANTIDADE: ${fmt(valor)} €`);
       novoTotal += valor;
       novosMeses = Math.max(novosMeses, 25);
     } else if (ocrArmasAlto > 0) {
