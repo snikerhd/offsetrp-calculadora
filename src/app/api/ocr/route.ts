@@ -302,8 +302,11 @@ function fixOcrTypos(text: string): string {
 }
 
 function parseInventoryOCR(text: string): {
+  text: string;
+  weights: { item: string; kg: number; unitKg: number | null }[];
+  weaponCapture: WeaponCapture | null;
+} {
   const correctedText = fixOcrTypos(text);
- text: string; weights: { item: string; kg: number; unitKg: number | null }[]; weaponCapture: WeaponCapture | null } {
   const items: string[] = [];
   const weaponCapture = parseWeaponCapture(text);
 
