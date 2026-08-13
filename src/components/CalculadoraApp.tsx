@@ -208,6 +208,9 @@ type Department = 'DPSA' | 'DPLS' | 'DBC';
 
 type RelatorioImagem = { cc: string; url: string };
 
+// Resultado OCR associado ao CC no separador Relatório.
+type RelatorioOCR = Record<string, string>;
+
 export default function CalculadoraApp() {
   const [activeTab, setActiveTab] = useState("Coimas Rápidas PT");
   const [department, setDepartment] = useState<Department>('DPLS');
@@ -286,6 +289,8 @@ export default function CalculadoraApp() {
   const [relImagemCC, setRelImagemCC] = useState("");
   const [relImagemUrl, setRelImagemUrl] = useState("");
   const [relImagens, setRelImagens] = useState<RelatorioImagem[]>([]);
+  const [relOcrCC, setRelOcrCC] = useState("");
+  const [relOcrPorCC, setRelOcrPorCC] = useState<RelatorioOCR>({});
 
   const [velLimite, setVelLimite] = useState(50);
   const [velRegistrada, setVelRegistrada] = useState(0);
@@ -694,7 +699,7 @@ export default function CalculadoraApp() {
     // O relatório inclui tanto os CC introduzidos manualmente como os CC
     // associados às imagens, evitando que uma evidência fique de fora.
     const ccsManuais = relCCs.trim().split("\n").map(l => l.trim()).filter(Boolean);
-    const ccs = Array.from(new Set([...ccsManuais, ...relImagens.map(img => img.cc)]));
+    const ccs = Array.from(new Set([...ccsManuais, ...relImagens.map(img => img.cc), ...Object.keys(relOcrPorCC)]));
     const linhas: string[] = [];
 
     let resumo = "📝 Resumo:\n";
@@ -740,6 +745,26 @@ export default function CalculadoraApp() {
       linhas.push("➙ Foto 2 - Pertences");
       linhas.push("➙ Foto 3 - Identificação");
       linhas.push("➙ Foto 4 - Historial C.A.D.");
+      const ocrCC = relOcrPorCC[cc];
+      if (ocrCC) {
+        const ocrParsed = parseQuickInput(ocrCC);
+        linhas.push(`➙ OCR - Inventário: ${ocrCC}`);
+        if (ocrParsed.itens.resultados.length) {
+          linhas.push("   --- ITENS ILEGAIS ---");
+          linhas.push(...ocrParsed.itens.resultados);
+          linhas.push(`   TOTAL ITENS: ${fmt2(ocrParsed.itens.subtotal)} €`);
+        }
+        if (ocrParsed.armas.resultados.length) {
+          linhas.push("   --- ARMAS ---");
+          linhas.push(...ocrParsed.armas.resultados);
+          linhas.push(`   TOTAL ARMAS: ${fmt2(ocrParsed.armas.total)} €`);
+        }
+        if (ocrParsed.dinheiro.resultados.length) {
+          linhas.push("   --- DINHEIRO ---");
+          linhas.push(...ocrParsed.dinheiro.resultados);
+          linhas.push(`   TOTAL DINHEIRO: ${fmt2(ocrParsed.dinheiro.total)} €`);
+        }
+      }
     }
     linhas.push("");
 
@@ -758,10 +783,26 @@ export default function CalculadoraApp() {
 
       linhas.push("--- Coimas Extras ---");
       const extraEntries = extraPorCC[cc] || [];
+      const ocrTexto = relOcrPorCC[cc];
+      const ocrParsed = ocrTexto ? parseQuickInput(ocrTexto) : null;
+      const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
+      const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
+      const ocrExtraTotal = ocrItensExtra + ocrDinheiroExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
-      if (extraEntries.length || sequestroMultaRel > 0) {
+      if (extraEntries.length || ocrExtraTotal > 0 || sequestroMultaRel > 0) {
         for (const entry of extraEntries) {
           linhas.push(`  ${entry.desc}`);
+        }
+        if (ocrParsed?.itens.resultados.length) {
+          linhas.push("  Itens Ilegais:");
+          for (const linha of ocrParsed.itens.resultados) {
+            linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
+          }
+        }
+        if (ocrParsed?.dinheiro.resultados.length) {
+          for (const linha of ocrParsed.dinheiro.resultados) {
+            linhas.push(`  Dinheiro não declarado: ${linha.trim().replace(/ € x 75% = /, " € → multa ")}`);
+          }
         }
         if (sequestroMultaRel > 0) {
           let seqDesc = `  Sequestro: ${relCivis} civis (9.000€)`;
@@ -773,7 +814,7 @@ export default function CalculadoraApp() {
         linhas.push("  (Nenhuma coima extra registada)");
       }
 
-      const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + extraEntries.reduce((s, e) => s + e.valor, 0) + sequestroMultaRel;
+      const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + extraEntries.reduce((s, e) => s + e.valor, 0) + ocrExtraTotal + sequestroMultaRel;
       const mesesCC = cadEntries.reduce((s, e) => s + e.meses, 0);
       linhas.push(`💰 Total Coimas: ${fmt2(totalCC)} €`);
       const mesesCappedBase = Math.min(mesesCC, 60);
@@ -793,7 +834,7 @@ export default function CalculadoraApp() {
       const cadEntries = cadPorCC[cc] || [];
       const extraEntries = extraPorCC[cc] || [];
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
-      const totalExtras = extraEntries.reduce((s, e) => s + e.valor, 0);
+      const totalExtras = extraEntries.reduce((s, e) => s + e.valor, 0) + ocrExtraTotal;
       const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + totalExtras + sequestroMultaRel;
       const mesesCC = cadEntries.reduce((s, e) => s + e.meses, 0);
       const coimaFinal = totalCC * (relPercCoima / 100);
@@ -823,6 +864,8 @@ export default function CalculadoraApp() {
       setExtraPorCC({});
       setRelCCs("");
       setRelImagens([]);
+      setRelOcrPorCC({});
+      setRelOcrCC("");
       setCcAtual("Geral");
       setRelatorio("");
       showAlert("Todos os dados foram limpos.");
@@ -1315,6 +1358,81 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                       <span className="font-bold text-white shrink-0">CC: {img.cc}</span>
                       <a href={img.url} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 truncate" title={img.url}>{img.url}</a>
                       <button onClick={() => removerImagemRelatorio(index)} className="ml-auto text-red-400 hover:text-red-300 shrink-0 cursor-pointer">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ===== OCR / EVIDÊNCIA DO INVENTÁRIO POR CC ===== */}
+            <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
+              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-2 flex items-center gap-2">
+                🔍 OCR de Evidência por CC
+              </h2>
+              <p className="text-[10px] text-gray-500 mb-4">
+                Escolhe o CC e usa o mesmo OCR das Coimas Rápidas. O resultado fica associado ao CC e aparece automaticamente na secção de evidências do relatório.
+              </p>
+              <div className="mb-4">
+                <label className={labelCls}>CC da evidência OCR:</label>
+                <input
+                  value={relOcrCC}
+                  onChange={e => setRelOcrCC(e.target.value)}
+                  className={inputCls}
+                  placeholder="222"
+                />
+              </div>
+              <OcrBlock
+                inputCls={inputCls}
+                fillBtnTheme={fillBtnTheme}
+                neonShadow={neonShadow}
+                accentColor={accentColor}
+                onResult={(txt: string) => {
+                  const cc = relOcrCC.trim();
+                  if (!cc) {
+                    showAlert("Indique primeiro o CC da evidência OCR.");
+                    return;
+                  }
+                  const parsed = parseQuickInput(txt);
+                  setRelOcrPorCC(prev => ({ ...prev, [cc]: txt }));
+                  const detected: string[] = [];
+                  if (parsed.itens.resultados.length) detected.push(...parsed.itens.resultados.map(x => x.trim()));
+                  if (parsed.armas.resultados.length) detected.push(...parsed.armas.resultados.map(x => x.trim()));
+                  if (parsed.dinheiro.resultados.length) detected.push(...parsed.dinheiro.resultados.map(x => x.trim()));
+                  if (detected.length) {
+                    showAlert(`CC ${cc}: detetado(s) ${detected.join("; ")}.`);
+                  } else {
+                    showAlert(`OCR associado ao CC '${cc}', mas não foram encontrados itens com coima.`);
+                  }
+                }}
+              />
+              {Object.keys(relOcrPorCC).length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {Object.entries(relOcrPorCC).map(([cc, txt]) => (
+                    <div key={cc} className="rounded border border-white/5 bg-black/30 px-3 py-2 text-xs">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-white">CC: {cc}</span>
+                        <button
+                          onClick={() => setRelOcrPorCC(prev => {
+                            const next = { ...prev };
+                            delete next[cc];
+                            return next;
+                          })}
+                          className="ml-auto text-red-400 hover:text-red-300 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="text-gray-300 font-mono whitespace-pre-wrap">
+                        {(() => {
+                          const parsed = parseQuickInput(txt);
+                          const detected = [
+                            ...parsed.itens.resultados.map(x => x.trim()),
+                            ...parsed.armas.resultados.map(x => x.trim()),
+                            ...parsed.dinheiro.resultados.map(x => x.trim()),
+                          ];
+                          return detected.length ? detected.join("\n") : txt;
+                        })()}
+                      </div>
                     </div>
                   ))}
                 </div>
