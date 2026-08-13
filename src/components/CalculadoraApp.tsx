@@ -745,26 +745,6 @@ export default function CalculadoraApp() {
       linhas.push("➙ Foto 2 - Pertences");
       linhas.push("➙ Foto 3 - Identificação");
       linhas.push("➙ Foto 4 - Historial C.A.D.");
-      const ocrCC = relOcrPorCC[cc];
-      if (ocrCC) {
-        const ocrParsed = parseQuickInput(ocrCC);
-        linhas.push(`➙ OCR - Inventário: ${ocrCC}`);
-        if (ocrParsed.itens.resultados.length) {
-          linhas.push("   --- ITENS ILEGAIS ---");
-          linhas.push(...ocrParsed.itens.resultados);
-          linhas.push(`   TOTAL ITENS: ${fmt2(ocrParsed.itens.subtotal)} €`);
-        }
-        if (ocrParsed.armas.resultados.length) {
-          linhas.push("   --- ARMAS ---");
-          linhas.push(...ocrParsed.armas.resultados);
-          linhas.push(`   TOTAL ARMAS: ${fmt2(ocrParsed.armas.total)} €`);
-        }
-        if (ocrParsed.dinheiro.resultados.length) {
-          linhas.push("   --- DINHEIRO ---");
-          linhas.push(...ocrParsed.dinheiro.resultados);
-          linhas.push(`   TOTAL DINHEIRO: ${fmt2(ocrParsed.dinheiro.total)} €`);
-        }
-      }
     }
     linhas.push("");
 
@@ -1347,35 +1327,13 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
               </div>
             </div>
 
-            {/* ===== SECÇÃO IMAGENS / EVIDÊNCIAS POR CC ===== */}
-            <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
-              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-2 flex items-center gap-2"><Link className="w-4 h-4" /> 📸 Imagem de Evidência por CC</h2>
-              <p className="text-[10px] text-gray-500 mb-4">Coloca o CC e o link da imagem. Ao gerar o relatório, a imagem fica automaticamente associada ao CC correspondente.</p>
-              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-3 items-end">
-                <div><label className={labelCls}>CC:</label><input value={relImagemCC} onChange={e => setRelImagemCC(e.target.value)} className={inputCls} placeholder="222" /></div>
-                <div><label className={labelCls}>Link da imagem:</label><input value={relImagemUrl} onChange={e => setRelImagemUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && addImagemRelatorio()} className={inputCls} placeholder="https://..." /></div>
-                <button onClick={addImagemRelatorio} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button>
-              </div>
-              {relImagens.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {relImagens.map((img, index) => (
-                    <div key={`${img.cc}-${index}`} className="flex items-center gap-3 rounded border border-white/5 bg-black/30 px-3 py-2 text-xs">
-                      <span className="font-bold text-white shrink-0">CC: {img.cc}</span>
-                      <a href={img.url} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 truncate" title={img.url}>{img.url}</a>
-                      <button onClick={() => removerImagemRelatorio(index)} className="ml-auto text-red-400 hover:text-red-300 shrink-0 cursor-pointer">✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* ===== OCR / EVIDÊNCIA DO INVENTÁRIO POR CC ===== */}
             <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
               <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-2 flex items-center gap-2">
                 🔍 OCR de Evidência por CC
               </h2>
               <p className="text-[10px] text-gray-500 mb-4">
-                Escolhe o CC e usa o mesmo OCR das Coimas Rápidas. O resultado fica associado ao CC e aparece automaticamente na secção de evidências do relatório.
+                Escolhe o CC e usa o mesmo OCR das Coimas Rápidas. O resultado fica associado ao CC e é usado automaticamente nas Coimas Extras do relatório.
               </p>
               <div className="mb-4">
                 <label className={labelCls}>CC da evidência OCR:</label>
