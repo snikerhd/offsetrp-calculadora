@@ -190,7 +190,120 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
   };
 }
 
-function parseInventoryOCR(text: string): { text: string; weights: { item: string; kg: number; unitKg: number | null }[]; weaponCapture: WeaponCapture | null } {
+function fixOcrTypos(text: string): string {
+  // Each rule: [pattern to find, replacement]
+  const typoRules: [RegExp, string][] = [
+    // MEDIKIT / MEDICKIT misreads
+    [/\bHEDIC?KIT\b/gi, "MEDIKIT"],
+    [/\bMEDIC?KTT\b/gi, "MEDIKIT"],
+    [/\bHEDICK?IT\b/gi, "MEDIKIT"],
+    [/\bMEDTCKIT\b/gi, "MEDIKIT"],
+    [/\bMEDTKIT\b/gi, "MEDIKIT"],
+    [/\bMEDIC?K1T\b/gi, "MEDIKIT"],
+
+    // BANDAGEM misreads
+    [/\bBANDAGEN\b/gi, "BANDAGEM"],
+    [/\bBANDAGEH\b/gi, "BANDAGEM"],
+    [/\bBANDAGEMM?\b/gi, "BANDAGEM"],
+    [/\bBAHDAGEM\b/gi, "BANDAGEM"],
+
+    // ESTIMULANTE misreads
+    [/\bESTIHULANTE\b/gi, "ESTIMULANTE"],
+    [/\bESTIMULAHTE\b/gi, "ESTIMULANTE"],
+    [/\bESTINULANTE\b/gi, "ESTIMULANTE"],
+    [/\bESTIHULAHTE\b/gi, "ESTIMULANTE"],
+    [/\bESTTMULANTE\b/gi, "ESTIMULANTE"],
+    [/\bESTIMULAMTE\b/gi, "ESTIMULANTE"],
+
+    // ASSAULT SMG → OCR reads as "ASSAULT SHG" or "ASSAULT SNG"
+    [/\bASSAULT\s+SHG\b/gi, "ASSAULT SMG"],
+    [/\bASSAULT\s+SNG\b/gi, "ASSAULT SMG"],
+    [/\bASSAULT\s+SHC\b/gi, "ASSAULT SMG"],
+
+    // CARREGADOR DE SMG → OCR reads as "CARREGADOR DE SHG"
+    [/\bCARREGADOR\s+DE\s+SHG\b/gi, "CARREGADOR DE SMG"],
+    [/\bCARREGADOR\s+DE\s+SNG\b/gi, "CARREGADOR DE SMG"],
+
+    // MICRO SMG misreads
+    [/\bHICRO\s+SMG\b/gi, "MICRO SMG"],
+    [/\bMICRO\s+SHG\b/gi, "MICRO SMG"],
+    [/\bHICRO\s+SHG\b/gi, "MICRO SMG"],
+
+    // MACHINE PISTOL misreads
+    [/\bHACHINE\s+PISTOL\b/gi, "MACHINE PISTOL"],
+    [/\bMACHTNE\s+PISTOL\b/gi, "MACHINE PISTOL"],
+
+    // COLETE misreads
+    [/\bCOLETE\b/gi, "COLETE"],
+
+    // CRISTAL misreads
+    [/\bCRTSTAL\b/gi, "CRISTAL"],
+
+    // PROCESSADO misreads
+    [/\bPROCESSADO\b/gi, "PROCESSADO"],
+
+    // DINHEIRO misreads
+    [/\bDINHETRO\b/gi, "DINHEIRO"],
+    [/\bDINEIRO\b/gi, "DINHEIRO"],
+    [/\bDINHEIRR?O\b/gi, "DINHEIRO"],
+    [/\bDTNHEIRO\b/gi, "DINHEIRO"],
+
+    // FORTALECIDO misreads
+    [/\bFORTALECTDO\b/gi, "FORTALECIDO"],
+    [/\bFORTALECIDO\b/gi, "FORTALECIDO"],
+
+    // PACOTE DEALER misreads
+    [/\bPACOTE\s+DEALER\b/gi, "PACOTE DEALER"],
+
+    // PULSEIRA misreads
+    [/\bPULSETRA\b/gi, "PULSEIRA"],
+
+    // QUADRO misreads
+    [/\bQUADRO\b/gi, "QUADRO"],
+
+    // LOCKPICK misreads
+    [/\bLOCKPECK\b/gi, "LOCKPICK"],
+
+    // MESA QUIMICA misreads
+    [/\bHESA\s+QUIH?ICA\b/gi, "MESA QUIMICA"],
+    [/\bMESA\s+QUIH?ICA\b/gi, "MESA QUIMICA"],
+    [/\bHESA\s+QUIMICA\b/gi, "MESA QUIMICA"],
+
+    // SUMO MARACUJA misreads
+    [/\bSUMO\s+HARACUJA\b/gi, "SUMO MARACUJA"],
+    [/\bSUHO\s+MARACUJA\b/gi, "SUMO MARACUJA"],
+    [/\bSUHO\s+HARACUJA\b/gi, "SUMO MARACUJA"],
+
+    // BIFANA misreads (legal item but fix the OCR)
+    [/\bBTFANA\b/gi, "BIFANA"],
+
+    // SACO PLASTICO misreads
+    [/\bSACO\s+PL[AÁ]STICO\b/gi, "SACO PLASTICO"],
+    [/\bSACO\s+PLÁSTTCO\b/gi, "SACO PLASTICO"],
+
+    // REBARBADORA misreads
+    [/\bREBARBADORA\b/gi, "REBARBADORA"],
+    [/\bREBARBADOÍRA\b/gi, "REBARBADORA"],
+
+    // GUSENBERG misreads
+    [/\bGUSENBERG\b/gi, "GUSENBERG"],
+
+    // MAÇO TABACO misreads
+    [/\bHACO\s+TABACO\b/gi, "MAÇO TABACO"],
+    [/\bMAÇO\s+TABACO\b/gi, "MAÇO TABACO"],
+    [/\bMACO\s+TABACO\b/gi, "MAÇO TABACO"],
+  ];
+
+  let result = text;
+  for (const [pattern, replacement] of typoRules) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
+}
+
+function parseInventoryOCR(text: string): {
+  const correctedText = fixOcrTypos(text);
+ text: string; weights: { item: string; kg: number; unitKg: number | null }[]; weaponCapture: WeaponCapture | null } {
   const items: string[] = [];
   const weaponCapture = parseWeaponCapture(text);
 
@@ -204,10 +317,43 @@ function parseInventoryOCR(text: string): { text: string; weights: { item: strin
     if (weaponCapture.accessoryCount > 0) items.push(`${weaponCapture.accessoryCount} acessorios para armas`);
   }
   const weightTotals = new Map<string, number>();
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = correctedText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   // OCR.space can represent table columns as tabs OR as 2+ spaces.
   // Keep item names such as "MAÇO TABACO" intact (single spaces).
   const splitCells = (line: string) => line.split(/\t+|\s{2,}/).map((c) => c.trim()).filter(Boolean);
+
+  // OCR.space pode separar nomes compostos em linhas consecutivas:
+  // CRISTAL / PROCESSADO, LOCKPICK / AVANÇADA, CARREGADOR DE / SMG, etc.
+  // Normalizamos esses nomes antes do matching para não perder a quantidade.
+  const compoundNameRules: { first: RegExp; second: RegExp; merged: string }[] = [
+    { first: /^cristal$/i, second: /^processad[oa]?$/i, merged: "CRISTAL PROCESSADO" },
+    { first: /^colete$/i, second: /^fortalecid[oa]?$/i, merged: "COLETE FORTALECIDO" },
+    { first: /^carregador\s+de$/i, second: /^(pistola|smg|rifle|shotgun)$/i, merged: "CARREGADOR DE $1" },
+    { first: /^lock(?:pick|peck)$/i, second: /^avan[cç]ad[ao]?$/i, merged: "LOCKPICK AVANÇADA" },
+    { first: /^ouro$/i, second: /^estatal$/i, merged: "OURO ESTATAL" },
+    { first: /^corrente\s+de$/i, second: /^ouro(?:\s+10k)?$/i, merged: "CORRENTE DE $0" },
+  ];
+
+  for (let i = 0; i < lines.length - 1; i++) {
+    const thisCells = splitCells(lines[i]);
+    const nextCells = splitCells(lines[i + 1]);
+    if (thisCells.length !== 1 || nextCells.length === 0) continue;
+    const singleCell = thisCells[0].trim();
+
+    for (const rule of compoundNameRules) {
+      if (!rule.first.test(singleCell) || !rule.second.test(nextCells[0].trim())) continue;
+      let mergedName = rule.merged;
+      const match = nextCells[0].trim().match(rule.second);
+      if (match) {
+        mergedName = mergedName.replace("$0", match[0]).replace("$1", match[1] || match[0]);
+      }
+      nextCells[0] = mergedName;
+      lines[i + 1] = nextCells.join("\t");
+      lines[i] = "";
+      break;
+    }
+  }
+
 
   // OCR.space can split a single item name across adjacent cells/lines, e.g.
   // "COLETE" + "FORTALECIDO". Build a normalized view before matching so
