@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Shield, Clock, ShieldAlert, BookOpen, Layers, Calculator, Car,
   Coins, Package, FlaskConical, AlertTriangle, Scale, FileSpreadsheet, Gavel,
-  Pencil
+  Pencil, Link
 } from "lucide-react";
 import {
   ITENS_ILEGAIS, PRECOS_DROGAS,
@@ -206,6 +206,8 @@ const TABS = [
 
 type Department = 'DPSA' | 'DPLS' | 'DBC';
 
+type RelatorioImagem = { cc: string; url: string };
+
 export default function CalculadoraApp() {
   const [activeTab, setActiveTab] = useState("Coimas Rápidas PT");
   const [department, setDepartment] = useState<Department>('DPLS');
@@ -281,6 +283,9 @@ export default function CalculadoraApp() {
   const [relCCCAD, setRelCCCAD] = useState("");
   const [relMesesCAD, setRelMesesCAD] = useState(0);
   const [relValorCAD, setRelValorCAD] = useState(0);
+  const [relImagemCC, setRelImagemCC] = useState("");
+  const [relImagemUrl, setRelImagemUrl] = useState("");
+  const [relImagens, setRelImagens] = useState<RelatorioImagem[]>([]);
 
   const [velLimite, setVelLimite] = useState(50);
   const [velRegistrada, setVelRegistrada] = useState(0);
@@ -662,9 +667,34 @@ export default function CalculadoraApp() {
     showAlert(`Valor de ${fmt2(relValorCAD)} € e ${relMesesCAD} meses adicionados ao CAD do CC '${cc}'.`);
   };
 
+  // Associa uma imagem/evidência a um CC para aparecer automaticamente no relatório.
+  const addImagemRelatorio = () => {
+    const cc = relImagemCC.trim();
+    const url = relImagemUrl.trim();
+    if (!cc) { showAlert("Indique o CC da imagem."); return; }
+    if (!url) { showAlert("Indique o link da imagem."); return; }
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+    } catch {
+      showAlert("O link da imagem não parece válido.");
+      return;
+    }
+    setRelImagens(prev => [...prev, { cc, url }]);
+    setRelImagemUrl("");
+    showAlert(`Imagem associada ao CC '${cc}'.`);
+  };
+
+  const removerImagemRelatorio = (index: number) => {
+    setRelImagens(prev => prev.filter((_, i) => i !== index));
+  };
+
   // ========== FUNÇÃO GERAR RELATÓRIO (COM PRODUÇÃO DE DROGA) ==========
   const gerarRelatorio = () => {
-    const ccs = relCCs.trim().split("\n").map(l => l.trim()).filter(Boolean);
+    // O relatório inclui tanto os CC introduzidos manualmente como os CC
+    // associados às imagens, evitando que uma evidência fique de fora.
+    const ccsManuais = relCCs.trim().split("\n").map(l => l.trim()).filter(Boolean);
+    const ccs = Array.from(new Set([...ccsManuais, ...relImagens.map(img => img.cc)]));
     const linhas: string[] = [];
 
     let resumo = "📝 Resumo:\n";
@@ -792,6 +822,7 @@ export default function CalculadoraApp() {
       setCadPorCC({});
       setExtraPorCC({});
       setRelCCs("");
+      setRelImagens([]);
       setCcAtual("Geral");
       setRelatorio("");
       showAlert("Todos os dados foram limpos.");
@@ -1266,6 +1297,28 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                 <div><label className={labelCls}>Valor (€):</label><input type="number" value={relValorCAD} onChange={e => setRelValorCAD(Number(e.target.value))} className={inputCls} /></div>
                 <div className="flex items-end"><button onClick={addValorCAD} className={`w-full py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button></div>
               </div>
+            </div>
+
+            {/* ===== SECÇÃO IMAGENS / EVIDÊNCIAS POR CC ===== */}
+            <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
+              <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-2 flex items-center gap-2"><Link className="w-4 h-4" /> 📸 Imagem de Evidência por CC</h2>
+              <p className="text-[10px] text-gray-500 mb-4">Coloca o CC e o link da imagem. Ao gerar o relatório, a imagem fica automaticamente associada ao CC correspondente.</p>
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-3 items-end">
+                <div><label className={labelCls}>CC:</label><input value={relImagemCC} onChange={e => setRelImagemCC(e.target.value)} className={inputCls} placeholder="222" /></div>
+                <div><label className={labelCls}>Link da imagem:</label><input value={relImagemUrl} onChange={e => setRelImagemUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && addImagemRelatorio()} className={inputCls} placeholder="https://..." /></div>
+                <button onClick={addImagemRelatorio} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer`}>Adicionar</button>
+              </div>
+              {relImagens.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {relImagens.map((img, index) => (
+                    <div key={`${img.cc}-${index}`} className="flex items-center gap-3 rounded border border-white/5 bg-black/30 px-3 py-2 text-xs">
+                      <span className="font-bold text-white shrink-0">CC: {img.cc}</span>
+                      <a href={img.url} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 truncate" title={img.url}>{img.url}</a>
+                      <button onClick={() => removerImagemRelatorio(index)} className="ml-auto text-red-400 hover:text-red-300 shrink-0 cursor-pointer">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* CC dos Suspeitos */}
