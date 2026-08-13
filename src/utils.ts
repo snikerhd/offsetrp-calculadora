@@ -68,7 +68,7 @@ export function calcArmasGrandeQtde(
     const base = 150000;
     const acrescimo = (baixo - 5) * 20000;
     const val = base + acrescimo;
-    const detalhe = `5+ Armas Baixo Calibre (${baixo}x): ${fmt(val)} €`;
+    const detalhe = `5+ Armas Baixo Calibre (${baixo}x) — GRANDE QUANTIDADE: ${fmt(val)} €`;
     detalhes.push([detalhe, val]);
     total += val;
     meses = 15;
@@ -79,7 +79,7 @@ export function calcArmasGrandeQtde(
     const base = 200000;
     const acrescimo = (medio - 4) * 30000;
     const val = base + acrescimo;
-    const detalhe = `4+ Armas Médio Calibre (${medio}x): ${fmt(val)} €`;
+    const detalhe = `4+ Armas Médio Calibre (${medio}x) — GRANDE QUANTIDADE: ${fmt(val)} €`;
     detalhes.push([detalhe, val]);
     total += val;
     if (meses < 20) meses = 20;
@@ -90,7 +90,7 @@ export function calcArmasGrandeQtde(
     const base = 250000;
     const acrescimo = (alto - 3) * 80000;
     const val = base + acrescimo;
-    const detalhe = `3+ Armas Alto Calibre (${alto}x): ${fmt(val)} €`;
+    const detalhe = `3+ Armas Alto Calibre (${alto}x) — GRANDE QUANTIDADE: ${fmt(val)} €`;
     detalhes.push([detalhe, val]);
     total += val;
     if (meses < 25) meses = 25;
@@ -593,8 +593,8 @@ export function parseQuickInput(input: string): ParseResult {
 
   const partes = input.split(",").map((p) => p.trim()).filter(Boolean);
 
-  // Apenas para as COIMAS RÁPIDAS / OCR: acumular armas por calibre.
-  // Não altera a tabela/aba de "Armas em Grande Quantidade".
+  // OCR: acumular armas por calibre para aplicar o limite de grande quantidade
+  // depois de ler TODAS as linhas. Isto não altera a aba/função de Grande Quantidade.
   let ocrArmasBaixo = 0;
   let ocrArmasMedio = 0;
   let ocrArmasAlto = 0;
@@ -669,17 +669,16 @@ export function parseQuickInput(input: string): ParseResult {
     }
 
     if (tipoArma && (nome.includes("arma") || nome.includes("weapon") || nome.includes("gun"))) {
-      // COIMAS RÁPIDAS / OCR: guardar a quantidade por calibre.
-      if (tipoArma === "baixo") ocrArmasBaixo += qtd;
-      else if (tipoArma === "medio") ocrArmasMedio += qtd;
-      else ocrArmasAlto += qtd;
-
+      // Verificar se é posse ou grande quantidade
       let precoBase = 0;
       if (tipoArma === "baixo") precoBase = 20000; // Posse arma ilegal baixo calibre
       else if (tipoArma === "medio") precoBase = 30000; // Posse arma ilegal médio calibre
       else precoBase = 80000; // Posse arma ilegal alto calibre
 
       const subtotal = qtd * precoBase;
+      if (tipoArma === "baixo") ocrArmasBaixo += qtd;
+      else if (tipoArma === "medio") ocrArmasMedio += qtd;
+      else ocrArmasAlto += qtd;
       result.armas.resultados.push(`  ${qtd}x Arma ${tipoArma} calibre (${caliberArma}) x ${fmt(precoBase)} = ${fmt(subtotal)}`);
       result.armas.total += subtotal;
       continue;
@@ -801,41 +800,54 @@ export function parseQuickInput(input: string): ParseResult {
     result.materiaPrima.total = multaMateriaPrima;
   }
 
-  // COIMAS RÁPIDAS / OCR — aplicar grande quantidade POR CALIBRE.
-  // Isto é deliberadamente feito aqui, e não na função da tabela de
-  // "Armas em Grande Quantidade", para não alterar essa aba.
+  // Coimas Rápidas / OCR: aplicar o limite por calibre.
+  // IMPORTANTE: isto é exclusivo do OCR/Coimas Rápidas. A função
+  // calcArmasGrandeQtde e a aba de Grande Quantidade não são alteradas.
   const baixoGrande = ocrArmasBaixo >= 5;
   const medioGrande = ocrArmasMedio >= 4;
   const altoGrande = ocrArmasAlto >= 3;
 
   if (baixoGrande || medioGrande || altoGrande) {
-    let totalArmasNormal = 0;
-
-    // Só continuam a pagar por unidade os calibres abaixo do limite.
-    if (!baixoGrande) totalArmasNormal += ocrArmasBaixo * 20000;
-    if (!medioGrande) totalArmasNormal += ocrArmasMedio * 30000;
-    if (!altoGrande) totalArmasNormal += ocrArmasAlto * 80000;
+    const novosDetalhes: string[] = [];
+    let novoTotal = 0;
+    let novosMeses = 0;
 
     if (baixoGrande) {
-      const multa = 150000 + (ocrArmasBaixo - 5) * 20000;
-      result.armas.resultados = result.armas.resultados.filter((l) => !l.includes("Arma baixo calibre"));
-      result.armas.resultados.push(`  5+ Armas Baixo Calibre (${ocrArmasBaixo}x): ${fmt(multa)} €`);
-    }
-    if (medioGrande) {
-      const multa = 200000 + (ocrArmasMedio - 4) * 30000;
-      result.armas.resultados = result.armas.resultados.filter((l) => !l.includes("Arma medio calibre"));
-      result.armas.resultados.push(`  4+ Armas Médio Calibre (${ocrArmasMedio}x): ${fmt(multa)} €`);
-    }
-    if (altoGrande) {
-      const multa = 250000 + (ocrArmasAlto - 3) * 80000;
-      result.armas.resultados = result.armas.resultados.filter((l) => !l.includes("Arma alto calibre"));
-      result.armas.resultados.push(`  3+ Armas Alto Calibre (${ocrArmasAlto}x): ${fmt(multa)} €`);
+      const valor = 150000 + (ocrArmasBaixo - 5) * 20000;
+      novosDetalhes.push(`  5+ Armas Baixo Calibre (${ocrArmasBaixo}x): ${fmt(valor)} €`);
+      novoTotal += valor;
+      novosMeses = Math.max(novosMeses, 15);
+    } else if (ocrArmasBaixo > 0) {
+      const valor = ocrArmasBaixo * 20000;
+      novosDetalhes.push(`  ${ocrArmasBaixo}x Arma baixo calibre x 20000 = ${fmt(valor)}`);
+      novoTotal += valor;
     }
 
-    result.armas.total = totalArmasNormal
-      + (baixoGrande ? 150000 + (ocrArmasBaixo - 5) * 20000 : 0)
-      + (medioGrande ? 200000 + (ocrArmasMedio - 4) * 30000 : 0)
-      + (altoGrande ? 250000 + (ocrArmasAlto - 3) * 80000 : 0);
+    if (medioGrande) {
+      const valor = 200000 + (ocrArmasMedio - 4) * 30000;
+      novosDetalhes.push(`  4+ Armas Médio Calibre (${ocrArmasMedio}x): ${fmt(valor)} €`);
+      novoTotal += valor;
+      novosMeses = Math.max(novosMeses, 20);
+    } else if (ocrArmasMedio > 0) {
+      const valor = ocrArmasMedio * 30000;
+      novosDetalhes.push(`  ${ocrArmasMedio}x Arma medio calibre x 30000 = ${fmt(valor)}`);
+      novoTotal += valor;
+    }
+
+    if (altoGrande) {
+      const valor = 250000 + (ocrArmasAlto - 3) * 80000;
+      novosDetalhes.push(`  3+ Armas Alto Calibre (${ocrArmasAlto}x): ${fmt(valor)} €`);
+      novoTotal += valor;
+      novosMeses = Math.max(novosMeses, 25);
+    } else if (ocrArmasAlto > 0) {
+      const valor = ocrArmasAlto * 80000;
+      novosDetalhes.push(`  ${ocrArmasAlto}x Arma alto calibre x 80000 = ${fmt(valor)}`);
+      novoTotal += valor;
+    }
+
+    result.armas.resultados = novosDetalhes;
+    result.armas.total = novoTotal;
+    result.armas.meses = novosMeses;
   }
 
   // Calcular totals - só adicionar base se houver itens nessa categoria
