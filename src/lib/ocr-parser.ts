@@ -1191,13 +1191,15 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
       if (!pattern.test(allText)) continue;
 
+      // In inventory OCR, numbers next to an item are often durability/weight
+      // cells rather than quantities (e.g. `1 (0.7) CRISTAL` or `CRISTAL 76`).
+      // Only accept an explicit quantity immediately BEFORE the item, without
+      // a parenthesized weight between them. The structured grid parser above
+      // is responsible for quantities coming from `qty (kg)` cells.
       const beforeMatch = allText.match(
-        new RegExp("(\\d[\\d.,]*)\\s*(?:\\([^)]*\\))?\\s*" + pattern.source, "i")
+        new RegExp("(\\d[\\d.,]*)\\s+" + pattern.source, "i")
       );
-      const afterMatch = allText.match(
-        new RegExp(pattern.source + "\\s*(?:\\t|\\s{2,})\\s*(\\d[\\d.,]*)", "i")
-      );
-      const rawQty = beforeMatch?.[1] ?? afterMatch?.[1];
+      const rawQty = beforeMatch?.[1];
 
       if (rawQty) {
         const qty = parseInt(rawQty.replace(/[.,]/g, ""), 10);
