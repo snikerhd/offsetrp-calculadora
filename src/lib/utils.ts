@@ -679,6 +679,18 @@ export function parseQuickInput(input: string): ParseResult {
       continue;
     }
 
+    // Mais ruído/truncamento de OCR (não são itens nem coimas rápidas):
+    // - nomes vazios ou só pontuação/símbolos ("/", ":", "-")
+    // - nomes terminados em ":" (ex.: "peso:")
+    // - a palavra "peso" (a barra de peso "Peso: 53.70/120.00")
+    // - fragmentos truncados terminados em "de" (ex.: "carta de")
+    if (!nome || /^[\W_]+$/.test(nome)) {
+      continue;
+    }
+    if (/:$/.test(originalNome.trim()) || /\bpeso\b/i.test(nome) || /^carta\s+de$/i.test(nome)) {
+      continue;
+    }
+
     // Verificar armas (classes genéricas produzidas pelo parser do OCR, ex.:
     // "arma alto calibre"). Isto tem de correr ANTES da pesquisa de itens
     // (obterItemPorSinonimo), porque essa pesquisa faz correspondência
