@@ -668,6 +668,17 @@ export function parseQuickInput(input: string): ParseResult {
       continue;
     }
 
+    // Documento legal "cidadão" (não tem coima rápida) — não confundir com
+    // "cartão de cidadão" nem com drogas.
+    if (nome === "cidadao") {
+      continue;
+    }
+
+    // Ruído de OCR: horas/tempos ("17:23") e números soltos que não são itens.
+    if (/^\d{1,2}:\d{2}$/.test(originalNome) || /^\d+([.,]\d+)?$/.test(originalNome)) {
+      continue;
+    }
+
     // Verificar armas (classes genéricas produzidas pelo parser do OCR, ex.:
     // "arma alto calibre"). Isto tem de correr ANTES da pesquisa de itens
     // (obterItemPorSinonimo), porque essa pesquisa faz correspondência
@@ -804,13 +815,23 @@ export function parseQuickInput(input: string): ParseResult {
     // Verificar carregadores
     if (nome.includes("carregador")) {
       let precoUnit = 0;
-      if (tipoMun === "baixo" || nome.includes("baixo")) precoUnit = 2000;
-      else if (tipoMun === "medio" || nome.includes("medio")) precoUnit = 4000;
-      else if (tipoMun === "alto" || nome.includes("alto")) precoUnit = 6000;
-      else precoUnit = 2000; // Default
+      let tipoCarregador = "";
+      if (tipoMun === "baixo" || nome.includes("baixo")) {
+        precoUnit = 2000;
+        tipoCarregador = "baixo calibre";
+      } else if (tipoMun === "medio" || nome.includes("medio")) {
+        precoUnit = 4000;
+        tipoCarregador = "medio calibre";
+      } else if (tipoMun === "alto" || nome.includes("alto")) {
+        precoUnit = 6000;
+        tipoCarregador = "alto calibre";
+      } else {
+        precoUnit = 2000; // Default
+      }
 
       const subtotal = qtd * precoUnit;
-      result.municao.resultados.push(`  ${qtd}x Carregador x ${fmt(precoUnit)} = ${fmt(subtotal)}`);
+      const label = tipoCarregador ? `Carregador ${tipoCarregador}` : "Carregador";
+      result.municao.resultados.push(`  ${qtd}x ${label} x ${fmt(precoUnit)} = ${fmt(subtotal)}`);
       result.municao.total += subtotal;
       continue;
     }
