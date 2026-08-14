@@ -495,6 +495,7 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
     { first: /^diamante$/i, second: /^bruto$/i, merged: "DIAMANTE BRUTO" },
     { first: /^anel$/i, second: /^diamante$/i, merged: "ANEL DE DIAMANTE" },
     { first: /^kit$/i, second: /^repara[cç][aã]o$/i, merged: "KIT REPARACAO" },
+    { first: /^carregador\s+de$/i, second: /^(pistola|smg|rifle|shotgun)$/i, merged: "CARREGADOR DE $1" },
   ];
 
   for (const rule of nonAdjacentRules) {
