@@ -191,7 +191,7 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "eletrónico": "Eletrónicos",
   "eletrónicos": "Eletrónicos",
   "knife": "knife",
-  "branca": "knife",
+  "branca": "porte de arma branca",
   "arma branca": "knife",
   "algemas": "Algemas",
   "algema": "Algemas",
