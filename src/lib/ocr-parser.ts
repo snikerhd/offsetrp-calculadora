@@ -231,6 +231,23 @@ const ITEM_MAP: [RegExp, string][] = [
   [/bala\b/i, "balas baixo"],
   [/c4/i, "c4"],
   [/pack\s*safira/i, "pack safira"],
+  // Pesca
+  [/truta/i, "truta"],
+  [/salm[aã]o/i, "salmao"],
+  [/atum/i, "atum"],
+  [/sardinha/i, "sardinha"],
+  [/cana\s*(de\s*)?pesca/i, "cana de pesca"],
+  [/licen[cç]a\s*(de\s*)?pesca/i, "licenca pesca"],
+  // Crafting / Materiais
+  [/alum[ií]nio/i, "aluminio"],
+  [/borracha/i, "borracha"],
+  [/kit\s*repara[cç][aã]o/i, "kit reparacao"],
+  // Itens legais comuns
+  [/bandagem/i, "bandagem"],
+  [/sumo/i, "sumo"],
+  [/bifana/i, "bifana"],
+  [/r[aá]dio/i, "radio"],
+  [/telem[oó]vel/i, "telemovel"],
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -440,6 +457,48 @@ function splitCells(line: string): string[] {
       if (/^pack$/i.test(cur) && /^(vinhos|safira)$/i.test(next)) {
         result.push(cur + " " + next); i += 2; continue;
       }
+      // KIT REPARAÇÃO
+      if (/^kit$/i.test(cur) && /^repara[cç][aã]o$/i.test(next)) {
+        result.push(cur + " " + next); i += 2; continue;
+      }
+      // PORTE DE ARMA BRANCA
+      if (/^porte$/i.test(cur) && /^de$/i.test(next) && /^arma$/i.test(next2)) {
+        const next3 = words[i + 3] || "";
+        if (/^branca$/i.test(next3)) {
+          result.push(cur + " " + next + " " + next2 + " " + next3); i += 4; continue;
+        }
+        result.push(cur + " " + next + " " + next2); i += 3; continue;
+      }
+      // CARTÃO DE CIDADÃO
+      if (/^cart[aã]o$/i.test(cur) && /^de$/i.test(next) && /^cidad[aã]o$/i.test(next2)) {
+        result.push(cur + " " + next + " " + next2); i += 3; continue;
+      }
+      // CANA DE PESCA
+      if (/^cana$/i.test(cur) && /^de$/i.test(next) && /^pesca$/i.test(next2)) {
+        result.push(cur + " " + next + " " + next2); i += 3; continue;
+      }
+      // LICENÇA PESCA, LICENÇA DE PESCA
+      if (/^licen[cç]a$/i.test(cur) && /^(de|pesca)$/i.test(next)) {
+        if (/^pesca$/i.test(next)) {
+          result.push(cur + " " + next); i += 2; continue;
+        }
+        if (/^pesca$/i.test(next2)) {
+          result.push(cur + " " + next + " " + next2); i += 3; continue;
+        }
+        result.push(cur + " " + next); i += 2; continue;
+      }
+      // SUMO LARANJA / SUMO MARACUJA (any juice variant)
+      if (/^sumo$/i.test(cur) && /^(laranja|maracu|manga|lim[aã]o)/i.test(next)) {
+        result.push(cur + " " + next); i += 2; continue;
+      }
+      // PEÇA BÁSICA, PEÇA AVANÇADA
+      if (/^pe[cç]a$/i.test(cur) && /^(b[aá]sica|avan[cç]ada)$/i.test(next)) {
+        result.push(cur + " " + next); i += 2; continue;
+      }
+      // SNS PISTOL MK2 / SNS PISTOL HK2 (three words)
+      if (/^sns$/i.test(cur) && /^pistol$/i.test(next) && /^(mk\s*2|hk\s*2)$/i.test(next2)) {
+        result.push(cur + " " + next + " " + next2); i += 3; continue;
+      }
 
       result.push(cur);
       i++;
@@ -498,6 +557,33 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
     if (/^mesa$/i.test(cur) && /^qu[ií]mica$/i.test(next)) {
       step1.push("MESA QUIMICA"); i += 2; continue;
     }
+    // PORTE DE ARMA + BRANCA
+    if (/^porte\s+de\s+arma$/i.test(cur) && /^branca$/i.test(next)) {
+      step1.push("PORTE DE ARMA BRANCA"); i += 2; continue;
+    }
+    // CARTÃO DE + CIDADÃO
+    if (/^cart[aã]o\s+de$/i.test(cur) && /^cidad[aã]o$/i.test(next)) {
+      step1.push("CARTAO DE CIDADAO"); i += 2; continue;
+    }
+    // KIT + REPARAÇÃO
+    if (/^kit$/i.test(cur) && /^repara[cç][aã]o$/i.test(next)) {
+      step1.push("KIT REPARACAO"); i += 2; continue;
+    }
+    // CANA DE + PESCA
+    if (/^cana\s+de$/i.test(cur) && /^pesca$/i.test(next)) {
+      step1.push("CANA DE PESCA"); i += 2; continue;
+    }
+    // LICENÇA + PESCA
+    if (/^licen[cç]a$/i.test(cur) && /^pesca$/i.test(next)) {
+      step1.push("LICENCA PESCA"); i += 2; continue;
+    }
+    // PEÇA + BÁSICA/AVANÇADA
+    if (/^pe[cç]a$/i.test(cur) && /^b[aá]sica$/i.test(next)) {
+      step1.push("PECA BASICA"); i += 2; continue;
+    }
+    if (/^pe[cç]a$/i.test(cur) && /^avan[cç]ada$/i.test(next)) {
+      step1.push("PECA AVANCADA"); i += 2; continue;
+    }
 
     step1.push(cur);
     i++;
@@ -511,17 +597,27 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
     { first: /^colete$/i, second: /^fortalecid[oa]?$/i, merged: "COLETE FORTALECIDO" },
     { first: /^cristal$/i, second: /^processad[oa]?$/i, merged: "CRISTAL PROCESSADO" },
     { first: /^ouro$/i, second: /^estatal$/i, merged: "OURO ESTATAL" },
+    { first: /^carregador\s+de$/i, second: /^(smg|pistola|rifle|shotgun)$/i, merged: "CARREGADOR DE $1" },
+    { first: /^porte\s+de\s+arma$/i, second: /^branca$/i, merged: "PORTE DE ARMA BRANCA" },
+    { first: /^cart[aã]o\s+de$/i, second: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
   ];
 
   let result = [...step1];
   for (const rule of nonAdjacentRules) {
     // Already merged in step1? Skip.
-    if (result.some((c) => new RegExp(rule.merged, "i").test(c))) continue;
+    const mergedEsc = rule.merged.replace(/\$\d/g, "\\w+");
+    if (result.some((c) => new RegExp(mergedEsc, "i").test(c))) continue;
 
     const firstIdx = result.findIndex((c) => rule.first.test(c));
     const secondIdx = result.findIndex((c) => rule.second.test(c));
     if (firstIdx >= 0 && secondIdx >= 0 && firstIdx !== secondIdx) {
-      result[firstIdx] = rule.merged;
+      // Support $1 substitution from second part's match
+      let mergedName = rule.merged;
+      const m = result[secondIdx].match(rule.second);
+      if (m && m[1]) {
+        mergedName = mergedName.replace("$1", m[1].toUpperCase());
+      }
+      result[firstIdx] = mergedName;
       result.splice(secondIdx, 1);
     }
   }
@@ -843,11 +939,23 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     // replace part B with the merged name (A+B) at part B's position.
     const mainCells = [...mainLine.cells];
 
-    // Compound merge rules for standalone → main line merging
+    // Compound merge rules for standalone → main line merging.
+    // "standalone" = text on a separate line (e.g. "COLETE", "CARREGADOR DE")
+    // "mainPart"   = matching cell on the main line (e.g. "FORTALECIDO", "SMG")
     const compoundRules: { standalone: RegExp; mainPart: RegExp; merged: string }[] = [
       { standalone: /^colete$/i, mainPart: /^fortalecid[oa]?$/i, merged: "COLETE FORTALECIDO" },
       { standalone: /^cristal$/i, mainPart: /^processad[oa]?$/i, merged: "CRISTAL PROCESSADO" },
       { standalone: /^ouro$/i, mainPart: /^estatal$/i, merged: "OURO ESTATAL" },
+      // "CARREGADOR DE" on standalone line + "SMG"/"PISTOLA"/"RIFLE"/"SHOTGUN" on main
+      { standalone: /^carregador\s+de$/i, mainPart: /^smg$/i, merged: "CARREGADOR DE SMG" },
+      { standalone: /^carregador\s+de$/i, mainPart: /^pistola$/i, merged: "CARREGADOR DE PISTOLA" },
+      { standalone: /^carregador\s+de$/i, mainPart: /^rifle$/i, merged: "CARREGADOR DE RIFLE" },
+      { standalone: /^carregador\s+de$/i, mainPart: /^shotgun$/i, merged: "CARREGADOR DE SHOTGUN" },
+      // "PORTE DE ARMA" + "BRANCA" (legal item, but merge name correctly)
+      { standalone: /^porte\s+de\s+arma$/i, mainPart: /^branca$/i, merged: "PORTE DE ARMA BRANCA" },
+      // "CARTÃO DE" + "CIDADÃO"
+      { standalone: /^cart[aã]o\s+de$/i, mainPart: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
+      // "GUSENBERG" standalone (alto calibre, not a compound — but handle cleanly)
     ];
 
     const usedFragments = new Set<number>();
@@ -858,6 +966,28 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         const mainIdx = mainCells.findIndex((c) => rule.mainPart.test(c));
         if (mainIdx >= 0) {
           mainCells[mainIdx] = rule.merged;
+          usedFragments.add(fi);
+          break;
+        }
+      }
+    }
+
+    // REVERSE: mainPart on standalone, standalonePrefix on main line
+    // e.g. "BRANCA" on standalone, "PORTE DE ARMA" on main line
+    const reverseRules: { mainCell: RegExp; fragment: RegExp; merged: string }[] = [
+      { mainCell: /^carregador\s+de$/i, fragment: /^smg$/i, merged: "CARREGADOR DE SMG" },
+      { mainCell: /^carregador\s+de$/i, fragment: /^pistola$/i, merged: "CARREGADOR DE PISTOLA" },
+      { mainCell: /^carregador\s+de$/i, fragment: /^rifle$/i, merged: "CARREGADOR DE RIFLE" },
+      { mainCell: /^carregador\s+de$/i, fragment: /^shotgun$/i, merged: "CARREGADOR DE SHOTGUN" },
+      { mainCell: /^porte\s+de\s+arma$/i, fragment: /^branca$/i, merged: "PORTE DE ARMA BRANCA" },
+      { mainCell: /^cart[aã]o\s+de$/i, fragment: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
+    ];
+    for (let mi = 0; mi < mainCells.length; mi++) {
+      for (const rule of reverseRules) {
+        if (!rule.mainCell.test(mainCells[mi])) continue;
+        const fi = standaloneFragments.findIndex((f, idx) => !usedFragments.has(idx) && rule.fragment.test(f));
+        if (fi >= 0) {
+          mainCells[mi] = rule.merged;
           usedFragments.add(fi);
           break;
         }
@@ -1091,8 +1221,24 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       (/lockpick/i.test(allText) && /avan[cç]ad/i.test(allText))
     ) {
       merged.delete("lockpick");
-      if (!merged.has("lockpick avancada")) {
-        merged.set("lockpick avancada", 1);
+
+      // Prefer an explicit quantity from OCR text, e.g. "2 LOCKpicks".
+      // This avoids falling back to 1 when the inventory grid split the
+      // numeric row and the compound item name across separate lines.
+      const explicitQtyMatch = allText.match(/(\d[\d.,]*)\s*lockpicks?/i);
+      const explicitQty = explicitQtyMatch
+        ? Math.max(1, parseInt(explicitQtyMatch[1].replace(/[.,]/g, ""), 10))
+        : 0;
+
+      const currentQty = merged.get("lockpick avancada") || 0;
+      const qty = explicitQty > 0 ? explicitQty : Math.max(1, currentQty);
+      merged.set("lockpick avancada", qty);
+
+      // Lockpick Avançada weighs 0.5 kg per unit. If OCR did not provide a
+      // reliable item-specific total, calculate the total from quantity.
+      const unitKg = getUnitWeight("lockpick avancada");
+      if (unitKg != null) {
+        weightTotals.set("lockpick avancada", Number((qty * unitKg).toFixed(2)));
       }
     }
   }

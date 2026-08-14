@@ -48,7 +48,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "colete fortalecido", displayName: "Colete Fortalecido", unitKg: 1, category: "equipamento", illegal: true },
   { name: "medickits", displayName: "Medikit", unitKg: 1, category: "equipamento", illegal: false },
   { name: "lockpick", displayName: "Lockpick", unitKg: 0.1, category: "equipamento", illegal: true },
-  { name: "lockpick avancada", displayName: "Lockpick Avançada", unitKg: 0.1, category: "equipamento", illegal: true },
+  { name: "lockpick avancada", displayName: "Lockpick Avançada", unitKg: 0.5, category: "equipamento", illegal: true },
   { name: "algemas", displayName: "Algemas", unitKg: 0.1, category: "equipamento", illegal: true },
   { name: "rebarbadora", displayName: "Rebarbadora", unitKg: 1, category: "equipamento", illegal: true },
   { name: "pager", displayName: "Pager", unitKg: 0.1, category: "equipamento", illegal: true },
@@ -91,6 +91,12 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "tubarao branco", displayName: "Tubarão Branco", unitKg: 1, category: "roubo", illegal: true },
   { name: "raia", displayName: "Raia", unitKg: 0.3, category: "roubo", illegal: true },
   { name: "polvo", displayName: "Polvo", unitKg: 0.3, category: "roubo", illegal: true },
+  { name: "truta", displayName: "Truta", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "salmao", displayName: "Salmão", unitKg: 0.3, category: "outro", illegal: false },
+  { name: "atum", displayName: "Atum", unitKg: 0.4, category: "outro", illegal: false },
+  { name: "sardinha", displayName: "Sardinha", unitKg: 0.1, category: "outro", illegal: false },
+  { name: "cana de pesca", displayName: "Cana de Pesca", unitKg: 0.5, category: "outro", illegal: false },
+  { name: "licenca pesca", displayName: "Licença de Pesca", unitKg: 0.1, category: "outro", illegal: false },
 
   // ── Pirataria ──
   { name: "bau", displayName: "Baú de Especiaria", unitKg: 0.3, category: "roubo", illegal: true },
@@ -111,11 +117,19 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "estanho", displayName: "Estanho", unitKg: 0.1, category: "crafting", illegal: true },
   { name: "niquel", displayName: "Níquel", unitKg: 0.5, category: "crafting", illegal: true },
   { name: "minerios", displayName: "Minérios", unitKg: 0.5, category: "crafting", illegal: true },
+  { name: "aluminio", displayName: "Alumínio", unitKg: 0.1, category: "crafting", illegal: false },
+  { name: "borracha", displayName: "Borracha", unitKg: 0.1, category: "crafting", illegal: false },
+  { name: "kit reparacao", displayName: "Kit Reparação", unitKg: 2, category: "crafting", illegal: false },
 
   // ── Outros ──
   { name: "dinheiro", displayName: "Dinheiro", unitKg: 0, category: "outro", illegal: false },
   { name: "saco plastico", displayName: "Saco Plástico", unitKg: 0.1, category: "outro", illegal: false },
   { name: "nitro", displayName: "Nitro", unitKg: 1, category: "outro", illegal: true },
+  { name: "bandagem", displayName: "Bandagem", unitKg: 0.1, category: "outro", illegal: false },
+  { name: "sumo", displayName: "Sumo", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "bifana", displayName: "Bifana", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "radio", displayName: "Rádio", unitKg: 1, category: "outro", illegal: false },
+  { name: "telemovel", displayName: "Telemóvel", unitKg: 0.7, category: "outro", illegal: false },
 ];
 
 // Quick lookup by canonical name
