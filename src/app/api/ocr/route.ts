@@ -1751,6 +1751,17 @@ function parseInventoryOCR(text: string): {
     }
   }
 
+
+  // Final weight consistency: quantity × configured unit weight.
+  // In particular, 3 coletes at 1 kg/unit must display 3 kg total.
+  {
+    const coleteQty = merged.get("colete");
+    if (coleteQty != null) {
+      const coleteUnitKg = getWeightForItem("colete") ?? 1;
+      weightTotals.set("colete", coleteQty * coleteUnitKg);
+    }
+  }
+
   const resultText = Array.from(merged.entries())
     .map(([name, qty]) => `${qty} ${name}`)
     .join(", ");
