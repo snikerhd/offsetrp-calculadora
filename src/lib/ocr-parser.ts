@@ -112,6 +112,8 @@ const ITEM_MAP: [RegExp, string][] = [
   [/medikit|medick/i, "medickits"],
   [/mesa\s*quimica/i, "mesa quimica"],
   [/diamante\s*bruto/i, "diamante bruto"],
+  // ANEL DE DIAMANTE must come BEFORE generic diamante
+  [/anel\s*(de\s*)?diamante/i, "anel"],
   [/diamante/i, "diamante"],
   [/safira/i, "safiras"],
   [/barra[s]?\s*(de\s*)?(ouro|outro)/i, "barras ouro"],
@@ -249,7 +251,6 @@ const ITEM_MAP: [RegExp, string][] = [
   [/bandagem/i, "bandagem"],
   [/sumo\s*maracu/i, "sumo maracuja"],
   [/sumo\s*laranja/i, "sumo laranja"],
-  [/sumo\s*manga/i, "sumo"],
   [/sumo/i, "sumo"],
   [/bifana/i, "bifana"],
   [/r[aá]dio/i, "radio"],
@@ -343,14 +344,15 @@ function weightMatches(itemName: string, qty: number, totalKg: number | null): b
   if (unitW === 0) return true;
   const computed = totalKg / qty;
 
-  // STRICT primary weight match (tolerance 5%, min 0.03 kg)
-  if (Math.abs(computed - unitW) <= Math.max(0.03, unitW * 0.05)) return true;
+  // STRICT primary weight match (tolerance 10%, min 0.05 kg)
+  // Increased from 5% to 10% to handle OCR rounding errors like 10.65 vs 10.7
+  if (Math.abs(computed - unitW) <= Math.max(0.05, unitW * 0.1)) return true;
 
   // Check alternative weights
   const alts = ALT_WEIGHTS[itemName];
   if (alts) {
     for (const alt of alts) {
-      if (Math.abs(computed - alt) <= Math.max(0.03, alt * 0.05)) return true;
+      if (Math.abs(computed - alt) <= Math.max(0.05, alt * 0.1)) return true;
     }
   }
   return false;
@@ -401,6 +403,8 @@ function splitCells(line: string): string[] {
   // For numeric lines: split on boundaries between ) and digit, or between
   // digit-paren groups. Pattern: "1300(130.0) 1 (1.0) 10 (1.0)"
   // Allow OCR misreads inside parentheses: B→8, O→0, etc.
+  // ALSO: a "standalone number" is only a quantity if it has NO text suffix
+  // like "10K" or "1000" alone might be ammo, etc. So require parenthesised weight.
   const numPattern = /\d[\d.,]*\s*\(\s*[^)]+\s*\)/g;
   const numMatches = line.match(numPattern);
   if (numMatches && numMatches.length >= 2) {
@@ -412,8 +416,9 @@ function splitCells(line: string): string[] {
   const words = line.split(/\s+/).filter(Boolean);
   if (words.length <= 1) return words;
 
-  // Check if this looks like a text line (all non-numeric words)
-  const allText = words.every((w) => !/^\d/.test(w));
+  // Check if this looks like a text line (all non-numeric words,
+  // or numeric words that end with a letter like "10K" or "100M")
+  const allText = words.every((w) => !/^\d+\.?\d*$/.test(w));
   if (allText) {
     // Keep compound names together
     const result: string[] = [];
@@ -548,9 +553,11 @@ function splitCells(line: string): string[] {
         result.push(cur + " " + next); i += 2; continue;
       }
       // SUMO LARANJA / SUMO MARACUJA (any juice variant)
-      if (/^sumo$/i.test(cur) && /^(laranja|maracu|manga|lim[aã]o)/i.test(next)) {
-        result.push(cur + " " + next); i += 2; continue;
-      }
+    // Don't merge SUMO + LARANJA/MARACUJA by default — they may be separate
+    // items in the same row (e.g. BIFANA SUMO LARANJA could mean 3 items)
+    // if (/^sumo$/i.test(cur) && /^(laranja|maracu|manga|lim[aã]o)/i.test(next)) {
+    //   result.push(cur + " " + next); i += 2; continue;
+    // }
       // PEÇA BÁSICA, PEÇA AVANÇADA
       if (/^pe[cç]a$/i.test(cur) && /^(b[aá]sica|avan[cç]ada)$/i.test(next)) {
         result.push(cur + " " + next); i += 2; continue;
@@ -570,8 +577,10 @@ function splitCells(line: string): string[] {
   return [line];
 }
 
-const isNumericCell = (c: string) => /^\d/.test(c);
-const isTextCell = (c: string) => c.trim() !== "" && !/^\d/.test(c);
+// A cell is numeric only if it starts with a digit AND ends with a digit
+// (or close-paren). "10K", "100M" etc. are NOT numeric — they're name fragments.
+const isNumericCell = (c: string) => /^\d/.test(c) && !/[a-zA-Z]/.test(c);
+const isTextCell = (c: string) => c.trim() !== "" && !isNumericCell(c);
 
 // ── Merge compound names within a flat list of text cells ──────────────────
 // Handles both ADJACENT pairs (CRISTAL + PROCESSADO) and NON-ADJACENT pairs
@@ -778,6 +787,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
   const parsedLines: ParsedLine[] = lines.map((line, lineIdx) => {
     const cells = splitCells(line);
+    if (process.env.DEBUG_PARSER) console.log(`splitCells[${lineIdx}] = ${JSON.stringify(cells)}`);
     const numCells = cells
       .map((c, cellIdx) => ({ ...parseQtyWeight(c), cellIdx, raw: c }))
       .filter((x) => isNumericCell(x.raw));
@@ -1002,16 +1012,37 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     //   - Mixed lines with some text (still useful for fragment matching)
     const numCellCount = line.numCells.length;
 
-    // Look in BOTH directions for d=1 and d=2.
-    // Include text-only lines AND mixed lines (which may contain fragments
-    // like "tem 5 lock" embedded between numeric pairs).
-    for (let d = 1; d <= 2; d++) {
-      for (const direction of [1, -1]) {
+    // Look in BOTH directions for d=1, d=2.
+    // CRITICAL: Only collect text lines that are BETWEEN the current numeric
+    // line and the next numeric line. This prevents mixing text from
+    // different inventory blocks.
+    // First, find the next numeric line in each direction.
+    let nextNumInDirection: number[] = [parsedLines.length, -1];
+    for (const direction of [1, -1]) {
+      for (let d = 1; d <= 5; d++) {
         const adj = i + d * direction;
-        if (adj < 0 || adj >= parsedLines.length || usedLines.has(adj)) continue;
+        if (adj < 0 || adj >= parsedLines.length) break;
+        if (parsedLines[adj].numCells.length >= 2) {
+          if (direction === 1) nextNumInDirection[0] = adj;
+          else nextNumInDirection[1] = adj;
+          break;
+        }
+      }
+    }
+
+    // Now collect text lines only within the current block
+    for (const direction of [1, -1]) {
+      const limit = direction === 1 ? nextNumInDirection[0] : nextNumInDirection[1];
+      // For direction -1, only collect if there's a previous numeric line.
+      // If no previous numeric, the text line belongs to a different block.
+      if (direction === -1 && limit === -1) continue;
+      for (let d = 1; d <= 4; d++) {
+        const adj = i + d * direction;
+        if (adj < 0 || adj >= parsedLines.length) break;
+        if (direction === 1 && adj >= limit) break;
+        if (direction === -1 && adj <= limit) break;
+        if (usedLines.has(adj)) continue;
         const adjLine = parsedLines[adj];
-        // Skip pure-numeric lines (they belong to a different block)
-        if (adjLine.numCells.length > 0 && adjLine.textCells.length === 0) continue;
         if (adjLine.textCells.length === 0) continue;
 
         textLineData.push({
@@ -1024,8 +1055,25 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
     if (textLineData.length === 0) continue;
 
-    // Find the "main" label line (most cells)
-    textLineData.sort((a, b) => b.cells.length - a.cells.length);
+    // PREFER the main line that has EXACTLY the same number of cells as
+    // the numeric line. This is the strongest evidence of column alignment.
+    const numCellCount2 = line.numCells.length;
+    if (process.env.DEBUG_PARSER) {
+      console.log(`textLineData: ${textLineData.length} lines, numCellCount=${numCellCount2}`);
+      for (const t of textLineData) console.log(`  line ${t.lineIdx} (${t.cells.length} cells): ${JSON.stringify(t.cells)}`);
+    }
+    const exactMatch = textLineData.find(t => t.cells.length === numCellCount2);
+    if (exactMatch) {
+      // Move the exact match to the front
+      const idx = textLineData.indexOf(exactMatch);
+      textLineData.splice(idx, 1);
+      textLineData.unshift(exactMatch);
+      if (process.env.DEBUG_PARSER) console.log(`  → Using exact match: line ${exactMatch.lineIdx}`);
+    } else {
+      // Otherwise, sort by cells desc (most cells = main)
+      textLineData.sort((a, b) => b.cells.length - a.cells.length);
+      if (process.env.DEBUG_PARSER) console.log(`  → No exact match, using most cells: line ${textLineData[0].lineIdx}`);
+    }
     const mainLine = textLineData[0];
     const standaloneFragments: string[] = [];
     for (let tl = 1; tl < textLineData.length; tl++) {
@@ -1103,6 +1151,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       }
     }
 
+    // (No 10K special handling — it interferes with positional matching)
+
     // Apply within-list compound merging for adjacent pairs in the combined list
     const mergedNames = mergeCompoundNamesInList(allCells);
 
@@ -1158,11 +1208,20 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     candidates.sort((a, b) => b.score - a.score);
     const usedQ = new Set<number>();
 
+    if (process.env.DEBUG_PARSER) {
+      console.log("Main line cells:", mainLine.cells);
+      console.log("Top candidates:", candidates.slice(0, 5).map(c => `q${c.qIdx}→n${c.nIdx}(${c.item})=${c.score}`).join(" "));
+    }
+
     for (const c of candidates) {
       if (c.score < 0) continue; // Skip weak/conflicting matches
       if (usedQ.has(c.qIdx) || usedNameIdxs.has(c.nIdx)) continue;
       usedQ.add(c.qIdx);
       usedNameIdxs.add(c.nIdx);
+
+      if (process.env.DEBUG_PARSER) {
+        console.log(`  ASSIGN q${c.qIdx}→n${c.nIdx}(${c.item}) score=${c.score}`);
+      }
 
       const qc = numCells[c.qIdx];
       assignments.push({
@@ -1382,6 +1441,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             }
           }
 
+          // Loose matches get strongly penalized to prevent wrong assignments
+          if (loose) weightedDist += 500;
+
           if (weightedDist < bestDist) {
             bestDist = weightedDist;
             bestPair = pair;
@@ -1389,9 +1451,12 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         }
 
       if (bestPair) {
+        if (process.env.DEBUG_PARSER) console.log(`  PASS4 ASSIGN ${itemName}=${bestPair.qty} (from ${bestPair.raw}) strict=${weightMatches(itemName, bestPair.qty, bestPair.totalKg)} loose=${weightMatchesLoose(itemName, bestPair.qty, bestPair.totalKg)}`);
         bestPair.matched = true;
         merged.set(itemName, bestPair.qty);
         weightTotals.set(itemName, bestPair.totalKg);
+      } else {
+        if (process.env.DEBUG_PARSER) console.log(`  PASS4 NO MATCH for ${itemName} (looked for qty that gives ${namePos} weight)`);
       }
     }
   }
