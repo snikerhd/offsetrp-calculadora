@@ -13,6 +13,7 @@ import {
   calcArmasGrandeQtde, calcItensIlegais, calcDroga,
   obterItemPorSinonimo, obterDrogaPorSinonimo, parseQuickInput, parseCrimesInput, getAllCrimesFlat,
 } from "@/lib/utils";
+import { ITEM_BY_NAME } from "@/lib/item-weights";
 import EntriesPanel from "@/components/EntriesPanel";
 import OcrBlock from "@/components/OcrBlock";
 
@@ -461,8 +462,22 @@ export default function CalculadoraApp() {
       if (!m) { erros.push(`Formato inválido: '${p}'`); continue; }
       const qtd = parseInt(m[1]);
       const nome = m[2].trim().toLowerCase();
+      const nomeNormalizado = normalizeText(nome);
+
+      // Itens legais podem ser reconhecidos no OCR/pesos, mas nunca
+      // entram nas Coimas Rápidas. São simplesmente ignorados aqui.
+      const itemLegalDireto = ITEM_BY_NAME.get(nomeNormalizado);
+      if (itemLegalDireto && !itemLegalDireto.illegal) {
+        continue;
+      }
+
       const item = obterItemPorSinonimo(nome);
       if (item) {
+        const itemDef = ITEM_BY_NAME.get(normalizeText(item));
+        if (itemDef && !itemDef.illegal) {
+          continue;
+        }
+
         const unit = ITENS_ILEGAIS[item];
         const sub = qtd * unit;
         totalUnitario += sub;
