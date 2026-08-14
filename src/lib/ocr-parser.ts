@@ -182,6 +182,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/combat\s*pdw/i, "arma medio calibre"],
   [/assault\s*smg/i, "arma medio calibre"],
   // Alto calibre
+  [/assault\s*rifle(?:\s*mk(?:\s*(?:2|ii))?)?/i, "arma alto calibre"],
   [/rifle\s*mk\s*2/i, "arma alto calibre"],
   [/bullpup\s*(mk\s*2|rifle)/i, "arma alto calibre"],
   [/gusenberg/i, "arma alto calibre"],
@@ -1111,7 +1112,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const weights: ItemMatch[] = [];
   for (const [name, qty] of merged.entries()) {
     const itemDef = ITEM_BY_NAME.get(name);
-    const unitKg = itemDef?.unitKg ?? null;
+    // Ignora ruído/truncamentos de OCR que não correspondem a itens reais
+    // (ex.: "jogador-", "peso:", "/", "(1 (15.0)"). Só itens do catálogo.
+    if (!itemDef) continue;
+    const unitKg = itemDef.unitKg;
     const ocrTotalKg = weightTotals.get(name);
     let confidence = 50;
     let matchReason = "Nome detetado no OCR";
