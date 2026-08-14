@@ -125,8 +125,11 @@ const ITEM_MAP: [RegExp, string][] = [
   [/quadro/i, "quadro"],
   [/pulseira/i, "pulseira ouro"],
   [/rel[oó]gio\s*(de\s*)?ouro/i, "relogio ouro"],
-  [/corrente\s*(de\s*)?ouro\s*10k/i, "corrente 10k"],
+  [/corrente\s*(de\s*)?ouro\s*10k|(?:^|\s)10k\s*corrente/i, "corrente 10k"],
   [/corrente\s*(de\s*)?ouro/i, "corrente"],
+  // Standalone "10K" / "14K" / "18K" = corrente de ouro N-K (the prefix was
+  // OCR'd as a separate cell). Match the karat suffix as corrente 10k.
+  [/^(?:10|14|18|22)k$/i, "corrente 10k"],
   [/anel\s*(de\s*)?diamante/i, "anel"],
   [/perfume/i, "perfume"],
   [/phone\s*7/i, "phone 7"],
@@ -344,15 +347,14 @@ function weightMatches(itemName: string, qty: number, totalKg: number | null): b
   if (unitW === 0) return true;
   const computed = totalKg / qty;
 
-  // STRICT primary weight match (tolerance 10%, min 0.05 kg)
-  // Increased from 5% to 10% to handle OCR rounding errors like 10.65 vs 10.7
-  if (Math.abs(computed - unitW) <= Math.max(0.05, unitW * 0.1)) return true;
+  // STRICT primary weight match (5% tolerance, min 0.03 kg)
+  if (Math.abs(computed - unitW) <= Math.max(0.03, unitW * 0.05)) return true;
 
   // Check alternative weights
   const alts = ALT_WEIGHTS[itemName];
   if (alts) {
     for (const alt of alts) {
-      if (Math.abs(computed - alt) <= Math.max(0.05, alt * 0.1)) return true;
+      if (Math.abs(computed - alt) <= Math.max(0.03, alt * 0.05)) return true;
     }
   }
   return false;
@@ -1033,17 +1035,23 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     // Now collect text lines only within the current block
     for (const direction of [1, -1]) {
       const limit = direction === 1 ? nextNumInDirection[0] : nextNumInDirection[1];
-      // For direction -1, only collect if there's a previous numeric line.
-      // If no previous numeric, the text line belongs to a different block.
-      if (direction === -1 && limit === -1) continue;
+      // For direction -1, if there's NO previous numeric, still allow
+      // collecting the very first text line (limit = -1) — it may contain
+      // item names that don't have a paired numeric row visible in the OCR.
+      // We collect up to the FIRST line only.
+      const allowFirstLine = direction === -1 && limit === -1;
       for (let d = 1; d <= 4; d++) {
         const adj = i + d * direction;
         if (adj < 0 || adj >= parsedLines.length) break;
         if (direction === 1 && adj >= limit) break;
-        if (direction === -1 && adj <= limit) break;
+        // If we have a limit, stop at it
+        if (direction === -1 && limit !== -1 && adj <= limit) break;
         if (usedLines.has(adj)) continue;
         const adjLine = parsedLines[adj];
         if (adjLine.textCells.length === 0) continue;
+
+        // For "first text line" mode, only collect d=1
+        if (allowFirstLine && d > 1) break;
 
         textLineData.push({
           lineIdx: adj,
@@ -1151,7 +1159,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       }
     }
 
-    // (No 10K special handling — it interferes with positional matching)
+    // (10K cells are now directly recognized as "corrente 10k" via pattern)
 
     // Apply within-list compound merging for adjacent pairs in the combined list
     const mergedNames = mergeCompoundNamesInList(allCells);
@@ -1485,6 +1493,30 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     }
   }
 
+  // ── RECOVERY: weapons/armas found in OCR but not assigned a quantity ───
+  // get qty=1. This handles OCRs where the numeric value for a weapon
+  // was missing or unreadable (e.g. "1 MICRO SMG" where the weight column
+  // is blank in the screenshot). Only applies to WEAPONS because
+  // legal items without a numeric are likely from a different row.
+  {
+    const allText = lines.join(" ").replace(/\s+/g, " ").trim();
+    const weaponPatterns = [
+      { pattern: /\bmicro\s+smg\b/i, item: "arma medio calibre" },
+      { pattern: /\b(?:sns\s+)?pistol\s+hk\s*2\b/i, item: "arma medio calibre" },
+      { pattern: /\b(?:sns|vintage|revolver\s+mk\s*2|ap)\s+pistol\b/i, item: "arma baixo calibre" },
+      { pattern: /\bmachine\s+pistol\b/i, item: "arma medio calibre" },
+      { pattern: /\bvintage\s+pistol\b/i, item: "arma baixo calibre" },
+      { pattern: /\b(?:bullpup|gusenberg|double\s+barrel|tactical|compact|advanced|spas|assault\s+rifle)\b/i, item: "arma alto calibre" },
+      { pattern: /\b(?:arma\s+branca|arma\s+branca\s+ilegal)\b/i, item: "arma branca" },
+    ];
+    for (const wp of weaponPatterns) {
+      if (merged.has(wp.item)) continue;
+      if (wp.pattern.test(allText)) {
+        merged.set(wp.item, (merged.get(wp.item) || 0) + 1);
+      }
+    }
+  }
+
   // ── Deduplicate: specific vs generic ──────────────────────────────────────
   if (merged.has("colete fortalecido") && merged.has("colete")) {
     const allText = lines.join(" ").replace(/\s+/g, " ").trim();
@@ -1492,7 +1524,14 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       merged.delete("colete");
     }
   }
-  if (merged.has("corrente 10k")) merged.delete("corrente");
+  // Keep both "corrente" and "corrente 10k" if they have different quantities.
+  // Only remove generic "corrente" if it has the SAME qty as "corrente 10k"
+  // (suggesting a duplicate from OCR).
+  if (merged.has("corrente 10k") && merged.has("corrente")) {
+    if (merged.get("corrente") === merged.get("corrente 10k")) {
+      merged.delete("corrente");
+    }
+  }
   if (merged.has("diamante bruto") && merged.has("diamante")) {
     if (merged.get("diamante") === merged.get("diamante bruto")) {
       merged.delete("diamante");
