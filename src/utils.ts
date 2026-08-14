@@ -1,4 +1,5 @@
 import { ITENS_ILEGAIS, PRECOS_DROGAS, CRIMES_CATALOGO, Crime } from "./data";
+import { ITEM_BY_NAME } from "./lib/item-weights";
 
 // Alias for backwards compatibility
 export type CrimeData = Crime;
@@ -609,6 +610,15 @@ export function parseQuickInput(input: string): ParseResult {
     const qtd = parseInt(match[1]);
     const nome = normalizeText(match[2]);
     const originalNome = match[2].trim();
+
+    // Itens legais do catálogo são reconhecidos, mas NUNCA entram nas
+    // Coimas Rápidas. Este teste tem de acontecer antes dos matches parciais
+    // de drogas/itens, para impedir casos como "saco plastico" -> "saco" ->
+    // "Saco de Cannabis".
+    const itemCatalogoInicial = ITEM_BY_NAME.get(nome);
+    if (itemCatalogoInicial && !itemCatalogoInicial.illegal) {
+      continue;
+    }
 
     // Verificar drogas
     const droga = obterDrogaPorSinonimo(originalNome);

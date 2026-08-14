@@ -645,6 +645,17 @@ export function parseQuickInput(input: string): ParseResult {
     const nome = normalizeText(match[2]);
     const originalNome = match[2].trim();
 
+    // ITENS DO CATÁLOGO QUE NÃO TÊM COIMA RÁPIDA:
+    // Têm de ser filtrados ANTES de obterDrogaPorSinonimo/obterItemPorSinonimo.
+    // Essas funções fazem correspondências parciais (ex.: "saco"), o que
+    // fazia "saco plastico" ser interpretado como "Saco de Cannabis".
+    // O catálogo de pesos é a fonte de verdade: se o item existe e é legal,
+    // é reconhecido mas nunca pode entrar nas Coimas Rápidas.
+    const itemCatalogoInicial = ITEM_BY_NAME.get(nome);
+    if (itemCatalogoInicial && !itemCatalogoInicial.illegal) {
+      continue;
+    }
+
     // Folha de tabaco é artigo/inventário e nunca entra nas coimas.
     // Não deixar o fallback parcial de "tabaco" convertê-la em "Maço tabaco".
     if (/^folha(?:\s+de)?\s+tabaco$/.test(nome)) {
