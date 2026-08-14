@@ -47,7 +47,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "colete", displayName: "Colete", unitKg: 1, category: "equipamento", illegal: true },
   { name: "colete fortalecido", displayName: "Colete Fortalecido", unitKg: 1, category: "equipamento", illegal: true },
   { name: "medickits", displayName: "Medikit", unitKg: 1, category: "equipamento", illegal: false },
-  { name: "lockpick", displayName: "Lockpick", unitKg: 0.1, category: "equipamento", illegal: true },
+  { name: "lockpick", displayName: "Lockpick", unitKg: 0.5, category: "equipamento", illegal: true },
   { name: "lockpick avancada", displayName: "Lockpick Avançada", unitKg: 0.5, category: "equipamento", illegal: true },
   { name: "algemas", displayName: "Algemas", unitKg: 0.1, category: "equipamento", illegal: true },
   { name: "rebarbadora", displayName: "Rebarbadora", unitKg: 1, category: "equipamento", illegal: true },
@@ -127,9 +127,19 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "nitro", displayName: "Nitro", unitKg: 1, category: "outro", illegal: true },
   { name: "bandagem", displayName: "Bandagem", unitKg: 0.1, category: "outro", illegal: false },
   { name: "sumo", displayName: "Sumo", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "sumo maracuja", displayName: "Sumo Maracujá", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "sumo laranja", displayName: "Sumo Laranja", unitKg: 0.2, category: "outro", illegal: false },
   { name: "bifana", displayName: "Bifana", unitKg: 0.2, category: "outro", illegal: false },
   { name: "radio", displayName: "Rádio", unitKg: 1, category: "outro", illegal: false },
   { name: "telemovel", displayName: "Telemóvel", unitKg: 0.7, category: "outro", illegal: false },
+  { name: "petrol can", displayName: "Petrol Can", unitKg: 1, category: "outro", illegal: false },
+  { name: "tuna deluxe", displayName: "Tuna Deluxe", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "tesoura", displayName: "Tesoura", unitKg: 0.3, category: "outro", illegal: false },
+  { name: "pedaco de metal", displayName: "Pedaço de Metal", unitKg: 0.1, category: "outro", illegal: false },
+  { name: "fotografia", displayName: "Fotografia", unitKg: 0, category: "outro", illegal: false },
+  { name: "cartao de cidadao", displayName: "Cartão de Cidadão", unitKg: 0, category: "outro", illegal: false },
+  { name: "caneta", displayName: "Caneta", unitKg: 0.1, category: "outro", illegal: false },
+  { name: "passaporte", displayName: "Passaporte", unitKg: 0.1, category: "outro", illegal: false },
 ];
 
 // Quick lookup by canonical name

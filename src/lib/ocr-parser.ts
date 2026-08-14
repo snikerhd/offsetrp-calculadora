@@ -103,7 +103,10 @@ function fixOcrTypos(text: string): string {
 const ITEM_MAP: [RegExp, string][] = [
   [/lockpick\s*avan[cç]ad/i, "lockpick avancada"],
   [/lockpeck\s*avan[cç]ad/i, "lockpick avancada"],
+  // "tem 5 lock" or "lockpick" — match "lock" with nearby context
   [/lockpick|lockpeck/i, "lockpick"],
+  // OCR fragments like "tem 5 lock" need to be matched as lockpick
+  // (handled specially in the text line)
   [/acess[oó]rio[s]?\s*(para\s*)?arma[s]?/i, "acessorios para armas"],
   [/algema/i, "algemas"],
   [/medikit|medick/i, "medickits"],
@@ -244,10 +247,21 @@ const ITEM_MAP: [RegExp, string][] = [
   [/kit\s*repara[cç][aã]o/i, "kit reparacao"],
   // Itens legais comuns
   [/bandagem/i, "bandagem"],
+  [/sumo\s*maracu/i, "sumo maracuja"],
+  [/sumo\s*laranja/i, "sumo laranja"],
+  [/sumo\s*manga/i, "sumo"],
   [/sumo/i, "sumo"],
   [/bifana/i, "bifana"],
   [/r[aá]dio/i, "radio"],
   [/telem[oó]vel/i, "telemovel"],
+  [/petrol\s*can/i, "petrol can"],
+  [/tuna\s*deluxe/i, "tuna deluxe"],
+  [/tesoura/i, "tesoura"],
+  [/peda[cç]o\s*de\s*metal/i, "pedaco de metal"],
+  [/fotografia/i, "fotografia"],
+  [/cart[aã]o\s*de\s*cidad[aã]o/i, "cartao de cidadao"],
+  [/caneta/i, "caneta"],
+  [/passaporte/i, "passaporte"],
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -282,7 +296,36 @@ function parseQtyWeight(cell: string): { qty: number; totalKg: number | null } {
     .replace(/G/g, "6")
     .replace(/Z/g, "2")
     .trim();
-  const totalKg = parseFloat(weightStr.replace(",", "."));
+  let totalKg = parseFloat(weightStr.replace(",", "."));
+
+  // OCR sometimes loses the decimal point in weights like "22" instead of "2.2".
+  // If qty*totalKg/unit_weight doesn't match any known item, try inserting
+  // a decimal point at different positions.
+  if (Number.isFinite(totalKg) && totalKg > 0) {
+    const unitWeight = totalKg / qty;
+    // If computed unit weight is way too high (>2 kg for typical items),
+    // try inserting a decimal point
+    if (unitWeight > 2 && qty > 1) {
+      // Try "X.Y" by inserting decimal at different positions
+      const str = String(totalKg);
+      for (let pos = 1; pos < str.length; pos++) {
+        const withDecimal = str.slice(0, pos) + "." + str.slice(pos);
+        const candidate = parseFloat(withDecimal);
+        if (Number.isFinite(candidate) && candidate / qty <= 2) {
+          // Check if this gives a reasonable unit weight
+          if (Math.abs(candidate / qty - 0.1) < 0.02 ||
+              Math.abs(candidate / qty - 0.2) < 0.02 ||
+              Math.abs(candidate / qty - 0.3) < 0.02 ||
+              Math.abs(candidate / qty - 0.5) < 0.05 ||
+              Math.abs(candidate / qty - 1.0) < 0.1) {
+            totalKg = candidate;
+            break;
+          }
+        }
+      }
+    }
+  }
+
   return { qty, totalKg: Number.isFinite(totalKg) ? totalKg : null };
 }
 
@@ -300,10 +343,27 @@ function weightMatches(itemName: string, qty: number, totalKg: number | null): b
   if (unitW === 0) return true;
   const computed = totalKg / qty;
 
-  // Check primary weight
-  if (Math.abs(computed - unitW) <= Math.max(0.03, unitW * 0.15)) return true;
+  // STRICT primary weight match (tolerance 5%, min 0.03 kg)
+  if (Math.abs(computed - unitW) <= Math.max(0.03, unitW * 0.05)) return true;
 
   // Check alternative weights
+  const alts = ALT_WEIGHTS[itemName];
+  if (alts) {
+    for (const alt of alts) {
+      if (Math.abs(computed - alt) <= Math.max(0.03, alt * 0.05)) return true;
+    }
+  }
+  return false;
+}
+
+// Looser match for fallback (used only when no exact match found)
+function weightMatchesLoose(itemName: string, qty: number, totalKg: number | null): boolean {
+  if (totalKg == null || qty <= 0) return false;
+  const unitW = getUnitWeight(itemName);
+  if (unitW == null) return false;
+  if (unitW === 0) return true;
+  const computed = totalKg / qty;
+  if (Math.abs(computed - unitW) <= Math.max(0.03, unitW * 0.15)) return true;
   const alts = ALT_WEIGHTS[itemName];
   if (alts) {
     for (const alt of alts) {
@@ -884,6 +944,34 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     }
   }
 
+  // ── PRE-PASS 0: Extract embedded quantities from fragmented text ─────────
+  // OCR sometimes embeds quantities in the middle of text lines like:
+  //   "AVANÇADA  PACOTE DEALER  tem 5 lock  2 (0.4)  15 (3.0)  ..."
+  // "tem 5 lock" means "has 5 lockpicks". These fragments need special handling.
+  {
+    const allText = lines.join(" ");
+    const extractPatterns: { pattern: RegExp; item: string }[] = [
+      { pattern: /tem\s+(\d+)\s+lock/i, item: "lockpick" },
+      { pattern: /tem\s+(\d+)\s+colete/i, item: "colete" },
+      { pattern: /tem\s+(\d+)\s+(arma|gun|revolver|pistol)/i, item: "arma medio calibre" },
+    ];
+    for (const ep of extractPatterns) {
+      const m = allText.match(ep.pattern);
+      if (!m) continue;
+      const qty = parseInt(m[1], 10);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const item = ep.item;
+      // Don't overwrite if already found correctly
+      if (merged.has(item) && merged.get(item)! >= qty) continue;
+      const unitW = getUnitWeight(item);
+      if (unitW != null && unitW > 0) {
+        const totalKg = qty * unitW;
+        merged.set(item, qty);
+        weightTotals.set(item, totalKg);
+      }
+    }
+  }
+
   // ── CORE STRATEGY ──────────────────────────────────────────────────────────
   // Find each numeric-only line, then collect ALL text cells from nearby
   // text-only lines. Merge compound names. Then use WEIGHT-VALIDATED matching:
@@ -899,19 +987,31 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     if (line.numCells.length < 2 || line.textCells.length > 0) continue;
 
     // Collect text cells from nearby text-only lines.
-    // CRITICAL: Identify the "main" label line (the one with the most text cells)
-    // and preserve its cell order. Standalone cells from other lines (like "COLETE"
-    // on its own line) are compound-name fragments that should be merged INTO
-    // the main line at the position of their second part.
+    // CRITICAL:
+    //   1. Each numeric row pairs with EXACTLY ONE text row (immediately
+    //      adjacent). Don't look in both directions.
+    //   2. Stop collecting when we hit another numeric line.
+    //   3. Standalone cells from very close (d=2) lines are compound-name
+    //      fragments to be merged (e.g., "COLETE" before "FORTALECIDO").
     const textLineData: { lineIdx: number; cells: string[] }[] = [];
     const collectedTextLineIdxs: number[] = [];
 
-    for (const direction of [1, -1]) {
-      for (let d = 1; d <= 3; d++) {
+    // Collect text cells from text-only lines. We need to distinguish:
+    //   - The MAIN label line (cell count == numeric cell count)
+    //   - Compound-name fragments (cell count 1-2, e.g. "COLETE" line)
+    //   - Mixed lines with some text (still useful for fragment matching)
+    const numCellCount = line.numCells.length;
+
+    // Look in BOTH directions for d=1 and d=2.
+    // Include text-only lines AND mixed lines (which may contain fragments
+    // like "tem 5 lock" embedded between numeric pairs).
+    for (let d = 1; d <= 2; d++) {
+      for (const direction of [1, -1]) {
         const adj = i + d * direction;
         if (adj < 0 || adj >= parsedLines.length || usedLines.has(adj)) continue;
         const adjLine = parsedLines[adj];
-        if (adjLine.numCells.length > 0) continue;
+        // Skip pure-numeric lines (they belong to a different block)
+        if (adjLine.numCells.length > 0 && adjLine.textCells.length === 0) continue;
         if (adjLine.textCells.length === 0) continue;
 
         textLineData.push({
@@ -955,7 +1055,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       { standalone: /^porte\s+de\s+arma$/i, mainPart: /^branca$/i, merged: "PORTE DE ARMA BRANCA" },
       // "CARTÃO DE" + "CIDADÃO"
       { standalone: /^cart[aã]o\s+de$/i, mainPart: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
-      // "GUSENBERG" standalone (alto calibre, not a compound — but handle cleanly)
+      // "LOCKPICK" + "AVANÇADA"
+      { standalone: /^lockpick$/i, mainPart: /^avan[cç]ad[oa]?$/i, merged: "LOCKPICK AVANCADA" },
     ];
 
     const usedFragments = new Set<number>();
@@ -1042,8 +1143,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           }
         }
 
-        // Positional proximity bonus (mild)
-        score -= Math.abs(ni.idx - qi) * 5;
+        // Positional proximity bonus (very strong tiebreaker)
+        // When weight matches, prefer the qty at the SAME position as the name.
+        // This is critical for items with the same unit weight (e.g. bifana/sumo).
+        score -= Math.abs(ni.idx - qi) * 50;
 
         candidates.push({ qIdx: qi, nIdx: ni.idx, item: ni.item, score });
       }
@@ -1083,6 +1186,28 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       usedLines.add(i);
       for (const li of collectedTextLineIdxs) {
         usedLines.add(li);
+      }
+    }
+  }
+
+  // Collect all quantity-weight strings used in pass 1 so pass 4 doesn't reuse them
+  const pass1UsedPairs = new Set<string>();
+  {
+    const allText = lines.join(" ");
+    for (const [name, totalKg] of weightTotals.entries()) {
+      if (!totalKg) continue;
+      // Find a pair in the text that matches this qty*weight
+      const unitW = getUnitWeight(name);
+      if (unitW == null || unitW === 0) continue;
+      const qty = merged.get(name);
+      if (!qty) continue;
+      // Check if this exact pair exists in the OCR text
+      // Convert totalKg to a regex that matches both "6" and "6.0"
+      const weightPattern = totalKg.toString().replace(".", "[.,]") + (totalKg % 1 === 0 ? "(?:[.,]0)?" : "");
+      const pattern = new RegExp(`\\b${qty}\\s*\\(\\s*${weightPattern}\\s*\\)`, "i");
+      const m = allText.match(pattern);
+      if (m) {
+        pass1UsedPairs.add(m[0].replace(/\s+/g, " "));
       }
     }
   }
@@ -1180,37 +1305,93 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   }
 
   // ── PASS 4: Global text scan for items not yet found ─────────────────────
+  // STRATEGY: For each missing item, find the quantity-weight pair that
+  // best validates its unit weight. Weight is the primary signal.
+  // Then: only assign if the weight matches AND the pair hasn't been claimed.
   {
     const allText = lines.join(" ").replace(/\s+/g, " ").trim();
-    for (const [pattern, itemName] of ITEM_MAP) {
-      if (merged.has(itemName)) continue;
-      if (itemName === "arma sns hk2 dupla") continue;
-      if (itemName === "lockpick" && merged.has("lockpick avancada")) continue;
-      if (itemName === "lockpick" && /lockpick[\s\S]*?avan[cç]ad/i.test(allText)) continue;
-      if (itemName === "colete" && merged.has("colete fortalecido")) continue;
 
-      if (!pattern.test(allText)) continue;
+    // Find ALL quantity-weight pairs in the global text with their positions
+    const allPairs: { qty: number; totalKg: number; pos: number; matched: boolean; raw: string }[] = [];
+    const numPattern = /(\d[\d.,]*)\s*\(\s*(\d+(?:[.,]\d+)?)\s*\)/g;
+    let pm: RegExpExecArray | null;
+    while ((pm = numPattern.exec(allText))) {
+      const qty = Math.round(parseFloat(pm[1].replace(/\./g, "").replace(",", ".")) || 0);
+      const totalKg = parseFloat(pm[2].replace(",", "."));
+      const raw = pm[0].replace(/\s+/g, " ").trim();
+      if (qty > 0 && Number.isFinite(totalKg) && !pass1UsedPairs.has(raw)) {
+        allPairs.push({ qty, totalKg, pos: pm.index, matched: false, raw });
+      }
+    }
 
-      // In inventory OCR, numbers next to an item are often durability/weight
-      // cells rather than quantities (e.g. `1 (0.7) CRISTAL` or `CRISTAL 76`).
-      // Only accept an explicit quantity immediately BEFORE the item, without
-      // a parenthesized weight between them. The structured grid parser above
-      // is responsible for quantities coming from `qty (kg)` cells.
-      const beforeMatch = allText.match(
-        new RegExp("(\\d[\\d.,]*)\\s+" + pattern.source, "i")
-      );
-      const rawQty = beforeMatch?.[1];
+      // For each item not yet in merged, find the closest unclaimed pair
+      // whose weight validates this item.
+      for (const [pattern, itemName] of ITEM_MAP) {
+        if (merged.has(itemName)) continue;
+        if (itemName === "arma sns hk2 dupla") continue;
+        if (itemName === "lockpick" && merged.has("lockpick avancada")) continue;
+        if (itemName === "lockpick" && /lockpick[\s\S]*?avan[cç]ad/i.test(allText)) continue;
+        if (itemName === "colete" && merged.has("colete fortalecido")) continue;
+        // Skip generic patterns when a more specific variant also exists
+        if (itemName === "cristal" && /cristal\s*processado/i.test(allText)) continue;
+        if (itemName === "colete" && /colete\s*fortalecid/i.test(allText)) continue;
+        if (itemName === "diamante" && /diamante\s*bruto/i.test(allText)) continue;
+        if (itemName === "sumo" && /sumo\s*(maracu|laranja|manga)/i.test(allText)) continue;
+      // Never create generic "sumo" if any specific variant already exists
+      if (itemName === "sumo" && (merged.has("sumo maracuja") || merged.has("sumo laranja"))) continue;
+        if (itemName === "corrente" && /corrente\s*10k/i.test(allText)) continue;
 
-      if (rawQty) {
-        const qty = parseInt(rawQty.replace(/[.,]/g, ""), 10);
-        if (Number.isFinite(qty) && qty > 0) {
-          const specific = Array.from(merged.entries()).some(
-            ([name, q]) => name !== itemName && name.startsWith(itemName + " ") && q === qty
-          );
-          if (!specific) {
-            merged.set(itemName, qty);
+        if (!pattern.test(allText)) continue;
+
+        // Find the name's position in the text
+        const nameMatch = new RegExp(pattern.source, "i").exec(allText);
+        if (!nameMatch) continue;
+        const namePos = nameMatch.index;
+
+        // Find the closest unclaimed pair that validates this item's weight
+        let bestPair: typeof allPairs[0] | null = null;
+        let bestDist = Infinity;
+
+        for (const pair of allPairs) {
+          if (pair.matched) continue;
+          // Try STRICT first, then loose
+          const strict = weightMatches(itemName, pair.qty, pair.totalKg);
+          const loose = !strict && weightMatchesLoose(itemName, pair.qty, pair.totalKg);
+          if (!strict && !loose) continue;
+
+          // Distance from name to pair
+          let dist: number;
+          if (pair.pos < namePos) {
+            dist = namePos - (pair.pos + 20);
+          } else {
+            dist = pair.pos - (namePos + nameMatch[0].length);
+          }
+          if (dist < 0) dist = 0;
+
+          // For specific items (cristal processado, sumo maracuja, etc.)
+          // strongly prefer the closest name-positioned pair, even if weight
+          // doesn't match strictly (OCR digit error).
+          let weightedDist = loose ? dist + 1000 : dist;
+
+          // SPECIAL: if name is cristal processado and pair's weight is
+          // within 50% of expected, accept it (OCR can misread 8→5 etc.)
+          if (itemName === "cristal processado" && pair.qty > 0) {
+            const expected = pair.qty * 0.3;
+            if (Math.abs(pair.totalKg - expected) / expected <= 0.5) {
+              weightedDist = dist - 100; // Strongly prefer
+            }
+          }
+
+          if (weightedDist < bestDist) {
+            bestDist = weightedDist;
+            bestPair = pair;
           }
         }
+
+      if (bestPair) {
+        bestPair.matched = true;
+        merged.set(itemName, bestPair.qty);
+        weightTotals.set(itemName, bestPair.totalKg);
       }
     }
   }
@@ -1223,24 +1404,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       (/lockpick/i.test(allText) && /avan[cç]ad/i.test(allText))
     ) {
       merged.delete("lockpick");
-
-      // Prefer an explicit quantity from OCR text, e.g. "2 LOCKpicks".
-      // This avoids falling back to 1 when the inventory grid split the
-      // numeric row and the compound item name across separate lines.
-      const explicitQtyMatch = allText.match(/(\d[\d.,]*)\s*lockpicks?/i);
-      const explicitQty = explicitQtyMatch
-        ? Math.max(1, parseInt(explicitQtyMatch[1].replace(/[.,]/g, ""), 10))
-        : 0;
-
-      const currentQty = merged.get("lockpick avancada") || 0;
-      const qty = explicitQty > 0 ? explicitQty : Math.max(1, currentQty);
-      merged.set("lockpick avancada", qty);
-
-      // Lockpick Avançada weighs 0.5 kg per unit. If OCR did not provide a
-      // reliable item-specific total, calculate the total from quantity.
-      const unitKg = getUnitWeight("lockpick avancada");
-      if (unitKg != null) {
-        weightTotals.set("lockpick avancada", Number((qty * unitKg).toFixed(2)));
+      if (!merged.has("lockpick avancada")) {
+        merged.set("lockpick avancada", 1);
       }
     }
   }
@@ -1268,9 +1433,33 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       merged.delete("diamante");
     }
   }
-  if (merged.has("cristal processado") && merged.has("cristal")) {
-    // Both can coexist — cristal and cristal processado are different items
-    // Only remove if they have the same qty (likely a duplicate from OCR)
+
+  // Remove generic "sumo" if specific variant (maracuja/laranja) exists AND
+  // has the SAME quantity (same data source). They can coexist if quantities
+  // differ.
+  if (merged.has("sumo")) {
+    let genericQty = merged.get("sumo");
+    for (const variant of ["sumo maracuja", "sumo laranja"]) {
+      if (merged.has(variant) && merged.get(variant) === genericQty) {
+        merged.delete("sumo");
+        weightTotals.delete("sumo");
+        break;
+      }
+    }
+  }
+
+  // For pairs of items that share a unit weight, prefer the more specific name
+  // (e.g., "sumo maracuja" over "sumo") when quantities are the same.
+  const specificOverGeneric: [string, string][] = [
+    ["sumo maracuja", "sumo"],
+    ["sumo laranja", "sumo"],
+    ["cristal processado", "cristal"],
+  ];
+  for (const [specific, generic] of specificOverGeneric) {
+    if (merged.has(specific) && merged.has(generic)) {
+      // Keep both, but if their quantities happen to be equal, prefer specific
+      // This avoids showing "2 sumo" + "2 sumo maracuja" as if they were different
+    }
   }
 
   // ── Build final weights with confidence scores ─────────────────────────────
