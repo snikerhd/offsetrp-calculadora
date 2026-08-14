@@ -1499,6 +1499,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   // was missing or unreadable (e.g. "1 MICRO SMG" where the weight column
   // is blank in the screenshot). Only applies to WEAPONS because
   // legal items without a numeric are likely from a different row.
+  // Skipped entirely for the weapon that triggered a weaponCapture popup
+  // (see rule below) — that popup's weapon must never re-appear here.
   {
     const allText = lines.join(" ").replace(/\s+/g, " ").trim();
     const weaponPatterns = [
@@ -1511,11 +1513,23 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       { pattern: /\b(?:arma\s+branca|arma\s+branca\s+ilegal)\b/i, item: "arma branca" },
     ];
     for (const wp of weaponPatterns) {
+      if (weaponCapture && wp.item === weaponCapture.weaponItem) continue;
       if (merged.has(wp.item)) continue;
       if (wp.pattern.test(allText)) {
         merged.set(wp.item, (merged.get(wp.item) || 0) + 1);
       }
     }
+  }
+
+  // ── RULE: weapon-capture popup (has "Número de Série") never reports the
+  // weapon itself — only the ammo/accessories registered above. The arma
+  // is tracked by its serial number elsewhere, so listing it again here
+  // would double-count it. This is a hard safety net that overrides
+  // anything the block/pair-matching logic above may have added for this
+  // weapon type, regardless of how it got matched.
+  if (weaponCapture) {
+    merged.delete(weaponCapture.weaponItem);
+    weightTotals.delete(weaponCapture.weaponItem);
   }
 
   // ── Deduplicate: specific vs generic ──────────────────────────────────────
