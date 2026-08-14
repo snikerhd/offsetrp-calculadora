@@ -1109,11 +1109,23 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   }
 
   // ── Build result ──
+  // Normaliza nomes (sem acentos) para tolerar diferenças entre o texto OCR
+  // (ex.: "kit reparação") e as chaves do catálogo (ex.: "kit reparacao").
+  const normKey = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const catalogByNorm = new Map<string, (typeof ITEM_CATALOG)[number]>();
+  for (const def of ITEM_CATALOG) catalogByNorm.set(normKey(def.name), def);
+
+  // Remove ruído/truncamentos de OCR que não correspondem a itens reais
+  // (ex.: "jogador-", "peso:", "/", "(1 (15.0)"), para que nem o texto nem
+  // os pesos os incluam. Todos os itens legítimos estão no catálogo.
+  for (const name of [...merged.keys()]) {
+    if (!catalogByNorm.has(normKey(name))) merged.delete(name);
+  }
+
   const weights: ItemMatch[] = [];
   for (const [name, qty] of merged.entries()) {
-    const itemDef = ITEM_BY_NAME.get(name);
-    // Ignora ruído/truncamentos de OCR que não correspondem a itens reais
-    // (ex.: "jogador-", "peso:", "/", "(1 (15.0)"). Só itens do catálogo.
+    const itemDef = catalogByNorm.get(normKey(name));
     if (!itemDef) continue;
     const unitKg = itemDef.unitKg;
     const ocrTotalKg = weightTotals.get(name);
