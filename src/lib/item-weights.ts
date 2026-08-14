@@ -147,8 +147,6 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "cartao de cidadao", displayName: "Cartão de Cidadão", unitKg: 0, category: "outro", illegal: false },
   { name: "caneta", displayName: "Caneta", unitKg: 0.1, category: "outro", illegal: false },
   { name: "passaporte", displayName: "Passaporte", unitKg: 0.1, category: "outro", illegal: false },
-  { name: "momoshu", displayName: "Momoshu", unitKg: 0.2, category: "outro", illegal: false },
-  { name: "meowchi mochi", displayName: "Meowchi Mochi", unitKg: 0.2, category: "outro", illegal: false },
 ];
 
 // Quick lookup by canonical name

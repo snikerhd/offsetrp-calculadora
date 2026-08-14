@@ -263,8 +263,6 @@ const ITEM_MAP: [RegExp, string][] = [
   [/cart[aã]o\s*de\s*cidad[aã]o/i, "cartao de cidadao"],
   [/caneta/i, "caneta"],
   [/passaporte/i, "passaporte"],
-  [/momoshu/i, "momoshu"],
-  [/meowchi\s*mochi/i, "meowchi mochi"],
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────

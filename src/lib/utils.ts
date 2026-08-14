@@ -662,18 +662,6 @@ export function parseQuickInput(input: string): ParseResult {
       continue;
     }
 
-    // Fragmentos de itens legais vindos do OCR (ex.: "BRANCA" de "PORTE DE ARMA
-    // BRANCA", "CIDADÃO" de "CARTÃO DE CIDADÃO"). São artigos legais:
-    // reconhecidos mas nunca entram nas Coimas Rápidas.
-    if (nome === "branca" || nome === "cidadao") {
-      continue;
-    }
-
-    // Ruído do OCR: horas/relógio (ex.: "17:23") e números soltos sem nome de item.
-    if (/^\d{1,2}:\d{2}$/.test(originalNome) || /^\d+([.,]\d+)?$/.test(originalNome)) {
-      continue;
-    }
-
     // Verificar armas (classes genéricas produzidas pelo parser do OCR, ex.:
     // "arma alto calibre"). Isto tem de correr ANTES da pesquisa de itens
     // (obterItemPorSinonimo), porque essa pesquisa faz correspondência
