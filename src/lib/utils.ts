@@ -1,4 +1,5 @@
 import { ITENS_ILEGAIS, PRECOS_DROGAS, CRIMES_CATALOGO, Crime } from "@/lib/data";
+import { ITEM_BY_NAME } from "@/lib/item-weights";
 
 // Alias for backwards compatibility
 export type CrimeData = Crime;
@@ -816,6 +817,16 @@ export function parseQuickInput(input: string): ParseResult {
         result.sequestro.resultados.push(`  ${qtd}x Refém civil x 9.000 € = ${fmt(qtd * 9000)}`);
         result.sequestro.total += qtd * 9000;
       }
+      continue;
+    }
+
+    // Se o item existe no catálogo de pesos, já é um item conhecido.
+    // Itens legais são apenas reconhecidos para pesos/OCR e NUNCA entram
+    // nas Coimas Rápidas. Itens ilegais sem preço de coima também não
+    // devem aparecer como "Não reconhecido" — ficam reconhecidos no OCR
+    // e aguardam uma regra/preço específico de coima.
+    const itemCatalogo = ITEM_BY_NAME.get(nome);
+    if (itemCatalogo) {
       continue;
     }
 
