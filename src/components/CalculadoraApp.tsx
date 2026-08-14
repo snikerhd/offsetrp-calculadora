@@ -783,7 +783,8 @@ export default function CalculadoraApp() {
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
       const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
-      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra;
+      const ocrArmasExtra = ocrParsed?.armas.total || 0;
+      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       if (extraEntries.length || ocrExtraTotal > 0 || sequestroMultaRel > 0) {
         for (const entry of extraEntries) {
@@ -792,6 +793,12 @@ export default function CalculadoraApp() {
         if (ocrParsed?.itens.resultados.length) {
           linhas.push("  Itens Ilegais:");
           for (const linha of ocrParsed.itens.resultados) {
+            linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
+          }
+        }
+        if (ocrParsed?.armas.resultados.length) {
+          linhas.push("  Posse de Arma(s):");
+          for (const linha of ocrParsed.armas.resultados) {
             linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
           }
         }
@@ -840,7 +847,8 @@ export default function CalculadoraApp() {
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
       const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
-      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra;
+      const ocrArmasExtra = ocrParsed?.armas.total || 0;
+      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       const totalExtras = extraEntries.reduce((s, e) => s + e.valor, 0) + ocrExtraTotal;
       const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + totalExtras + sequestroMultaRel;
@@ -1386,9 +1394,11 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                   const detected: string[] = [];
                   if (parsed.itens.resultados.length) detected.push(...parsed.itens.resultados.map(x => x.trim()));
                   if (parsed.armas.resultados.length) detected.push(...parsed.armas.resultados.map(x => x.trim()));
+                  if (parsed.municao.resultados.length) detected.push(...parsed.municao.resultados.map(x => x.trim()));
                   if (parsed.dinheiro.resultados.length) detected.push(...parsed.dinheiro.resultados.map(x => x.trim()));
+                  const ocrExtraTotalPreview = parsed.itens.subtotal + parsed.municao.total + parsed.dinheiro.total + parsed.armas.total;
                   if (detected.length) {
-                    showAlert(`CC ${cc}: detetado(s) ${detected.join("; ")}.`);
+                    showAlert(`CC ${cc}: detetado(s) ${detected.join("; ")} → total ${fmt2(ocrExtraTotalPreview)} €.`);
                   } else {
                     showAlert(`OCR associado ao CC '${cc}', mas não foram encontrados itens com coima.`);
                   }
@@ -1417,6 +1427,7 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                           const detected = [
                             ...parsed.itens.resultados.map(x => x.trim()),
                             ...parsed.armas.resultados.map(x => x.trim()),
+                            ...parsed.municao.resultados.map(x => x.trim()),
                             ...parsed.dinheiro.resultados.map(x => x.trim()),
                           ];
                           return detected.length ? detected.join("\n") : txt;

@@ -180,16 +180,34 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
           <img src={ocrPreview} alt="Preview" className="max-h-40 rounded border border-white/10" />
         </div>
       )}
-      {ocrWeapon && (
-        <div className="mb-2 rounded border border-amber-500/20 bg-amber-500/5 p-2">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">🔫 Captura da arma</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-[10px] text-gray-300">
-            <div>Arma: <span className="text-gray-100">{ocrWeapon.weaponItem.replace("arma ", "").replace("calibre", "calibre")}</span></div>
-            <div>Munição: <span className="text-gray-100">{ocrWeapon.ammo} {ocrWeapon.ammoItem}</span></div>
-            <div>Acessórios: <span className="text-amber-300 font-bold">{ocrWeapon.accessoryCount}</span></div>
+      {ocrWeapon && (() => {
+        const AMMO_PRECO: Record<string, number> = { "balas baixo": 500, "balas medio": 1000, "balas alto": 1500 };
+        const precoUnitAmmo = AMMO_PRECO[ocrWeapon.ammoItem] ?? 0;
+        const coimaMunicao = ocrWeapon.ammo * precoUnitAmmo;
+        const coimaAcessorios = ocrWeapon.accessoryCount * 5000;
+        const coimaTotal = coimaMunicao + coimaAcessorios;
+        return (
+          <div className="mb-2 rounded border border-amber-500/20 bg-amber-500/5 p-2">
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">🔫 Captura da arma</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-[10px] text-gray-300">
+              <div>Arma: <span className="text-gray-100">{ocrWeapon.weaponItem.replace("arma ", "").replace("calibre", "calibre")}</span></div>
+              <div>Munição: <span className="text-gray-100">{ocrWeapon.ammo} {ocrWeapon.ammoItem}</span></div>
+              <div>Acessórios: <span className="text-amber-300 font-bold">{ocrWeapon.accessoryCount}</span></div>
+            </div>
+            {coimaTotal > 0 && (
+              <div className="mt-1.5 border-t border-amber-500/10 pt-1.5 text-[10px] text-gray-300">
+                {ocrWeapon.ammo > 0 && (
+                  <div>💰 {ocrWeapon.ammo} {ocrWeapon.ammoItem} x {precoUnitAmmo.toLocaleString("pt-PT")} € = <span className="text-amber-300 font-bold">{coimaMunicao.toLocaleString("pt-PT")} €</span></div>
+                )}
+                {ocrWeapon.accessoryCount > 0 && (
+                  <div>💰 {ocrWeapon.accessoryCount} acessórios x 5.000 € = <span className="text-amber-300 font-bold">{coimaAcessorios.toLocaleString("pt-PT")} €</span></div>
+                )}
+                <div className="mt-0.5 font-bold text-amber-200">Coima extra estimada: {coimaTotal.toLocaleString("pt-PT")} €</div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {ocrWeights.length > 0 && (
         <details className="mb-2" open>
