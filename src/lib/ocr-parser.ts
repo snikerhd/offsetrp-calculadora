@@ -733,17 +733,28 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
   const ammo = ammoMatch ? parseInt(ammoMatch[1], 10) : 0;
 
   let accessoryCount = 0;
+  // Primeiro tenta sempre ler a lista explícita depois de "Acessórios:".
+  // O regex anterior exigia whitespace antes do fim da string, falhava quando
+  // a lista acabava diretamente no último acessório e caía no fallback.
+  // Nesse fallback, "Precision Muzzle" também fazia match em "Muzzle",
+  // contando o mesmo acessório duas vezes.
   const accessoriesMatch = flat.match(
-    /acess[oó]rios?\s*:\s*(.+?)(?=\s+(?:peso|durabilidade|condi[cç][aã]o|valor|$))/i
+    /acess[oó]rios?\s*:\s*(.+?)(?=\s+(?:peso|durabilidade|condi[cç][aã]o|valor)\b|$)/i
   );
   if (accessoriesMatch) {
-    accessoryCount = accessoriesMatch[1].split(/\s*,\s*/).filter(Boolean).length;
+    accessoryCount = accessoriesMatch[1]
+      .split(/\s*,\s*/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .length;
   } else if (/acess[oó]rios?\s*:/i.test(flat)) {
     const knownAccessoryPatterns = [
       /extended\s*clip/i, /precision\s*muzzle/i, /scope/i, /\bgrip\b/i,
-      /flashlight/i, /heavy\s*barrel/i, /suppressor/i, /muzzle/i, /magazine/i,
+      /flashlight/i, /heavy\s*barrel/i, /suppressor/i, /magazine/i,
     ];
     accessoryCount = knownAccessoryPatterns.filter((p) => p.test(flat)).length;
+    // "Muzzle" genérico não é contado separadamente quando já existe
+    // "Precision Muzzle". Cada acessório físico vale apenas 1.
   }
 
   return {
