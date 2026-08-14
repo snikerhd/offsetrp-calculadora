@@ -766,9 +766,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const merged = new Map<string, number>();
   const weightTotals = new Map<string, number>();
 
-  // If weapon capture popup, add those items
+  // If weapon capture popup (shows "Número de Série" + "Munição"), the arma
+  // was already counted from the inventory photo — only register the ammo
+  // (and accessories) here, never add +1 to the weapon count again.
   if (weaponCapture) {
-    merged.set(weaponCapture.weaponItem, (merged.get(weaponCapture.weaponItem) || 0) + 1);
     if (weaponCapture.ammo > 0) {
       merged.set(weaponCapture.ammoItem, (merged.get(weaponCapture.ammoItem) || 0) + weaponCapture.ammo);
     }
