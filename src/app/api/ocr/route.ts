@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 
 const OCR_SPACE_URL = "https://api.ocr.space/parse/image";
-const OCR_SPACE_KEY = "helloworld";
+const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "helloworld";
 
 export async function POST(req: NextRequest) {
   try {

@@ -2,12 +2,19 @@
 // ITEM WEIGHT CATALOG — Offset RP
 // ══════════════════════════════════════════════════════════════════════════════
 // Every item known to the inventory with its unit weight in kg and category.
-
 export interface ItemDef {
   name: string;
   displayName: string;
   unitKg: number;
-  category: "droga" | "arma" | "municao" | "acessorio" | "equipamento" | "roubo" | "crafting" | "outro";
+  category:
+    | "droga"
+    | "arma"
+    | "municao"
+    | "acessorio"
+    | "equipamento"
+    | "roubo"
+    | "crafting"
+    | "outro";
   illegal: boolean;
 }
 
@@ -29,7 +36,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "arma branca ilegal", displayName: "Arma Branca Ilegal", unitKg: 1, category: "arma", illegal: true },
   { name: "arma branca", displayName: "Arma Branca (Legal c/ Porte)", unitKg: 1, category: "arma", illegal: false },
   { name: "arma baixo calibre", displayName: "Arma Baixo Calibre", unitKg: 5, category: "arma", illegal: true },
-  { name: "arma medio calibre", displayName: "Arma Médio Calibre", unitKg: 5, category: "arma", illegal: true }, // some variants weigh up to 10 kg in-game
+  { name: "arma medio calibre", displayName: "Arma Médio Calibre", unitKg: 5, category: "arma", illegal: true },
   { name: "arma alto calibre", displayName: "Arma Alto Calibre", unitKg: 15, category: "arma", illegal: true },
 
   // ── Munição ──
