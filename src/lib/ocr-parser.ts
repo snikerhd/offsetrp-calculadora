@@ -274,7 +274,9 @@ const ITEM_MAP: [RegExp, string][] = [
   [/peda[cç]o\s*de\s*metal/i, "pedaco de metal"],
   [/fotografia/i, "fotografia"],
   [/cart[aã]o\s*de\s*cidad[aã]o/i, "cartao de cidadao"],
+  [/carta\s*de\s*condu[cç][aã]o/i, "carta de conducao"],
   [/cart[aã]o\b/i, "cartao"],
+  [/carta\s+de\b/i, "carta de conducao"],
   [/encomenda/i, "encomenda"],
   [/[aá]gua\b/i, "agua"],
   [/medwch[ií]\s*mochi|hedach[ií]\s*mochi/i, "medwchi mochi"],
@@ -577,6 +579,8 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
     { first: /^anel$/i, second: /^diamante$/i, merged: "ANEL DE DIAMANTE" },
     { first: /^kit$/i, second: /^repara[cç][aã]o$/i, merged: "KIT REPARACAO" },
     { first: /^carregador\s+de$/i, second: /^(pistola|smg|rifle|shotgun)$/i, merged: "CARREGADOR DE $1" },
+    { first: /^cart[aã]o\s+de$/i, second: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
+    { first: /^carta\s+de$/i, second: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
   ];
 
   for (const rule of nonAdjacentRules) {
@@ -962,6 +966,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         { standalonePrefix: /^(10|14|18|22)k$/i, mainPart: /corrente/i, merged: "CORRENTE DE OURO $1K" },
         { standalonePrefix: /^reparacao$/i, mainPart: /kit/i, merged: "KIT REPARACAO" },
         { standalonePrefix: /^reparação$/i, mainPart: /kit/i, merged: "KIT REPARACAO" },
+        { standalonePrefix: /^carta\s+de$/i, mainPart: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
+        { standalonePrefix: /^cart[aã]o\s+de$/i, mainPart: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
       ];
 
       for (let fi = 0; fi < standaloneFragments.length; fi++) {
@@ -986,6 +992,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         { mainCell: /^carregador\s+de$/i, fragment: /^shotgun$/i, merged: "CARREGADOR DE SHOTGUN" },
         { mainCell: /^porte\s+de\s+arma$/i, fragment: /^branca$/i, merged: "PORTE DE ARMA BRANCA" },
         { mainCell: /^cart[aã]o\s+de$/i, fragment: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
+        { mainCell: /^carta\s+de$/i, fragment: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
       ];
       for (let mi = 0; mi < mainCells.length; mi++) {
         for (const rule of reverseRules) {
@@ -1118,6 +1125,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         let bestMatch: { name: string; diff: number } | null = null;
         for (const itemDef of ITEM_CATALOG) {
           if (itemDef.unitKg <= 0) continue;
+          if (itemDef.name === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextForPass3)) continue;
+          if (itemDef.name === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3)) continue;
           const diff = Math.abs(computed - itemDef.unitKg);
           if (diff > Math.max(0.03, itemDef.unitKg * 0.15)) continue;
           if (merged.has(itemDef.name)) continue;
@@ -1179,6 +1188,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (itemName === "sumo" && /sumo\s*(maracu|laranja|manga|ananas)/i.test(allText)) continue;
         if (itemName === "sumo" && (merged.has("sumo maracuja") || merged.has("sumo laranja") || merged.has("sumo ananas"))) continue;
         if (itemName === "corrente" && /corrente\s*10k/i.test(allText)) continue;
+        // Skip do "cartão" genérico (peso 0.1kg) quando o texto tem "cartão de
+        // cidadão" ou "carta de condução" (documentos sem peso) — evita roubar
+        // pares (qty, peso) de outros itens (ex.: semente de erva 295 (29.5)).
+        if (itemName === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allText)) continue;
+        if (itemName === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allText)) continue;
         if (!pattern.test(allText)) continue;
 
         const nameMatch = new RegExp(pattern.source, "i").exec(allText);

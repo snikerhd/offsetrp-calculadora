@@ -148,4 +148,25 @@ for (const [i, q] of e9) {
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
 }
 
+// Cartão de Cidadão e Carta de Condução (0 kg) não podem ser confundidos com
+// o "cartão" genérico (0.1 kg), que antes roubava o par 295 (29.5) da semente.
+const ocr10 = `Jogador-1254
+Peso: 40.50	120.00
+1(1.0)	3 (0.6)	2 (0.4)	1 (5.0)
+RADIO	SUMO ANANAS	BIFANA	MACHINE PISTOL
+1(0.0)	1 (0.0)	4 (2.0)	1 (1.0)	1 (0.7)
+CARTA DE	CARTÃO DE	92
+CONDUÇÃO	CIDADÃO	ÁGUA	PETROL CAN	TELEMÓVEL
+295 (29.5)	1 (0.3)
+SEMENTE ERVA	TESOURA
+`;
+const r10 = parseInventoryOCR(ocr10);
+const e10: [string, number][] = [["semente erva", 295], ["tesoura", 1], ["cartao de cidadao", 1], ["carta de conducao", 1]];
+for (const [i, q] of e10) {
+  const x = r10.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+const cartaoFalso = r10.weights.find(w => w.item === "cartao");
+if (!cartaoFalso) { p++; console.log("PASS sem cartao falso"); } else { f++; console.log("FAIL cartao falso qty=" + cartaoFalso.qty); }
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

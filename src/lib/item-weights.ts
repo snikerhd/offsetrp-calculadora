@@ -155,6 +155,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "knife", displayName: "Faca (Knife)", unitKg: 0.2, category: "arma", illegal: false },
   { name: "fotografia", displayName: "Fotografia", unitKg: 0, category: "outro", illegal: false },
   { name: "cartao de cidadao", displayName: "Cartão de Cidadão", unitKg: 0, category: "outro", illegal: false },
+  { name: "carta de conducao", displayName: "Carta de Condução", unitKg: 0, category: "outro", illegal: false },
   { name: "caneta", displayName: "Caneta", unitKg: 0.1, category: "outro", illegal: false },
   { name: "passaporte", displayName: "Passaporte", unitKg: 0.1, category: "outro", illegal: false },
   { name: "porte de arma branca", displayName: "Porte de Arma Branca", unitKg: 0, category: "outro", illegal: false },
