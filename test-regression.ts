@@ -59,4 +59,21 @@ for (const [i, q] of e3) {
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
 }
 
+// Corrente 10k / anel / corrente / relógio de ouro lado a lado.
+// Antes: "5 (0.5)" de relógio de ouro (0.1 kg/un) era atribuído à corrente
+// (28 em vez de 23) e o relógio acabava com 103x. O relógio de ouro pesa
+// 0.1 kg/un no jogo, não 0.2.
+const ocr4 = `1 (1.0)\t1 (5.0)\t1 (1.0)\t
+96\t
+RADID\tHACHINE PISTOL\tPETROL CAN\t
+1 (0.7)\t103 (15.4)\t20 (2.0)\t23 (2.3)\t5 (0.5)\t
+CORRENTE DE DURO\t
+TELEHOVEL\t1BK\tANEL DE DIAHANTE\tCORRENTE DE DURO\tRELOGIO DE DURO\t`;
+const r4 = parseInventoryOCR(ocr4);
+const e4: [string, number][] = [["corrente 10k", 103], ["anel", 20], ["corrente", 23], ["relogio ouro", 5], ["telemovel", 1]];
+for (const [i, q] of e4) {
+  const x = r4.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

@@ -90,6 +90,8 @@ function fixOcrTypos(text: string): string {
     [/\bCORRENTE\s+DE\s+DURO\b/gi, "CORRENTE DE OURO"],
     // OCR: "TELENOVEL" is a misread of "TELEMOVEL"
     [/\bTELENOVEL\b/gi, "TELEMOVEL"],
+    // OCR: "TELEHOVEL" is a misread of "TELEMOVEL"
+    [/\bTELEHOVEL\b/gi, "TELEMOVEL"],
     // OCR: "1BK" is a misread of "18K" (corrente label fragment)
     [/\b1BK\b/gi, "18K"],
     // OCR: "1OK" → "10K", "14K" etc. digit misreads in karat labels
@@ -320,6 +322,10 @@ const ALT_WEIGHTS: Record<string, number[]> = {
   "arma medio calibre": [5, 7.5, 10],
   "arma alto calibre": [15, 10],
   "arma baixo calibre": [5, 3],
+  // O relógio de ouro pesa 0.1 kg/un no jogo (ex.: 5 un = 0.5 kg), mas alguns
+  // screenshots antigos/catálogo apontam 0.2 kg/un. Aceitamos ambos para o
+  // peso não "vazar" para outro item com o mesmo peso (ex.: corrente de ouro).
+  "relogio ouro": [0.1, 0.2],
 };
 
 function weightMatches(itemName: string, qty: number, totalKg: number | null): boolean {

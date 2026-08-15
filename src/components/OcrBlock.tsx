@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { Camera } from "lucide-react";
+import { ITEM_BY_NAME } from "@/lib/item-weights";
 
 interface OcrBlockProps {
   inputCls: string;
@@ -11,13 +12,24 @@ interface OcrBlockProps {
   onResult: (txt: string) => void;
 }
 
+interface DetectedWeight {
+  item: string;
+  qty: number;
+  kg: number;
+  unitKg: number | null;
+  confidence: number;
+  confidenceLevel: "high" | "medium" | "low";
+  matchReason: string;
+}
+
 export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentColor, onResult }: OcrBlockProps) {
   const [ocrUrl, setOcrUrl] = useState("");
   const [ocrProcessing, setOcrProcessing] = useState(false);
   const [ocrStatus, setOcrStatus] = useState("");
   const [ocrPreview, setOcrPreview] = useState<string | null>(null);
   const [ocrRawText, setOcrRawText] = useState("");
-  const [ocrWeights, setOcrWeights] = useState<{ item: string; qty: number; kg: number; unitKg: number | null }[]>([]);
+  const [ocrWeights, setOcrWeights] = useState<DetectedWeight[]>([]);
+  const [ocrOverallConfidence, setOcrOverallConfidence] = useState<number | null>(null);
   const [ocrWeapon, setOcrWeapon] = useState<{ weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -26,12 +38,14 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     preview?: string;
     error?: string;
     ocrRaw?: string;
-    detectedWeights?: { item: string; qty: number; kg: number; unitKg: number | null }[];
+    detectedWeights?: DetectedWeight[];
+    overallConfidence?: number;
     weaponCapture?: { weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null;
   }) => {
     if (data.preview) setOcrPreview(data.preview);
     if (data.ocrRaw) setOcrRawText(data.ocrRaw);
     setOcrWeights(data.detectedWeights || []);
+    setOcrOverallConfidence(data.overallConfidence ?? null);
     setOcrWeapon(data.weaponCapture || null);
 
     if (data.error && !data.result) {
@@ -209,19 +223,78 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         );
       })()}
 
-      {ocrWeights.length > 0 && (
+      {(ocrWeights.length > 0 || ocrOverallConfidence != null) && (
         <details className="mb-2" open>
           <summary className="cursor-pointer text-[10px] text-gray-500 hover:text-gray-300">
-            ⚖️ Pesos reconhecidos ({ocrWeights.length})
+            📊 Probabilidades e Pesos ({ocrWeights.length})
+            {ocrOverallConfidence != null && (
+              <span className="ml-2">
+                · Confiança global: <strong className={ocrOverallConfidence >= 80 ? "text-emerald-400" : ocrOverallConfidence >= 60 ? "text-yellow-400" : "text-red-400"}>{ocrOverallConfidence}%</strong>
+              </span>
+            )}
           </summary>
-          <div className="mt-1 grid grid-cols-2 md:grid-cols-3 gap-1 rounded border border-white/10 bg-black/40 p-2">
-            {ocrWeights.map((w) => (
-              <div key={w.item} className="text-[10px] text-gray-400">
-                <span className="text-gray-200">{w.qty}x {w.item}</span>: {w.kg} kg
-                {w.unitKg != null && <span className="text-gray-600"> ({w.unitKg} kg/un.)</span>}
-              </div>
-            ))}
-          </div>
+          {ocrWeights.length > 0 ? (
+            <div className="mt-1 overflow-x-auto rounded border border-white/10 bg-black/40 p-2">
+              <table className="w-full text-[10px]">
+                <thead>
+                  <tr className="text-left text-gray-500 uppercase tracking-wider">
+                    <th className="py-1 pr-2">Item</th>
+                    <th className="py-1 pr-2 text-right">Qtd</th>
+                    <th className="py-1 pr-2 text-right">Peso un.</th>
+                    <th className="py-1 pr-2 text-right">Peso total</th>
+                    <th className="py-1 px-2 text-center">Confiança</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {ocrWeights.map((w, i) => {
+                    const def = ITEM_BY_NAME.get(w.item);
+                    const confBadge =
+                      w.confidenceLevel === "high"
+                        ? "bg-emerald-500/20 text-emerald-300"
+                        : w.confidenceLevel === "medium"
+                          ? "bg-yellow-500/20 text-yellow-300"
+                          : "bg-red-500/20 text-red-300";
+                    const confBar =
+                      w.confidenceLevel === "high"
+                        ? "bg-emerald-500"
+                        : w.confidenceLevel === "medium"
+                          ? "bg-yellow-500"
+                          : "bg-red-500";
+                    return (
+                      <tr key={i} className="align-top">
+                        <td className="py-1 pr-2 text-gray-200">
+                          <div className="flex flex-col">
+                            <span>
+                              {def?.displayName || w.item}
+                              {def?.illegal && <span className="ml-1 px-1 rounded bg-red-500/20 text-red-400 text-[8px] uppercase">ilegal</span>}
+                            </span>
+                            {w.matchReason && (
+                              <span className="text-[9px] text-gray-500">{w.matchReason}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-1 pr-2 text-right text-gray-300 font-mono">{w.qty.toLocaleString("pt-PT")}</td>
+                        <td className="py-1 pr-2 text-right text-gray-500 font-mono">{w.unitKg != null ? `${w.unitKg} kg` : "—"}</td>
+                        <td className="py-1 pr-2 text-right text-gray-300 font-mono">{w.kg > 0 ? `${w.kg.toLocaleString("pt-PT")} kg` : "—"}</td>
+                        <td className="py-1 px-2 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`px-1.5 py-0.5 rounded font-bold ${confBadge}`}>{w.confidence}%</span>
+                            <div className="h-1 w-12 overflow-hidden rounded-full bg-gray-700">
+                              <div className={`h-full ${confBar}`} style={{ width: `${w.confidence}%` }} />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="mt-1 rounded border border-white/10 bg-black/40 p-2 text-[10px] text-gray-500">
+              Nenhum peso reconhecido.
+            </div>
+          )}
         </details>
       )}
 
