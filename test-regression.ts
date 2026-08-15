@@ -130,4 +130,22 @@ for (const [i, q] of e8) {
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
 }
 
+// Coimas rápidas: números e nomes em linhas separadas, com linha de ruído
+// (timestamp "17:23") a tentar roubar a linha principal, e um par (qty, peso)
+// único dividido em duas linhas. Antes detetava 34 cristal / 1 saco / 1
+// telemovel / 1 estimulante (4.4 kg). Agora deve dar 330/33/1/102/102 (88 kg).
+const ocr9 = `330(33.0)\t33 (3.3)\t1 (0.7)\t102 (30.6)\t
+17:23\t
+CRISTAL\t
+CRISTAL\tSACO PLÁSTICO\tTELEMÓVEL\tPROCESSADO\t
+102 (20.4)\t
+ESTIMULANTE\t
+ACETONE`;
+const r9 = parseInventoryOCR(ocr9);
+const e9: [string, number][] = [["cristal", 330], ["saco plastico", 33], ["telemovel", 1], ["cristal processado", 102], ["estimulante", 102]];
+for (const [i, q] of e9) {
+  const x = r9.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

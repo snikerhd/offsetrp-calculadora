@@ -285,6 +285,12 @@ const ITEM_MAP: [RegExp, string][] = [
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────
+// Linhas de ruído OCR que nunca são nomes de itens (timestamps, peso do
+// jogador, header do inventário). Se entrassem na coleção de nomes podiam
+// roubar o papel de "linha principal" e desalinhar as quantidades.
+const NOISE_LINE_RE =
+  /^(\d{1,2}:\d{2}\s*$|peso\s*:.*|jogador\s*[-:].*|(?:invent[aá]rio|mochila|equipamento)\s*$)/i;
+
 function getUnitWeight(itemName: string): number | null {
   const def = ITEM_BY_NAME.get(itemName);
   return def ? def.unitKg : null;
@@ -439,6 +445,11 @@ function splitCells(line: string): string[] {
   const numPattern = /\d[\d.,]*\s*\(\s*[^)]+\s*\)/g;
   const numMatches = line.match(numPattern);
   if (numMatches && numMatches.length >= 2) {
+    return numMatches;
+  }
+  // A single "qty (weight)" cell on its own line (ex.: "102 (20.4)") must stay
+  // as one cell instead of splitting into "102" + "(20.4)".
+  if (numMatches && numMatches.length === 1 && numMatches[0] === line.trim()) {
     return numMatches;
   }
 
@@ -673,7 +684,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     }
   }
 
-  const lines = correctedText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = correctedText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !NOISE_LINE_RE.test(l));
 
   interface ParsedLine {
     lineIdx: number;
@@ -819,6 +834,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     // ── PASS 0: Standalone item names without numeric cells ──────────────
     // Only process text-only lines that are NOT adjacent to a numeric line.
     // If a text line is next to a numeric line, the Core Strategy will pair them.
+    const allNumCells = parsedLines.flatMap((pl) => pl.numCells);
     for (let i = 0; i < parsedLines.length; i++) {
       if (usedLines.has(i)) continue;
       const line = parsedLines[i];
@@ -847,6 +863,13 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (existing >= qty) continue;
         const unitW = getUnitWeight(item);
         if (unitW != null && unitW > 0) {
+          // Se existe uma célula numérica noutro local cujo peso bate com este
+          // item, a quantidade real vem dessa célula (Core Strategy / PASS 3) —
+          // não adivinhar qty=1 aqui (ex.: "ESTIMULANTE" solto + "102 (20.4)").
+          const hasMatchingCell = allNumCells.some(
+            (nc) => nc.totalKg != null && nc.qty > 0 && weightMatchesLoose(item, nc.qty, nc.totalKg)
+          );
+          if (hasMatchingCell) continue;
           const totalKg = qty * unitW;
           merged.set(item, qty);
           weightTotals.set(item, totalKg);
