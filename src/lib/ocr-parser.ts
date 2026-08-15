@@ -196,6 +196,9 @@ const ITEM_MAP: [RegExp, string][] = [
   [/carregador\s*(de\s*)?pistola/i, "carregador baixo calibre"],
   [/carregador\s*(de\s*)?smg/i, "carregador medio calibre"],
   [/carregador\s*(de\s*)?rifle/i, "carregador alto calibre"],
+  // "CARREGADOR DE" e "RIFLE" podem ficar separados por outra célula quando o
+  // OCR parte a linha (ex.: "CARREGADOR DE" ... "RIFLE").
+  [/carregador\s+de\b[\s\S]*?\brifle\b/i, "carregador alto calibre"],
   [/carregador\s*(de\s*)?shotgun/i, "carregador alto calibre"],
   [/carregador\s*(de\s*)?baixo\s*calibre/i, "carregador baixo calibre"],
   [/carregador\s*(de\s*)?m[eé]dio\s*calibre/i, "carregador medio calibre"],
