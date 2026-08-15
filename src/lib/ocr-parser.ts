@@ -300,13 +300,13 @@ function parseQtyWeight(cell: string): { qty: number; totalKg: number | null } {
 
   if (Number.isFinite(totalKg) && totalKg > 0) {
     const unitWeight = totalKg / qty;
-    if (unitWeight > 2 && qty > 1) {
+    if (unitWeight > 2 && qty > 1 && !unitWeightMatchesKnown(unitWeight)) {
       const str = String(totalKg);
       for (let pos = 1; pos < str.length; pos++) {
         const candidate = parseFloat(str.slice(0, pos) + "." + str.slice(pos));
         if (Number.isFinite(candidate) && candidate > 0) {
           const candUnit = candidate / qty;
-          if (candUnit >= 0.05 && candUnit <= 2) {
+          if (candUnit >= 0.05 && unitWeightMatchesKnown(candUnit)) {
             totalKg = candidate;
             break;
           }
@@ -327,6 +327,27 @@ const ALT_WEIGHTS: Record<string, number[]> = {
   // peso não "vazar" para outro item com o mesmo peso (ex.: corrente de ouro).
   "relogio ouro": [0.1, 0.2],
 };
+
+// Alguns itens pesam >2 kg/un (ex.: mesa química = 5 kg). A correção de
+// "ponto decimal perdido" no OCR (ex.: "2 (10.0)" lido como "2 (1.0)") só é
+// aplicada quando o resultado bate com um peso conhecido do catálogo.
+let knownUnitWeightsCache: Set<number> | null = null;
+function getKnownUnitWeights(): Set<number> {
+  if (!knownUnitWeightsCache) {
+    const s = new Set<number>();
+    for (const item of ITEM_CATALOG) if (item.unitKg > 0) s.add(item.unitKg);
+    for (const alts of Object.values(ALT_WEIGHTS)) for (const alt of alts) if (alt > 0) s.add(alt);
+    knownUnitWeightsCache = s;
+  }
+  return knownUnitWeightsCache;
+}
+function unitWeightMatchesKnown(w: number): boolean {
+  const known = getKnownUnitWeights();
+  for (const kw of known) {
+    if (Math.abs(w - kw) <= Math.max(0.03, kw * 0.15)) return true;
+  }
+  return false;
+}
 
 function weightMatches(itemName: string, qty: number, totalKg: number | null): boolean {
   if (totalKg == null || qty <= 0) return false;

@@ -76,4 +76,16 @@ for (const [i, q] of e4) {
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
 }
 
+// Mesa química pesa 5 kg/un (não 0.7). Multi-unidades como "2 (10.0)" e
+// "3 (15.0)" não podem ser "corrigidas" para "2 (1.0)"/3 (1.5) pela heurística
+// de ponto decimal perdido.
+const ocr5 = `2 (10.0)\t1 (5.0)\t3 (15.0)\t
+MESA QUIMICA\tMESA QUIMICA\tMESA QUIMICA\t`;
+const r5 = parseInventoryOCR(ocr5);
+const e5: [string, number][] = [["mesa quimica", 6]];
+for (const [i, q] of e5) {
+  const x = r5.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
