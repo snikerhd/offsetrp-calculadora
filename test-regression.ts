@@ -88,4 +88,22 @@ for (const [i, q] of e5) {
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
 }
 
+// Sumo ananás (0.2 kg), mesa química a 5 kg e linha de ruído "1- піо:" que
+// não pode roubar o alinhamento de CRISTAL/SACO PLÁSTICO. A anotação no final
+// da célula do saco plástico não pode duplicar o cristal.
+const ocr6 = `Jogador-3080	
+Peso: 127.50 / 128.00	
+1 (1.0)	34 (3.4)	2(10.0)	32 (6.4)	35 (7.0)	
+20	
+PETROL CAN	BANDAGEM	MESA QUÍMICA	SUNO ANANAS	BIFANA	
+500 (50.0)	50 (5.0)	
+1- піо:	
+CRISTAL	SACO PLÁSTICO tem 500 cristal com peso de 50kg saco de plastico 50 5kg`;
+const r6 = parseInventoryOCR(ocr6);
+const e6: [string, number][] = [["petrol can", 1], ["bandagem", 34], ["sumo ananas", 32], ["bifana", 35], ["mesa quimica", 2], ["cristal", 500], ["saco plastico", 50]];
+for (const [i, q] of e6) {
+  const x = r6.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

@@ -136,6 +136,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "sumo", displayName: "Sumo", unitKg: 0.2, category: "outro", illegal: false },
   { name: "sumo maracuja", displayName: "Sumo Maracujá", unitKg: 0.2, category: "outro", illegal: false },
   { name: "sumo laranja", displayName: "Sumo Laranja", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "sumo ananas", displayName: "Sumo Ananás", unitKg: 0.2, category: "outro", illegal: false },
   { name: "bifana", displayName: "Bifana", unitKg: 0.2, category: "outro", illegal: false },
   { name: "radio", displayName: "Rádio", unitKg: 1, category: "outro", illegal: false },
   { name: "telemovel", displayName: "Telemóvel", unitKg: 0.7, category: "outro", illegal: false },

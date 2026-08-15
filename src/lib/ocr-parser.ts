@@ -80,6 +80,7 @@ function fixOcrTypos(text: string): string {
     [/\bSUMO\s+HARACUJA\b/gi, "SUMO MARACUJA"],
     [/\bSUHO\s+MARACUJA\b/gi, "SUMO MARACUJA"],
     [/\bSUHO\s+HARACUJA\b/gi, "SUMO MARACUJA"],
+    [/\bSUNO\b/gi, "SUMO"],
     [/\bBTFANA\b/gi, "BIFANA"],
     [/\bSACO\s+PL[AÁ]STICO\b/gi, "SACO PLASTICO"],
     [/\bSACO\s+PLÁSTTCO\b/gi, "SACO PLASTICO"],
@@ -255,6 +256,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/kit\s*repara[cç][aã]o/i, "kit reparacao"],
   // Itens legais comuns
   [/bandagem/i, "bandagem"],
+  [/sumo\s*ananas/i, "sumo ananas"],
   [/sumo\s*maracu/i, "sumo maracuja"],
   [/sumo\s*laranja/i, "sumo laranja"],
   [/sumo/i, "sumo"],
@@ -383,10 +385,14 @@ function weightMatchesLoose(itemName: string, qty: number, totalKg: number | nul
 
 function matchItemName(text: string): string {
   const normalized = text.trim();
+  let best: { name: string; len: number } | null = null;
   for (const [pattern, name] of ITEM_MAP) {
-    if (pattern.test(normalized)) return name;
+    const m = pattern.exec(normalized);
+    if (m && m[0].length > (best ? best.len : -1)) {
+      best = { name, len: m[0].length };
+    }
   }
-  return normalized.toLowerCase();
+  return best ? best.name : normalized.toLowerCase();
 }
 
 // ── Split a line into cells ──────────────────────────────────────────────
@@ -867,9 +873,16 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
       const exactMatch = textLineData.find((t) => t.cells.length === numCellCount2);
       if (exactMatch) {
-        const idx = textLineData.indexOf(exactMatch);
+        // Se várias linhas têm o número certo de células, preferir a que tem
+        // mais nomes de itens reais (evita linhas de ruído OCR, ex.: "1- піо:",
+        // ganharem à linha de nomes quando ambas têm a mesma contagem).
+        const knownName = (c: string) => !!ITEM_BY_NAME.get(matchItemName(c));
+        const exactMatches = textLineData.filter((t) => t.cells.length === numCellCount2);
+        const scoreLine = (t: { cells: string[] }) => t.cells.filter((c) => knownName(c)).length;
+        const bestExact = exactMatches.reduce((a, b) => (scoreLine(b) > scoreLine(a) ? b : a));
+        const idx = textLineData.indexOf(bestExact);
         textLineData.splice(idx, 1);
-        textLineData.unshift(exactMatch);
+        textLineData.unshift(bestExact);
       } else {
         textLineData.sort((a, b) => b.cells.length - a.cells.length);
       }
@@ -1107,8 +1120,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (itemName === "diamante" && /diamante\s*bruto/i.test(allText)) continue;
         // Skip generic "diamante" if "anel" (from "anel de diamante") is already matched
         if (itemName === "diamante" && merged.has("anel") && /anel\s*(de\s*)?diamante/i.test(allText)) continue;
-        if (itemName === "sumo" && /sumo\s*(maracu|laranja|manga)/i.test(allText)) continue;
-        if (itemName === "sumo" && (merged.has("sumo maracuja") || merged.has("sumo laranja"))) continue;
+        if (itemName === "sumo" && /sumo\s*(maracu|laranja|manga|ananas)/i.test(allText)) continue;
+        if (itemName === "sumo" && (merged.has("sumo maracuja") || merged.has("sumo laranja") || merged.has("sumo ananas"))) continue;
         if (itemName === "corrente" && /corrente\s*10k/i.test(allText)) continue;
         if (!pattern.test(allText)) continue;
 
@@ -1179,7 +1192,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     }
 
     weights.push({
-      item: name,
+      item: itemDef.name,
       qty,
       kg: ocrTotalKg ?? qty * (unitKg ?? 0),
       unitKg,
