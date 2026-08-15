@@ -115,4 +115,19 @@ const r7 = parseInventoryOCR(ocr7);
 const x7 = r7.weights.find(w => w.item === "arma medio calibre");
 if (x7 && x7.qty === 2 && x7.confidence >= 80) { p++; console.log("PASS arma medio calibre (micro+machine) conf=" + x7.confidence); } else { f++; console.log("FAIL arma medio calibre got qty=" + (x7?.qty ?? "N/A") + " conf=" + (x7?.confidence ?? "N/A") + " exp qty 2 conf>=80"); }
 
+// Itens novos + "1BK" é "10K" (não 18K). Tudo a 95%.
+const ocr8 = `1 (5.0)	1(2.0)	19 (3.8)	15(3.0)	1(1.0)	
+HACHINE PISTOL	KIT REPARAÇÃO	HEDACHI MOCHI	HOHOSHU	PETROL CAN	
+64 (6.4)	1 (0.2)	3 (1.5)	4 (0.4)	1 (0.7)	
+CARTAD	ENCOHENDA	AGUA	ANEL DE DIAMANTE	TELEHOVEL	
+1 (0.2)	1(1.0)	42 (4.2)	65 (9.8)	
+CORRENTE DE DURO	
+NOBEL TUDO	RADIO	CORRENTE DE OURO	1BK`;
+const r8 = parseInventoryOCR(ocr8);
+const e8: [string, number][] = [["arma medio calibre", 1], ["kit reparacao", 1], ["medwchi mochi", 19], ["monoshu", 15], ["petrol can", 1], ["cartao", 64], ["encomenda", 1], ["agua", 3], ["anel", 4], ["telemovel", 1], ["nobel tudo", 1], ["radio", 1], ["corrente", 42], ["corrente 10k", 65]];
+for (const [i, q] of e8) {
+  const x = r8.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

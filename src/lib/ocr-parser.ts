@@ -81,6 +81,11 @@ function fixOcrTypos(text: string): string {
     [/\bSUHO\s+MARACUJA\b/gi, "SUMO MARACUJA"],
     [/\bSUHO\s+HARACUJA\b/gi, "SUMO MARACUJA"],
     [/\bSUNO\b/gi, "SUMO"],
+    // OCR: "HEDACHI/HOHOSHU/CARTAD/ENCOHENDA" são misreads de itens
+    [/\bHEDACHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
+    [/\bHOHOSHU\b/gi, "MONOSHU"],
+    [/\bCARTAD\b/gi, "CARTAO"],
+    [/\bENCOHENDA\b/gi, "ENCOMENDA"],
     [/\bBTFANA\b/gi, "BIFANA"],
     [/\bSACO\s+PL[AÁ]STICO\b/gi, "SACO PLASTICO"],
     [/\bSACO\s+PLÁSTTCO\b/gi, "SACO PLASTICO"],
@@ -93,8 +98,8 @@ function fixOcrTypos(text: string): string {
     [/\bTELENOVEL\b/gi, "TELEMOVEL"],
     // OCR: "TELEHOVEL" is a misread of "TELEMOVEL"
     [/\bTELEHOVEL\b/gi, "TELEMOVEL"],
-    // OCR: "1BK" is a misread of "18K" (corrente label fragment)
-    [/\b1BK\b/gi, "18K"],
+    // OCR: "1BK" é misread de "10K" (o jogo só tem corrente 10K, não 18K)
+    [/\b1BK\b/gi, "10K"],
     // OCR: "1OK" → "10K", "14K" etc. digit misreads in karat labels
     [/\b1OK\b/gi, "10K"],
   ];
@@ -269,6 +274,12 @@ const ITEM_MAP: [RegExp, string][] = [
   [/peda[cç]o\s*de\s*metal/i, "pedaco de metal"],
   [/fotografia/i, "fotografia"],
   [/cart[aã]o\s*de\s*cidad[aã]o/i, "cartao de cidadao"],
+  [/cart[aã]o\b/i, "cartao"],
+  [/encomenda/i, "encomenda"],
+  [/[aá]gua\b/i, "agua"],
+  [/medwch[ií]\s*mochi|hedach[ií]\s*mochi/i, "medwchi mochi"],
+  [/monoshu/i, "monoshu"],
+  [/nobel\s*tudo/i, "nobel tudo"],
   [/caneta/i, "caneta"],
   [/passaporte/i, "passaporte"],
 ];
