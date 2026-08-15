@@ -106,4 +106,13 @@ for (const [i, q] of e6) {
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
 }
 
+// Micro SMG pesa 10 kg/un e Machine Pistol 5 kg/un. Um mix (5+10) dá 7.5 kg —
+// todos pesos válidos de "arma medio calibre" — e NÃO pode dar 40% de
+// confiança ("Peso divergente") por usar apenas o peso primário (5 kg).
+const ocr7 = `1 (10.0)\t1 (5.0)\t
+MICRO SMG\tMACHINE PISTOL\t`;
+const r7 = parseInventoryOCR(ocr7);
+const x7 = r7.weights.find(w => w.item === "arma medio calibre");
+if (x7 && x7.qty === 2 && x7.confidence >= 80) { p++; console.log("PASS arma medio calibre (micro+machine) conf=" + x7.confidence); } else { f++; console.log("FAIL arma medio calibre got qty=" + (x7?.qty ?? "N/A") + " conf=" + (x7?.confidence ?? "N/A") + " exp qty 2 conf>=80"); }
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

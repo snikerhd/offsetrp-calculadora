@@ -383,6 +383,28 @@ function weightMatchesLoose(itemName: string, qty: number, totalKg: number | nul
   return false;
 }
 
+// Peso unitário de referência mais próximo do OCR (primário ou alternativo).
+// Ex.: Micro SMG pesa 10 kg e Machine Pistol 5 kg — um mix (5+10) dá 7.5,
+// todos pesos válidos de "arma medio calibre".
+function bestUnitWeight(itemName: string, qty: number, totalKg: number | null): number | null {
+  if (totalKg == null || qty <= 0) return null;
+  const computed = totalKg / qty;
+  const cands = [...(ALT_WEIGHTS[itemName] || [])];
+  const unitW = getUnitWeight(itemName);
+  if (unitW != null && unitW > 0) cands.unshift(unitW);
+  let best: number | null = null;
+  let bestDiff = Infinity;
+  for (const w of cands) {
+    if (w <= 0) continue;
+    const diff = Math.abs(computed - w);
+    if (diff <= Math.max(0.03, w * 0.15) && diff < bestDiff) {
+      bestDiff = diff;
+      best = w;
+    }
+  }
+  return best;
+}
+
 function matchItemName(text: string): string {
   const normalized = text.trim();
   let best: { name: string; len: number } | null = null;
@@ -1176,18 +1198,19 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     let matchReason = "Nome detetado no OCR";
 
     if (unitKg != null && unitKg > 0 && ocrTotalKg != null && ocrTotalKg > 0) {
-      const expectedTotal = qty * unitKg;
+      const refUnit = bestUnitWeight(itemDef.name, qty, ocrTotalKg) ?? unitKg;
+      const expectedTotal = qty * refUnit;
       const deviation = Math.abs(ocrTotalKg - expectedTotal);
       const deviationPercent = (deviation / expectedTotal) * 100;
       if (deviationPercent < 5) {
         confidence = 95;
-        matchReason = `Peso perfeito: ${ocrTotalKg}kg = ${qty}x${unitKg}kg`;
+        matchReason = `Peso perfeito: ${ocrTotalKg}kg = ${qty}x${refUnit}kg`;
       } else if (deviationPercent < 20) {
         confidence = 80;
-        matchReason = `Peso próximo: ${ocrTotalKg}kg ≈ ${qty}x${unitKg}kg`;
+        matchReason = `Peso próximo: ${ocrTotalKg}kg ≈ ${qty}x${refUnit}kg`;
       } else {
         confidence = 40;
-        matchReason = `Peso divergente: ${ocrTotalKg}kg vs ${qty}x${unitKg}kg`;
+        matchReason = `Peso divergente: ${ocrTotalKg}kg vs ${qty}x${refUnit}kg`;
       }
     }
 
