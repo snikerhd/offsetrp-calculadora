@@ -709,6 +709,18 @@ export default function CalculadoraApp() {
     setRelImagens(prev => prev.filter((_, i) => i !== index));
   };
 
+  // No RELATÓRIO, coimas de armas só contam em GRANDE QUANTIDADE
+  // (baixo ≥5, médio ≥4, alto ≥3). Armas avulsas (ex.: 1x médio calibre)
+  // não entram nas Coimas Extras. Nas Coimas Rápidas mantém-se tudo.
+  const ocrArmasGrande = (ocrParsed: ReturnType<typeof parseQuickInput> | null): { linhas: string[]; total: number } => {
+    const linhas = (ocrParsed?.armas.resultados || []).filter((l) => l.includes("GRANDE QUANTIDADE"));
+    const total = linhas.reduce((s, l) => {
+      const m = l.match(/(\d[\d.]*)\s*€\s*$/);
+      return s + (m ? parseInt(m[1].replace(/\./g, ""), 10) : 0);
+    }, 0);
+    return { linhas, total };
+  };
+
   // ========== FUNÇÃO GERAR RELATÓRIO (COM PRODUÇÃO DE DROGA) ==========
   const gerarRelatorio = () => {
     // O relatório inclui tanto os CC introduzidos manualmente como os CC
@@ -783,7 +795,7 @@ export default function CalculadoraApp() {
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
       const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
-      const ocrArmasExtra = ocrParsed?.armas.total || 0;
+      const { linhas: ocrArmasGrandeLinhas, total: ocrArmasExtra } = ocrArmasGrande(ocrParsed);
       const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       if (extraEntries.length || ocrExtraTotal > 0 || sequestroMultaRel > 0) {
@@ -796,9 +808,9 @@ export default function CalculadoraApp() {
             linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
           }
         }
-        if (ocrParsed?.armas.resultados.length) {
-          linhas.push("  Posse de Arma(s):");
-          for (const linha of ocrParsed.armas.resultados) {
+        if (ocrArmasGrandeLinhas.length) {
+          linhas.push("  Armas em Grande Quantidade:");
+          for (const linha of ocrArmasGrandeLinhas) {
             linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
           }
         }
@@ -847,7 +859,7 @@ export default function CalculadoraApp() {
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
       const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
-      const ocrArmasExtra = ocrParsed?.armas.total || 0;
+      const { total: ocrArmasExtra } = ocrArmasGrande(ocrParsed);
       const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       const totalExtras = extraEntries.reduce((s, e) => s + e.valor, 0) + ocrExtraTotal;
@@ -1396,7 +1408,7 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                   if (parsed.armas.resultados.length) detected.push(...parsed.armas.resultados.map(x => x.trim()));
                   if (parsed.municao.resultados.length) detected.push(...parsed.municao.resultados.map(x => x.trim()));
                   if (parsed.dinheiro.resultados.length) detected.push(...parsed.dinheiro.resultados.map(x => x.trim()));
-                  const ocrExtraTotalPreview = parsed.itens.subtotal + parsed.municao.total + parsed.dinheiro.total + parsed.armas.total;
+                  const ocrExtraTotalPreview = parsed.itens.subtotal + parsed.municao.total + parsed.dinheiro.total + ocrArmasGrande(parsed).total;
                   if (detected.length) {
                     showAlert(`CC ${cc}: detetado(s) ${detected.join("; ")} → total ${fmt2(ocrExtraTotalPreview)} €.`);
                   } else {
