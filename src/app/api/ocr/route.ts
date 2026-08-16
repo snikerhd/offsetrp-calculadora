@@ -1,8 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
+import { tmpdir } from "os";
+import { join } from "path";
+import sharp from "sharp";
+import { createWorker } from "tesseract.js";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 
 const OCR_SPACE_URL = "https://api.ocr.space/parse/image";
 const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "helloworld";
+
+let workerPromise: ReturnType<typeof createWorker> | null = null;
+function getWorker() {
+  if (!workerPromise) {
+    workerPromise = createWorker("por", 1, { cachePath: join(tmpdir(), "tesseract-ocr") });
+  }
+  return workerPromise;
+}
+
+// OCR.space (OCREngine 2) devolve texto vazio em PNGs RGBA e em screenshots
+// pequenas. Upscale 2x + conversão para JPEG resolve; o tesseract.js local
+// serve de fallback quando a API externa falha ou fica sem quota.
+async function preprocessImage(base64Data: string): Promise<Buffer> {
+  const buf = Buffer.from(base64Data, "base64");
+  const meta = await sharp(buf).metadata();
+  const scale = 2;
+  return sharp(buf)
+    .resize(Math.round((meta.width || 0) * scale), Math.round((meta.height || 0) * scale))
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,11 +75,12 @@ export async function POST(req: NextRequest) {
     }
 
     const preview = `data:${mimeType};base64,${base64Data}`;
+    const processed = await preprocessImage(base64Data);
     let ocrText = "";
 
     try {
       const formBody = new URLSearchParams();
-      formBody.append("base64Image", `data:${mimeType};base64,${base64Data}`);
+      formBody.append("base64Image", `data:image/jpeg;base64,${processed.toString("base64")}`);
       formBody.append("language", "por");
       formBody.append("isOverlayRequired", "false");
       formBody.append("isTable", "true");
@@ -71,13 +98,21 @@ export async function POST(req: NextRequest) {
       if (ocrResp.ok) {
         const ocrData = await ocrResp.json();
         if (ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
-          ocrText = ocrData.ParsedResults
-            .map((r: { ParsedText?: string }) => r.ParsedText || "")
-            .join("\n");
+          ocrText = ocrData.ParsedResults.map((r: { ParsedText?: string }) => r.ParsedText || "").join("\n");
         }
       }
     } catch (ocrErr) {
       console.error("OCR.space error:", ocrErr);
+    }
+
+    if (!ocrText || ocrText.trim().length < 3) {
+      try {
+        const worker = await getWorker();
+        const { data } = await worker.recognize(processed);
+        ocrText = (data.text || "").trim();
+      } catch (tessErr) {
+        console.error("tesseract fallback error:", tessErr);
+      }
     }
 
     if (!ocrText || ocrText.trim().length < 3) {
