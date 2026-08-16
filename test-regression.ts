@@ -326,5 +326,60 @@ if (!fakePepita) { p++; console.log("PASS sem pepitas 1x0.3 falsa"); } else { f+
 const totalKg18 = r18.weights.reduce((s, w) => s + w.kg, 0);
 if (Math.abs(totalKg18 - 151.1) < 0.05) { p++; console.log("PASS total 151.1 kg"); } else { f++; console.log("FAIL total got " + totalKg18.toFixed(2) + " exp 151.1"); }
 
+// A lista-síntese do jogo ("N× Item — X,kg") é autoritativa sobre a grelha.
+// Ruído na grelha (64, 80, SANTOS, CRIANE) desalinhava colunas e gerava
+// "cartao 64×0.1", "pack vinhos 26×0.2" e "sumo 6×0.2" falsos; a síntese dá
+// "1× Cartão de Cidadão", "26× Bifana", "6× Pack Vinho(s)" e "3× TV LED 75".
+const ocr19 = `Jogador-2763
+Peso: 32.98 / 120.00
+1 (0.0)	26 (5.2)	1 (1.0)	1 (1.0)	1 (1.0)
+CARTÃO DE	64	80
+CIDADÃO	BIFANA	PETROL CAN	RADIO	REBARBADORA
+44 (8.8).	1 (0.7)	38 (3.8)	2(4.0)	11(2.2)
+17:23
+SUMO ANANAS	TELEMÓVEL	BANDAGEM	KIT REPARAÇÃO	PERFUME
+SANTOS	3 (3.0)	6 (1.2)	10 (1.0)
+CRIANE
+TV LED 75	PACK VINHOS	PACOTE DEALER
+1× Cartão de Cidadão — 0,0 kg
+26× Bifana — 5,2 kg
+1× Petrol Can — 1,0 kg
+1× Rádio — 1,0 kg
+1× Rebarbadora — 1,0 kg
+44× Sumo Ananás — 8,8 kg
+1× Telemóvel — 0,7 kg
+38× Bandagem — 3,8 kg
+2× Kit Reparação — 4,0 kg
+11× Perfume — 2,2 kg
+3× TV LED 75 — 3,0 kg
+6× Pack Vinho(s) — 1,2 kg
+10× Pacote Dealer — 1,0 kg
+TOTAL: 32,9 kg`;
+const r19 = parseInventoryOCR(ocr19);
+const e19: [string, number, number][] = [
+  ["cartao de cidadao", 1, 0],
+  ["bifana", 26, 5.2],
+  ["petrol can", 1, 1],
+  ["radio", 1, 1],
+  ["rebarbadora", 1, 1],
+  ["sumo ananas", 44, 8.8],
+  ["telemovel", 1, 0.7],
+  ["bandagem", 38, 3.8],
+  ["kit reparacao", 2, 4],
+  ["perfume", 11, 2.2],
+  ["tv led 75", 3, 3],
+  ["pack vinhos", 6, 1.2],
+  ["pacote dealer", 10, 1],
+];
+for (const [item, qty, kg] of e19) {
+  const w = r19.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01) { p++; console.log("PASS " + item + " " + qty + "x" + kg); }
+  else { f++; console.log("FAIL " + item + " got " + (w ? w.qty + "x" + w.kg : "N/A") + " exp " + qty + "x" + kg); }
+}
+const cartaoFalso19 = r19.weights.find(w => w.item === "cartao");
+if (!cartaoFalso19) { p++; console.log("PASS sem cartao generico falso na síntese"); } else { f++; console.log("FAIL cartao generico falso qty=" + cartaoFalso19.qty); }
+const totalKg19 = r19.weights.reduce((s, w) => s + w.kg, 0);
+if (Math.abs(totalKg19 - 32.9) < 0.05) { p++; console.log("PASS total síntese 32.9 kg"); } else { f++; console.log("FAIL total síntese got " + totalKg19.toFixed(2) + " exp 32.9"); }
+
 
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

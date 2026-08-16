@@ -159,7 +159,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/phone\s*7/i, "phone 7"],
   [/tv\s*led/i, "tv led 75"],
   [/computador/i, "computador"],
-  [/pack\s*vinhos/i, "pack vinhos"],
+  [/pack\s*vinho/i, "pack vinhos"],
   [/ouro\s*estatal/i, "ouro estatal"],
   [/arma\s*de\s*cole[cç]/i, "arma de colecao"],
   [/tigre/i, "tigre"],
@@ -449,7 +449,9 @@ function bestUnitWeight(itemName: string, qty: number, totalKg: number | null): 
 }
 
 function matchItemName(text: string): string {
-  const normalized = text.trim();
+  // A síntese do jogo usa acentos ("Sumo Ananás") que os padrões do ITEM_MAP
+  // não têm — normaliza (remove diacríticos) antes de casar.
+  const normalized = text.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   let best: { name: string; len: number } | null = null;
   for (const [pattern, name] of ITEM_MAP) {
     const m = pattern.exec(normalized);
@@ -565,6 +567,12 @@ const isNumericCell = (c: string): boolean => {
   return false;
 };
 const isTextCell = (c: string) => c.trim() !== "" && !isNumericCell(c);
+
+// Uma linha é uma "fila numérica real" se tiver pelo menos 2 células com peso
+// (ex.: "26 (5.2)"). Números puros sem peso são ruído OCR (ex.: "64", "80",
+// "SANTOS" noutras colunas) e não devem bloquear o alinhamento do CORE.
+const isRealNumericLine = (pl: { numCells: { totalKg: number | null }[] }): boolean =>
+  pl.numCells.filter((nc) => nc.totalKg != null).length >= 2;
 
 // ── Merge compound names within a flat list of text cells ──────────────
 function mergeCompoundNamesInList(cells: string[]): string[] {
@@ -890,6 +898,39 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS SUMMARY: Lista-síntese do jogo ("N× Item — X,kg")
+  // ══════════════════════════════════════════════════════════════════════
+  // O jogo mostra por baixo da grelha uma lista de cada item com a sua
+  // quantidade e peso total ("44× Sumo Ananás — 8,8 kg"). O OCR lê-a de forma
+  // muito mais fiável do que a grelha, onde ruído ("64", "80", "SANTOS",
+  // "CRIANE") desalinha colunas e gera itens falsos (ex.: "cartao 64×0.1"
+  // em vez de "1× Cartão de Cidadão — 0,0 kg"). Quando são detetadas pelo
+  // menos 2 linhas de síntese, são a fonte autoritativa e a grelha é ignorada.
+  const SUMMARY_RE = /(\d+)\s*[×x]\s*(.+?)\s*[—–-]\s*([\d.,]+)\s*kg\s*$/i;
+  const summaryItems: { name: string; qty: number; totalKg: number; lineIdx: number }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(SUMMARY_RE);
+    if (!m) continue;
+    const qty = Math.round(parseFloat(m[1].replace(".", "").replace(",", ".")) || 1);
+    const totalKg = parseFloat(m[3].replace(".", "").replace(",", "."));
+    if (!Number.isFinite(totalKg)) continue;
+    const item = matchItemName(m[2]);
+    if (!ITEM_BY_NAME.get(item)) continue;
+    summaryItems.push({ name: item, qty, totalKg, lineIdx: i });
+  }
+
+  const useSummaryOnly = summaryItems.length >= 2;
+  if (useSummaryOnly) {
+    for (const s of summaryItems) {
+      merged.set(s.name, (merged.get(s.name) || 0) + s.qty);
+      weightTotals.set(s.name, (weightTotals.get(s.name) || 0) + s.totalKg);
+      usedLines.add(s.lineIdx);
+    }
+    // Marca todas as linhas como usadas para a grelha não ser processada.
+    for (let i = 0; i < parsedLines.length; i++) usedLines.add(i);
+  }
+
   // If weapon grid took all lines, skip standard parsing
   if (usedLines.size < parsedLines.length) {
     // ── PASS 0: Standalone item names without numeric cells ──────────────
@@ -907,11 +948,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       for (let d = 1; d <= 2; d++) {
         const above = i - d;
         const below = i + d;
-        if (above >= 0 && parsedLines[above].numCells.length >= 2) {
+        if (above >= 0 && isRealNumericLine(parsedLines[above])) {
           adjacentToNumeric = true;
           break;
         }
-        if (below < parsedLines.length && parsedLines[below].numCells.length >= 2) {
+        if (below < parsedLines.length && isRealNumericLine(parsedLines[below])) {
           adjacentToNumeric = true;
           break;
         }
@@ -955,10 +996,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       for (let d = 1; d <= 3; d++) {
         const above = i - d;
         const below = i + d;
-        if (above >= 0 && parsedLines[above].numCells.length >= 2 && nextNumAbove === -1) {
+        if (above >= 0 && isRealNumericLine(parsedLines[above]) && nextNumAbove === -1) {
           nextNumAbove = above;
         }
-        if (below < parsedLines.length && parsedLines[below].numCells.length >= 2 && nextNumBelow === parsedLines.length) {
+        if (below < parsedLines.length && isRealNumericLine(parsedLines[below]) && nextNumBelow === parsedLines.length) {
           nextNumBelow = below;
         }
       }
@@ -971,7 +1012,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           if (direction === -1 && adj <= nextNumAbove) break;
           if (usedLines.has(adj)) continue;
           const adjLine = parsedLines[adj];
-          if (adjLine.numCells.length >= 2) break;
+          if (isRealNumericLine(adjLine)) break;
           if (adjLine.textCells.length === 0) continue;
           // Allow d=3 text lines even with multiple cells — they may contain
           // compound-name fragments (e.g., "CORRENTE DE OURO" + "10K") or the
@@ -1154,6 +1195,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         for (let ni = 0; ni < mergedNames.length; ni++) {
           if (usedText.has(ni)) continue;
           const item = matchItemName(mergedNames[ni]);
+          // Só alinhar com itens conhecidos do catálogo. Nomes desconhecidos
+          // (ruído OCR como "SANTOS", "CRIANE") não devem consumir células
+          // numéricas com peso — deixá-las para o PASS 3 recuperar por peso.
+          if (!ITEM_BY_NAME.get(item)) continue;
           let score = 0;
           if (qc.totalKg != null && qc.totalKg > 0) {
             if (weightMatches(item, qc.qty, qc.totalKg)) score += 1000;
