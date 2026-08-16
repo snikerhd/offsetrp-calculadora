@@ -691,7 +691,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const weaponCapture = parseWeaponCapture(rawText);
   const merged = new Map<string, number>();
   const weightTotals = new Map<string, number>();
-
+  // Pares "qty (peso)" já atribuídos pelo CORE/PASS 3 — o PASS 4 não pode
+  // reutilizá-los noutro item (ex.: "71 (10.7)" é da corrente 10K, não do
+  // sumo laranja).
+  const consumedPairKeys = new Set<string>();
   if (weaponCapture) {
     if (weaponCapture.ammo > 0) {
       merged.set(weaponCapture.ammoItem, (merged.get(weaponCapture.ammoItem) || 0) + weaponCapture.ammo);
@@ -931,7 +934,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       }
 
       for (const direction of [1, -1]) {
-        for (let d = 1; d <= 2; d++) {
+        for (let d = 1; d <= 3; d++) {
           const adj = i + d * direction;
           if (adj < 0 || adj >= parsedLines.length) break;
           if (direction === 1 && adj >= nextNumBelow) break;
@@ -940,9 +943,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           const adjLine = parsedLines[adj];
           if (adjLine.numCells.length >= 2) break;
           if (adjLine.textCells.length === 0) continue;
-          // Allow d=2 text lines even with multiple cells — they may contain
-          // compound-name fragments (e.g., "18K KIT REPARAÇÃO") that pair
-          // with the numeric cells on the current line.
+          // Allow d=3 text lines even with multiple cells — they may contain
+          // compound-name fragments (e.g., "CORRENTE DE OURO" + "10K") or the
+          // real name row several lines below the numeric row (e.g., after
+          // noise lines like "POLICIA"), and the exact-match logic below
+          // prefers the line whose cell count equals the numeric count.
           textLineData.push({
             lineIdx: adj,
             cells: adjLine.textCells.map((tc) => tc.text),
@@ -1089,6 +1094,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (qc.totalKg != null) {
           weightTotals.set(c.item, (weightTotals.get(c.item) || 0) + qc.totalKg);
         }
+        if (qc.totalKg != null) consumedPairKeys.add(qc.qty + "|" + qc.totalKg);
         matched++;
       }
 
@@ -1179,6 +1185,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (bestMatch) {
           merged.set(bestMatch.name, (merged.get(bestMatch.name) || 0) + qc.qty);
           weightTotals.set(bestMatch.name, (weightTotals.get(bestMatch.name) || 0) + qc.totalKg);
+          consumedPairKeys.add(qc.qty + "|" + qc.totalKg);
           usedLines.add(i);
         }
       }
@@ -1227,6 +1234,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         let bestDist = Infinity;
         for (const pair of allPairs) {
           if (pair.matched) continue;
+          if (consumedPairKeys.has(pair.qty + "|" + pair.totalKg)) continue;
           const strict = weightMatches(itemName, pair.qty, pair.totalKg);
           const loose = !strict && weightMatchesLoose(itemName, pair.qty, pair.totalKg);
           if (!strict && !loose) continue;

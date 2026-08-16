@@ -192,4 +192,28 @@ if (m12 && m12.qty === 30) { p++; console.log("PASS popup conta 30 balas medio")
 const a12 = r12.weights.find(w => w.item === "acessorios para armas");
 if (a12 && a12.qty === 1) { p++; console.log("PASS popup conta 1 acessorio"); } else { f++; console.log("FAIL popup acessorios got " + (a12?.qty ?? "N/A") + " exp 1"); }
 
+// Duas linhas de ruído (POLICIA + CORRENTE DE OURO) entre os números e a linha
+// de nomes certa: a fila "8 71 31 12 29" pertence a BANDAGEM/CORRENTE 10K/ANEL/
+// RELOGIO/CORRENTE (que aparece 3 linhas abaixo). Antes a fila era atribuída à
+// linha de cima (BIFANA/SUMO/RADIO/MICRO), dando "sumo laranja 71 (40%)",
+// "bandagem 31" e "anel 29".
+const ocr13 = `BIFANA	SUMO LARANJA	RADIO	MICRO SMG	
+8 (0.8)	71 (10.7)	31 (3.1)	12(1.2)	29 (2.9)	
+POLICIA	
+CORRENTE DE OURO	
+BANDAGEM	10K	ANEL DE DIAMANTE	RELOGIO DE OURO	CORRENTE DE OURO	
+1 (1.0)	
+FLASHLIGHT	
+1 (1.0)	1 (0.7)	
+17:23	`;
+const r13 = parseInventoryOCR(ocr13);
+const e13: [string, number][] = [["bandagem", 8], ["corrente 10k", 71], ["anel", 31], ["relogio ouro", 12], ["corrente", 29], ["radio", 1]];
+for (const [i, q] of e13) {
+  const x = r13.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+const sumoFalso = r13.weights.find(w => w.item === "sumo laranja");
+if (!sumoFalso) { p++; console.log("PASS sem sumo laranja falso"); } else { f++; console.log("FAIL sumo laranja falso qty=" + sumoFalso.qty + " conf=" + sumoFalso.confidence); }
+
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
