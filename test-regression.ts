@@ -284,5 +284,47 @@ const r17 = parseInventoryOCR(ocr17);
 const x17 = r17.weights.find(w => w.item === "c4");
 if (x17 && x17.qty === 1 && x17.kg === 1) { p++; console.log("PASS c4 (1x1.0kg)"); } else { f++; console.log("FAIL c4 got qty=" + (x17?.qty ?? "N/A") + " kg=" + (x17?.kg ?? "N/A") + " exp 1x1.0"); }
 
+// Bagageira com semente de tabaco, mining drill, minério, barras, estanho,
+// diamante bruto e pepitas. Pepita pesa 0.1 kg (o total "Peso: 151.10" confirma:
+// 122.8+0.2+15+5+5.4+1.1+1.6). Antes, o "16 (1.6)" da pepita era atribuído a
+// "diamante" e criava um "pepitas 1x0.3" falso.
+const ocr18 = `Bagageira-07XU86YK\t
+Peso: 151.10 / 200.00\t
+1228 (122.8)\t1 (0.2)\t30 (15.0)\t5 (5.0)\t54 (5.4)\t
+31\t
+SEMENTE TABACO\tMINING DRILL\tMINÉRIO\tBARRA DE OURO\tESTANHO\t
+11 (1.1)\t16 (1.6)\t
+TARE\t
+NET\t
+DIAMANTE BRUTO\tPEPITA\t
+CU.CAP, 1228× Semente Tabaco — 122,8 kg
+1× Mining Drill — 0,2 kg
+30× Minério — 15,0 kg
+5× Barra de Ouro — 5,0 kg
+54× Estanho — 5,4 kg
+11× Diamante Bruto — 1,1 kg
+16× Pepita — 1,6 kg`;
+const r18 = parseInventoryOCR(ocr18);
+const e18: [string, number, number][] = [
+  ["semente tabaco", 1228, 122.8],
+  ["mining drill", 1, 0.2],
+  ["minerios", 30, 15],
+  ["barras ouro", 5, 5],
+  ["estanho", 54, 5.4],
+  ["diamante bruto", 11, 1.1],
+  ["pepitas", 16, 1.6],
+];
+for (const [item, qty, kg] of e18) {
+  const w = r18.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01) { p++; console.log("PASS " + item + " " + qty + "x" + kg); }
+  else { f++; console.log("FAIL " + item + " got " + (w ? w.qty + "x" + w.kg : "N/A") + " exp " + qty + "x" + kg); }
+}
+const fakeDiamante = r18.weights.find(w => w.item === "diamante");
+if (!fakeDiamante) { p++; console.log("PASS sem diamante falso da pepita"); } else { f++; console.log("FAIL diamante falso qty=" + fakeDiamante.qty); }
+const fakePepita = r18.weights.find(w => w.item === "pepitas" && w.qty === 1);
+if (!fakePepita) { p++; console.log("PASS sem pepitas 1x0.3 falsa"); } else { f++; console.log("FAIL pepitas 1x0.3 falsa"); }
+const totalKg18 = r18.weights.reduce((s, w) => s + w.kg, 0);
+if (Math.abs(totalKg18 - 151.1) < 0.05) { p++; console.log("PASS total 151.1 kg"); } else { f++; console.log("FAIL total got " + totalKg18.toFixed(2) + " exp 151.1"); }
+
 
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

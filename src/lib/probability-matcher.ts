@@ -151,6 +151,8 @@ const PATTERN_DEFS: [RegExp, string][] = [
   [/folha\s*tabaco/i, "folha tabaco"],
   [/ma[cç]o/i, "maço"],
   [/semente.*erva/i, "semente erva"],
+  [/semente.*tabaco/i, "semente tabaco"],
+  [/mining\s*drill/i, "mining drill"],
   [/cabe[cç]o/i, "cabeco erva"],
   [/saco.*erva/i, "saco erva"],
   [/[oó]leo/i, "oleo medicinal"],

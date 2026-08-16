@@ -356,6 +356,8 @@ const SYNONYMS_DROGAS: Record<string, string> = {
   // Cannabis - Sementes
   "semente": "Sementes de Cannabis",
   "sementes": "Sementes de Cannabis",
+  "semente tabaco": "Semente de Tabaco",
+  "mining drill": "Mining Drill",
   "seed": "Sementes de Cannabis",
   "seeds": "Sementes de Cannabis",
   // Cannabis - Cabeços
