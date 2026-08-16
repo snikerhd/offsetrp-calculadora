@@ -282,6 +282,9 @@ const ITEM_MAP: [RegExp, string][] = [
   [/[aá]gua\b/i, "agua"],
   [/medwch[ií]\s*mochi|hedach[ií]\s*mochi/i, "medwchi mochi"],
   [/monoshu|momoshu|moonshine/i, "monoshu"],
+  [/saco\s*do\s*gin[aá]sio/i, "saco do ginasio"],
+  [/\bhammer\b/i, "hammer"],
+  [/casca\s*de\s*banana/i, "casca de banana"],
   [/nobel\s*tudo/i, "nobel tudo"],
   [/caneta/i, "caneta"],
   [/passaporte/i, "passaporte"],
@@ -531,10 +534,13 @@ function splitCells(line: string): string[] {
 // so we must allow letters INSIDE the parenthesised weight portion.
 const isNumericCell = (c: string): boolean => {
   if (!/^\d/.test(c)) return false;
+  // OCR pode deixar um ponto final a seguir à célula (ex.: "3 (4.5).") —
+  // isso não a torna texto.
+  const s = c.trim().replace(/\.$/, "");
   // If the cell matches the qty(weight) pattern, it's numeric even with OCR letter misreads
-  if (/^\d[\d.,]*\s*\(\s*[^)]+\s*\)$/.test(c)) return true;
+  if (/^\d[\d.,]*\s*\(\s*[^)]+\s*\)$/.test(s)) return true;
   // Plain number without parentheses
-  if (/^\d[\d.,]*$/.test(c)) return true;
+  if (/^\d[\d.,]*$/.test(s)) return true;
   // Otherwise, if it contains actual letters outside parens, it's text
   return false;
 };
@@ -582,6 +588,7 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
     { first: /^carregador\s+de$/i, second: /^(pistola|smg|rifle|shotgun)$/i, merged: "CARREGADOR DE $1" },
     { first: /^cart[aã]o\s+de$/i, second: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
     { first: /^carta\s+de$/i, second: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
+    { first: /^lockpick$/i, second: /^avan[cç]ad/i, merged: "LOCKPICK AVANCADA" },
   ];
 
   for (const rule of nonAdjacentRules) {
@@ -1020,6 +1027,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         { mainCell: /^carregador\s+de$/i, fragment: /^rifle$/i, merged: "CARREGADOR DE RIFLE" },
         { mainCell: /^carregador\s+de$/i, fragment: /^shotgun$/i, merged: "CARREGADOR DE SHOTGUN" },
         { mainCell: /^porte\s+de\s+arma$/i, fragment: /^branca$/i, merged: "PORTE DE ARMA BRANCA" },
+        { mainCell: /^avan[cç]ada$/i, fragment: /^lockpick$/i, merged: "LOCKPICK AVANCADA" },
         { mainCell: /^cart[aã]o\s+de$/i, fragment: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
         { mainCell: /^carta\s+de$/i, fragment: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
       ];

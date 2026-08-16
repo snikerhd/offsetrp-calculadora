@@ -215,5 +215,29 @@ for (const [i, q] of e13) {
 const sumoFalso = r13.weights.find(w => w.item === "sumo laranja");
 if (!sumoFalso) { p++; console.log("PASS sem sumo laranja falso"); } else { f++; console.log("FAIL sumo laranja falso qty=" + sumoFalso.qty + " conf=" + sumoFalso.confidence); }
 
+// A célula "3 (4.5)." tem um ponto final que a fazia cair para texto, excluindo a
+// linha toda do CORE — os nomes da linha 1 (PACOTE DEALER/CHIFRES/MOMOSHU...) eram
+// depois casados por peso à linha de baixo (199/2/5/1). O ponto final é agora
+// tolerado e a linha volta a ser numérica.
+const ocr14 = `Vinewood Park Drive, Hipó	Bagageira-07PF35WO	
+Peso: 48.48 / 208.08	
+33 (3.3)	30 (6.0)	3 (0.6)	3 (4.5).	1(1.0)	
+PACOTE DEALER	CHIFRES	MOMOSHU	SACO DO GINÁSIO	HAMMER	
+199 (19.9)	2 (1.0)	5 (0.5)	1(1.0)	
+LOCKPICK	
+SACO PLÁSTICO	AVANÇADA	CASCA DE BANANA	PETROL CAN	
+1 (0.2)	10(1.0)	2 (1.4)	
+17:23	
+CARREGADOR DE	
+PISTOLA	BANDAGEM	TELEMÓVEL	`;
+const r14 = parseInventoryOCR(ocr14);
+const e14: [string, number][] = [["pacote dealer", 33], ["chifres", 30], ["monoshu", 3], ["saco do ginasio", 3], ["hammer", 1], ["saco plastico", 199], ["lockpick avancada", 2], ["casca de banana", 5], ["petrol can", 1], ["carregador baixo calibre", 1], ["bandagem", 10], ["telemovel", 2]];
+for (const [i, q] of e14) {
+  const x = r14.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+const lpFalso = r14.weights.find(w => w.item === "lockpick");
+if (!lpFalso) { p++; console.log("PASS sem lockpick genérico"); } else { f++; console.log("FAIL lockpick genérico qty=" + lpFalso.qty); }
+
 
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
