@@ -260,8 +260,8 @@ const hamburgFalso = r15.weights.find(w => w.item === "hamburg steak");
 if (!hamburgFalso) { p++; console.log("PASS sem hamburg steak falso"); } else { f++; console.log("FAIL hamburg steak falso qty=" + hamburgFalso.qty); }
 
 // OCR com "TELEHÖVEL" (trema), "KIT REPARAÇAD" (truncado) e uma coluna sem nome
-// (a célula "1 (1.0)" do C4 entre BANDAGEM e BIFANA). TELEMÓVEL e KIT REPARAÇÃO
-// tinham de ser detetados; o C4 (1.0 kg) só é detetado quando o nome aparece.
+// (a célula "1 (1.0)" do C4 entre BANDAGEM e BIFANA). O nome do C4 não foi lido —
+// só o temporizador do C4 armado "1:23"; o parser deve detetá-lo via esse token.
 const ocr16 = `Peso\t18.18\t128.08\t
 1 (5.0)\t28 (2.8)\t1 (1.0)\t12 (2.4)\t16 (3.2)\t
 8809\t
@@ -271,7 +271,7 @@ MACHINE PISTOL\tBANDAGEM\tBIFANA\tSUMO ANANAS\t
 88\t
 PETROL CAN\tTELEHÖVEL\tKIT REPARAÇAD`;
 const r16 = parseInventoryOCR(ocr16);
-const e16: [string, number][] = [["arma medio calibre", 1], ["bandagem", 28], ["sumo ananas", 12], ["bifana", 16], ["petrol can", 1], ["telemovel", 1], ["kit reparacao", 1]];
+const e16: [string, number][] = [["arma medio calibre", 1], ["bandagem", 28], ["sumo ananas", 12], ["bifana", 16], ["petrol can", 1], ["telemovel", 1], ["kit reparacao", 1], ["c4", 1]];
 for (const [i, q] of e16) {
   const x = r16.weights.find(w => w.item === i);
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }

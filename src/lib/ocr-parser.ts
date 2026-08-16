@@ -111,6 +111,10 @@ function fixOcrTypos(text: string): string {
     // C4 lido com espaço ou como outro caráter (ex.: "C 4", "L4").
     [/\bC\s*4\b/gi, "C4"],
     [/\bL4\b/gi, "C4"],
+    // C4 armado mostra um temporizador (ex.: "1:23") em vez do nome — o OCR lê
+    // esse token isolado. Tratamo-lo como C4; o PASS 3 liga-o à célula de peso
+    // órfã "1 (1.0)".
+    [/(^|[\t \n])1:23(?=[\t \n]|$)/g, "$1C4"],
   ];
   let result = text;
   // Trema comum em texto OCR (Ö→O, Ü→U, Ä→A) para os padrões abaixo casarem.
