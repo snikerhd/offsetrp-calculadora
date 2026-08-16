@@ -48,8 +48,16 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     setOcrOverallConfidence(data.overallConfidence ?? null);
     setOcrWeapon(data.weaponCapture || null);
 
-    if (data.error && !data.result) {
+    if (data.error && !data.result && !data.weaponCapture) {
       setOcrStatus(`❌ ${data.error}`);
+      setOcrProcessing(false);
+      return;
+    }
+
+    if (data.weaponCapture && !data.result) {
+      setOcrStatus(
+        `✅ Arma identificada: ${data.weaponCapture.weaponItem.replace(/^arma\s+/i, "")} · Munição: ${data.weaponCapture.ammo} · Acessórios: ${data.weaponCapture.accessoryCount}`
+      );
       setOcrProcessing(false);
       return;
     }

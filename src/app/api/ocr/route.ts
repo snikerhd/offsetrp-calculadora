@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       weaponCapture: parsed.weaponCapture ?? null,
       ocrRaw: ocrText,
       preview,
-      error: parsed.text ? undefined : "Não foram identificados itens automaticamente.",
+      error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente.",
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Erro desconhecido";
