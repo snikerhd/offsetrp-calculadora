@@ -239,5 +239,25 @@ for (const [i, q] of e14) {
 const lpFalso = r14.weights.find(w => w.item === "lockpick");
 if (!lpFalso) { p++; console.log("PASS sem lockpick genérico"); } else { f++; console.log("FAIL lockpick genérico qty=" + lpFalso.qty); }
 
+// Linha de ruído "92" entre os números e os nomes; o cristal (droga) e a mesa
+// química (ilegal) têm de ser detetados juntamente com a arma.
+const ocr15 = `Jogador-1122	
+Peso: 171.30 / 120.00	
+1 (5.0)	12 (1.2)	3 (0.6)	3 (0.6)	1 (1.0)	
+92	
+MACHINE PISTOL	BANDAGEM	SUMO ANANAS	HAMBURG STEAK	PETROL CAN	
+1 (5.0)	1420 (142.0)	142 (14.2)	
+MESA QUÍMICA	CRISTAL	SACO PLÁSTICO	
+0 (0.0)	0 (0.0)	
+`;
+const r15 = parseInventoryOCR(ocr15);
+const e15: [string, number][] = [["arma medio calibre", 1], ["bandagem", 12], ["sumo ananas", 3], ["petrol can", 1], ["cristal", 1420], ["saco plastico", 142], ["mesa quimica", 1]];
+for (const [i, q] of e15) {
+  const x = r15.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+const hamburgFalso = r15.weights.find(w => w.item === "hamburg steak");
+if (!hamburgFalso) { p++; console.log("PASS sem hamburg steak falso"); } else { f++; console.log("FAIL hamburg steak falso qty=" + hamburgFalso.qty); }
+
 
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
