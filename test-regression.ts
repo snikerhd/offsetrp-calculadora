@@ -169,4 +169,27 @@ for (const [i, q] of e10) {
 const cartaoFalso = r10.weights.find(w => w.item === "cartao");
 if (!cartaoFalso) { p++; console.log("PASS sem cartao falso"); } else { f++; console.log("FAIL cartao falso qty=" + cartaoFalso.qty); }
 
+// Popup de arma com "Número de Série:" é apenas identificação — não pode gerar
+// "1 arma medio calibre" nem "1 balas baixo" falsos a partir de "Munição: 0".
+const ocr11 = `Machine Pistol
+Numero de Serie: 10Sop9Kn941|gzf
+Munição: 0`;
+const r11 = parseInventoryOCR(ocr11);
+if (r11.weights.length === 0) { p++; console.log("PASS popup arma sem itens"); } else { f++; console.log("FAIL popup arma gerou itens: " + JSON.stringify(r11.weights)); }
+const armaFalsa = r11.weights.find(w => w.item === "arma medio calibre" || w.item === "balas baixo");
+if (!armaFalsa) { p++; console.log("PASS sem arma/balas falsos no popup"); } else { f++; console.log("FAIL arma/balas falsos: " + armaFalsa.item); }
+if (r11.weaponCapture && r11.weaponCapture.weaponItem === "arma medio calibre" && r11.weaponCapture.ammo === 0) { p++; console.log("PASS weaponCapture mantido (arma medio, ammo 0)"); } else { f++; console.log("FAIL weaponCapture: " + JSON.stringify(r11.weaponCapture)); }
+
+// Popup com munição > 0 conta a munição (via capture) mas NÃO a arma em si.
+const ocr12 = `Machine Pistol
+Numero de Serie: 10Sop9Kn941|gzf
+Munição: 30
+Acessórios: Precision Muzzle`;
+const r12 = parseInventoryOCR(ocr12);
+if (r12.weights.some(w => w.item === "arma medio calibre")) { f++; console.log("FAIL popup contou a arma"); } else { p++; console.log("PASS popup não conta a arma"); }
+const m12 = r12.weights.find(w => w.item === "balas medio");
+if (m12 && m12.qty === 30) { p++; console.log("PASS popup conta 30 balas medio"); } else { f++; console.log("FAIL popup balas medio got " + (m12?.qty ?? "N/A") + " exp 30"); }
+const a12 = r12.weights.find(w => w.item === "acessorios para armas");
+if (a12 && a12.qty === 1) { p++; console.log("PASS popup conta 1 acessorio"); } else { f++; console.log("FAIL popup acessorios got " + (a12?.qty ?? "N/A") + " exp 1"); }
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

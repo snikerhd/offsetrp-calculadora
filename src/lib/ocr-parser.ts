@@ -602,25 +602,35 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
 }
 
 // ── Weapon-detail popup parser ───────────────────────────────────────────
+const WEAPON_RULES: {
+  pattern: RegExp;
+  item: WeaponCapture["weaponItem"];
+  ammo: WeaponCapture["ammoItem"];
+}[] = [
+  { pattern: /revolver\s*mk\s*2/i, item: "arma baixo calibre", ammo: "balas baixo" },
+  { pattern: /bullpup\s*rifle\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
+  { pattern: /bullpup\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
+  { pattern: /machine\s*pistol/i, item: "arma medio calibre", ammo: "balas medio" },
+  { pattern: /hk\s*2|hk2/i, item: "arma medio calibre", ammo: "balas medio" },
+  { pattern: /micro\s*smg/i, item: "arma medio calibre", ammo: "balas medio" },
+  { pattern: /assault\s*smg/i, item: "arma medio calibre", ammo: "balas medio" },
+  { pattern: /tactical\s*(carbine|rifle)/i, item: "arma alto calibre", ammo: "balas alto" },
+  { pattern: /double\s*barrel/i, item: "arma alto calibre", ammo: "balas alto" },
+  { pattern: /gusenberg/i, item: "arma alto calibre", ammo: "balas alto" },
+  { pattern: /compact\s*rifle/i, item: "arma alto calibre", ammo: "balas alto" },
+  { pattern: /assault\s*rifle\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
+  { pattern: /sns\s*pistol/i, item: "arma baixo calibre", ammo: "balas baixo" },
+  { pattern: /vintage\s*pistol/i, item: "arma baixo calibre", ammo: "balas baixo" },
+  { pattern: /pistol\s*\.\s*50/i, item: "arma baixo calibre", ammo: "balas baixo" },
+];
+
+// Linhas de identificação do popup de arma (nº de série, munição, balas,
+// acessórios). São apenas texto de identificação — não são itens do inventário.
+const WEAPON_POPUP_FIELD_RE =
+  /^(?:n[uú]mero\s+de\s+s[eé]rie|muni[cç][aã]o|\bbalas?|acess[oó]rios?)\s*:/i;
+
 function parseWeaponCapture(text: string): WeaponCapture | null {
   const flat = text.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
-  const weaponRules: { pattern: RegExp; item: WeaponCapture["weaponItem"]; ammo: WeaponCapture["ammoItem"] }[] = [
-    { pattern: /revolver\s*mk\s*2/i, item: "arma baixo calibre", ammo: "balas baixo" },
-    { pattern: /bullpup\s*rifle\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
-    { pattern: /bullpup\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
-    { pattern: /machine\s*pistol/i, item: "arma medio calibre", ammo: "balas medio" },
-    { pattern: /hk\s*2|hk2/i, item: "arma medio calibre", ammo: "balas medio" },
-    { pattern: /micro\s*smg/i, item: "arma medio calibre", ammo: "balas medio" },
-    { pattern: /assault\s*smg/i, item: "arma medio calibre", ammo: "balas medio" },
-    { pattern: /tactical\s*(carbine|rifle)/i, item: "arma alto calibre", ammo: "balas alto" },
-    { pattern: /double\s*barrel/i, item: "arma alto calibre", ammo: "balas alto" },
-    { pattern: /gusenberg/i, item: "arma alto calibre", ammo: "balas alto" },
-    { pattern: /compact\s*rifle/i, item: "arma alto calibre", ammo: "balas alto" },
-    { pattern: /assault\s*rifle\s*mk\s*2/i, item: "arma alto calibre", ammo: "balas alto" },
-    { pattern: /sns\s*pistol/i, item: "arma baixo calibre", ammo: "balas baixo" },
-    { pattern: /vintage\s*pistol/i, item: "arma baixo calibre", ammo: "balas baixo" },
-    { pattern: /pistol\s*\.\s*50/i, item: "arma baixo calibre", ammo: "balas baixo" },
-  ];
 
   const isWeaponPopup =
     /n[uú]mero\s+de\s+s[eé]rie\s*:/i.test(flat) ||
@@ -628,7 +638,7 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
     /acess[oó]rios?\s*:/i.test(flat);
   if (!isWeaponPopup) return null;
 
-  const rule = weaponRules.find((r) => r.pattern.test(flat));
+  const rule = WEAPON_RULES.find((r) => r.pattern.test(flat));
   if (!rule) return null;
 
   const ammoMatch =
@@ -692,7 +702,18 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
-    .filter((l) => !NOISE_LINE_RE.test(l));
+    .filter((l) => !NOISE_LINE_RE.test(l))
+    .filter((l) => {
+      // Quando o OCR é o popup de identificação de uma arma ("Número de Série:",
+      // "Munição:", "Acessórios:"), a arma e esses campos são apenas texto de
+      // identificação — não são itens do inventário com peso. Exclui essas
+      // linhas para não aparecer um "1 arma medio calibre" falso nem um
+      // "1 balas baixo" falso derivados da munição (ex.: "Munição: 0").
+      if (!weaponCapture) return true;
+      if (WEAPON_POPUP_FIELD_RE.test(l)) return false;
+      if (WEAPON_RULES.some((r) => r.pattern.test(l))) return false;
+      return true;
+    });
 
   interface ParsedLine {
     lineIdx: number;
