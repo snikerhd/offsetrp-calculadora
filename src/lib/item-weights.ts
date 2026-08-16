@@ -129,7 +129,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "kit reparacao", displayName: "Kit Reparação", unitKg: 2, category: "crafting", illegal: false },
 
   // ── Outros ──
-  { name: "dinheiro", displayName: "Dinheiro", unitKg: 0, category: "outro", illegal: false },
+  { name: "dinheiro", displayName: "Dinheiro", unitKg: 0.00001, category: "outro", illegal: false },
   { name: "saco plastico", displayName: "Saco Plástico", unitKg: 0.1, category: "outro", illegal: false },
   { name: "nitro", displayName: "Nitro", unitKg: 1, category: "outro", illegal: true },
   { name: "bandagem", displayName: "Bandagem", unitKg: 0.1, category: "outro", illegal: false },

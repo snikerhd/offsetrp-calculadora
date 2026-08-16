@@ -274,7 +274,9 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
                           <div className="flex flex-col">
                             <span>
                               {def?.displayName || w.item}
-                              {def?.illegal && <span className="ml-1 px-1 rounded bg-red-500/20 text-red-400 text-[8px] uppercase">ilegal</span>}
+                              {(def?.illegal || (w.item === "dinheiro" && w.qty > 10000)) && (
+                                <span className="ml-1 px-1 rounded bg-red-500/20 text-red-400 text-[8px] uppercase">ilegal</span>
+                              )}
                             </span>
                             {w.matchReason && (
                               <span className="text-[9px] text-gray-500">{w.matchReason}</span>
