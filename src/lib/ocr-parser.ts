@@ -84,6 +84,7 @@ function fixOcrTypos(text: string): string {
     // OCR: "HEDACHI/HOHOSHU/CARTAD/ENCOHENDA" são misreads de itens
     [/\bHEDACHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
     [/\bHOHOSHU\b/gi, "MONOSHU"],
+    [/\bMOMOSHU\b/gi, "MONOSHU"],
     [/\bCARTAD\b/gi, "CARTAO"],
     [/\bENCOHENDA\b/gi, "ENCOMENDA"],
     [/\bBTFANA\b/gi, "BIFANA"],
@@ -280,7 +281,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/encomenda/i, "encomenda"],
   [/[aá]gua\b/i, "agua"],
   [/medwch[ií]\s*mochi|hedach[ií]\s*mochi/i, "medwchi mochi"],
-  [/monoshu/i, "monoshu"],
+  [/monoshu|momoshu|moonshine/i, "monoshu"],
   [/nobel\s*tudo/i, "nobel tudo"],
   [/caneta/i, "caneta"],
   [/passaporte/i, "passaporte"],
@@ -559,7 +560,7 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
         const firstCellEnd = cells[i].length;
         // Match must span the boundary between the two cells
         return matchStart < firstCellEnd && matchEnd > firstCellEnd;
-      });
+      }) || /^CARREGADOR\s+DE$/i.test(mergedStr);
       if (isCompound) {
         step1.push(mergedStr);
         i += 2;
@@ -594,8 +595,10 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
       if (m2 && m2[1]) {
         mergedName = mergedName.replace("$1", m2[1].toUpperCase());
       }
-      result[firstIdx] = mergedName;
-      result.splice(secondIdx, 1);
+      const keepIdx = Math.min(firstIdx, secondIdx);
+      const removeIdx = Math.max(firstIdx, secondIdx);
+      result[keepIdx] = mergedName;
+      result.splice(removeIdx, 1);
     }
   }
   return result;
