@@ -103,8 +103,21 @@ function fixOcrTypos(text: string): string {
     [/\b1BK\b/gi, "10K"],
     // OCR: "1OK" → "10K", "14K" etc. digit misreads in karat labels
     [/\b1OK\b/gi, "10K"],
+    // OCR lê trema/acentos errados: "TELEHÖVEL" é "TELEMOVEL", etc.
+    [/\bTELEH[OÖ]VEL\b/gi, "TELEMOVEL"],
+    // Nomes truncados no canto direito da imagem (ex.: "KIT REPARAÇAD").
+    [/\bREPARA[CÇ]AD\b/gi, "REPARACAO"],
+    [/\bREPARA[CÇ]AR\b/gi, "REPARACAO"],
+    // C4 lido com espaço ou como outro caráter (ex.: "C 4", "L4").
+    [/\bC\s*4\b/gi, "C4"],
+    [/\bL4\b/gi, "C4"],
   ];
   let result = text;
+  // Trema comum em texto OCR (Ö→O, Ü→U, Ä→A) para os padrões abaixo casarem.
+  result = result
+    .replace(/Ö/g, "O").replace(/ö/g, "o")
+    .replace(/Ü/g, "U").replace(/ü/g, "u")
+    .replace(/Ä/g, "A").replace(/ä/g, "a");
   for (const [pattern, replacement] of typoRules) {
     result = result.replace(pattern, replacement);
   }
@@ -248,6 +261,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/muni[cç][aã]o/i, "balas baixo"],
   [/bala\b/i, "balas baixo"],
   [/c4/i, "c4"],
+  [/c\s*4\b/i, "c4"],
   [/pack\s*safira/i, "pack safira"],
   // Pesca
   [/truta/i, "truta"],
@@ -259,7 +273,7 @@ const ITEM_MAP: [RegExp, string][] = [
   // Crafting / Materiais
   [/alum[ií]nio/i, "aluminio"],
   [/borracha/i, "borracha"],
-  [/kit\s*repara[cç][aã]o/i, "kit reparacao"],
+  [/kit\s*repara[cç][aã]?[o]?[d]?/i, "kit reparacao"],
   // Itens legais comuns
   [/bandagem/i, "bandagem"],
   [/sumo\s*ananas/i, "sumo ananas"],
@@ -584,7 +598,7 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
     { first: /^corrente$/i, second: /^(10|14|18|22)k$/i, merged: "CORRENTE DE OURO $1K" },
     { first: /^diamante$/i, second: /^bruto$/i, merged: "DIAMANTE BRUTO" },
     { first: /^anel$/i, second: /^diamante$/i, merged: "ANEL DE DIAMANTE" },
-    { first: /^kit$/i, second: /^repara[cç][aã]o$/i, merged: "KIT REPARACAO" },
+    { first: /^kit$/i, second: /^repara[cç][aã]?[o]?[d]?$/i, merged: "KIT REPARACAO" },
     { first: /^carregador\s+de$/i, second: /^(pistola|smg|rifle|shotgun)$/i, merged: "CARREGADOR DE $1" },
     { first: /^cart[aã]o\s+de$/i, second: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
     { first: /^carta\s+de$/i, second: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
@@ -702,6 +716,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   // reutilizá-los noutro item (ex.: "71 (10.7)" é da corrente 10K, não do
   // sumo laranja).
   const consumedPairKeys = new Set<string>();
+  // Células numéricas já atribuídas a um item (linha:índice da célula). O
+  // PASS 3 recupera células órfãs mesmo em linhas parcialmente usadas.
+  const consumedCells = new Set<string>();
   if (weaponCapture) {
     if (weaponCapture.ammo > 0) {
       merged.set(weaponCapture.ammoItem, (merged.get(weaponCapture.ammoItem) || 0) + weaponCapture.ammo);
@@ -1103,6 +1120,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           weightTotals.set(c.item, (weightTotals.get(c.item) || 0) + qc.totalKg);
         }
         if (qc.totalKg != null) consumedPairKeys.add(qc.qty + "|" + qc.totalKg);
+        consumedCells.add(i + ":" + qc.cellIdx);
         matched++;
       }
 
@@ -1145,6 +1163,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           if (qc.totalKg != null) {
             weightTotals.set(best.item, (weightTotals.get(best.item) || 0) + qc.totalKg);
           }
+          consumedCells.add(i + ":" + qc.cellIdx);
           matched++;
         }
       }
@@ -1154,9 +1173,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     // ── PASS 3: Weight-validated recovery for remaining numeric cells ──
     const allTextForPass3 = lines.join(" ");
     for (let i = 0; i < parsedLines.length; i++) {
-      if (usedLines.has(i)) continue;
       const line = parsedLines[i];
       for (const qc of line.numCells) {
+        if (consumedCells.has(i + ":" + qc.cellIdx)) continue;
         if (qc.totalKg == null || qc.totalKg <= 0) continue;
         const computed = qc.totalKg / qc.qty;
 
@@ -1194,6 +1213,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           merged.set(bestMatch.name, (merged.get(bestMatch.name) || 0) + qc.qty);
           weightTotals.set(bestMatch.name, (weightTotals.get(bestMatch.name) || 0) + qc.totalKg);
           consumedPairKeys.add(qc.qty + "|" + qc.totalKg);
+          consumedCells.add(i + ":" + qc.cellIdx);
           usedLines.add(i);
         }
       }

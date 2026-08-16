@@ -61,7 +61,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "pager", displayName: "Pager", unitKg: 0.1, category: "equipamento", illegal: true },
   { name: "garrafa de nitro", displayName: "Garrafa de Nitro", unitKg: 1, category: "equipamento", illegal: true },
   { name: "bomba", displayName: "Bomba", unitKg: 0.3, category: "equipamento", illegal: true },
-  { name: "c4", displayName: "C4", unitKg: 0.5, category: "equipamento", illegal: true },
+  { name: "c4", displayName: "C4", unitKg: 1, category: "equipamento", illegal: true },
   { name: "mesa quimica", displayName: "Mesa Química", unitKg: 5, category: "equipamento", illegal: true },
 
   // ── Roubo / Assalto ──

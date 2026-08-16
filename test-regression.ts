@@ -259,5 +259,30 @@ for (const [i, q] of e15) {
 const hamburgFalso = r15.weights.find(w => w.item === "hamburg steak");
 if (!hamburgFalso) { p++; console.log("PASS sem hamburg steak falso"); } else { f++; console.log("FAIL hamburg steak falso qty=" + hamburgFalso.qty); }
 
+// OCR com "TELEHÖVEL" (trema), "KIT REPARAÇAD" (truncado) e uma coluna sem nome
+// (a célula "1 (1.0)" do C4 entre BANDAGEM e BIFANA). TELEMÓVEL e KIT REPARAÇÃO
+// tinham de ser detetados; o C4 (1.0 kg) só é detetado quando o nome aparece.
+const ocr16 = `Peso\t18.18\t128.08\t
+1 (5.0)\t28 (2.8)\t1 (1.0)\t12 (2.4)\t16 (3.2)\t
+8809\t
+MACHINE PISTOL\tBANDAGEM\tBIFANA\tSUMO ANANAS\t
+1 (1.0)\t1 (0.7)\t1 (2.0)\t
+1:23\t
+88\t
+PETROL CAN\tTELEHÖVEL\tKIT REPARAÇAD`;
+const r16 = parseInventoryOCR(ocr16);
+const e16: [string, number][] = [["arma medio calibre", 1], ["bandagem", 28], ["sumo ananas", 12], ["bifana", 16], ["petrol can", 1], ["telemovel", 1], ["kit reparacao", 1]];
+for (const [i, q] of e16) {
+  const x = r16.weights.find(w => w.item === i);
+  if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
+}
+
+// C4 com nome lido com espaço ("C 4") e peso real 1.0 kg/un.
+const ocr17 = `1 (5.0)\t28 (2.8)\t1 (1.0)\t12 (2.4)\t16 (3.2)\t
+MACHINE PISTOL\tBANDAGEM\tC 4\tBIFANA\tSUMO ANANAS\t`;
+const r17 = parseInventoryOCR(ocr17);
+const x17 = r17.weights.find(w => w.item === "c4");
+if (x17 && x17.qty === 1 && x17.kg === 1) { p++; console.log("PASS c4 (1x1.0kg)"); } else { f++; console.log("FAIL c4 got qty=" + (x17?.qty ?? "N/A") + " kg=" + (x17?.kg ?? "N/A") + " exp 1x1.0"); }
+
 
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
