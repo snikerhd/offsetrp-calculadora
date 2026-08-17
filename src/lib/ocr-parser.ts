@@ -1361,15 +1361,16 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       const expectedTotal = qty * refUnit;
       const deviation = Math.abs(ocrTotalKg - expectedTotal);
       const deviationPercent = (deviation / expectedTotal) * 100;
+      const fmtNum = (n: number) => n.toLocaleString("pt-PT");
       if (deviationPercent < 5) {
         confidence = 95;
-        matchReason = `Peso perfeito: ${ocrTotalKg}kg = ${qty}x${refUnit}kg`;
+        matchReason = `Peso perfeito: ${fmtNum(ocrTotalKg)} kg = ${fmtNum(qty)} × ${fmtNum(refUnit)} kg`;
       } else if (deviationPercent < 20) {
         confidence = 80;
-        matchReason = `Peso próximo: ${ocrTotalKg}kg ≈ ${qty}x${refUnit}kg`;
+        matchReason = `Peso próximo: ${fmtNum(ocrTotalKg)} kg ≈ ${fmtNum(qty)} × ${fmtNum(refUnit)} kg`;
       } else {
         confidence = 40;
-        matchReason = `Peso divergente: ${ocrTotalKg}kg vs ${qty}x${refUnit}kg`;
+        matchReason = `Peso divergente: ${fmtNum(ocrTotalKg)} kg vs ${fmtNum(qty)} × ${fmtNum(refUnit)} kg`;
       }
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Camera } from "lucide-react";
+import { BarChart3, Camera } from "lucide-react";
 import { ITEM_BY_NAME } from "@/lib/item-weights";
 
 interface OcrBlockProps {
@@ -32,6 +32,9 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   const [ocrOverallConfidence, setOcrOverallConfidence] = useState<number | null>(null);
   const [ocrWeapon, setOcrWeapon] = useState<{ weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const ocrTotalQty = ocrWeights.reduce((sum, w) => sum + w.qty, 0);
+  const ocrTotalKg = ocrWeights.reduce((sum, w) => sum + (w.kg > 0 ? w.kg : 0), 0);
 
   const handleResult = useCallback((data: {
     result?: string;
@@ -195,8 +198,8 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         </div>
       )}
 
-      {/* Preview + Raw OCR */}
-      {ocrPreview && (
+      {/* Preview (só em separado quando ainda não há pesos detetados) */}
+      {ocrPreview && ocrWeights.length === 0 && (
         <div className="mb-3">
           <p className="mb-1 text-[10px] uppercase tracking-wider text-gray-500">Imagem analisada:</p>
           <img src={ocrPreview} alt="Preview" className="max-h-40 rounded border border-white/10" />
@@ -232,80 +235,113 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       })()}
 
       {(ocrWeights.length > 0 || ocrOverallConfidence != null) && (
-        <details className="mb-2" open>
-          <summary className="cursor-pointer text-[10px] text-gray-500 hover:text-gray-300">
-            📊 Probabilidades e Pesos ({ocrWeights.length})
+        <div className="mb-2">
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+            <h3 className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-gray-300">
+              <BarChart3 className={`h-4 w-4 ${accentColor}`} />
+              Probabilidades e Pesos
+              <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-gray-300">{ocrWeights.length}</span>
+            </h3>
             {ocrOverallConfidence != null && (
-              <span className="ml-2">
-                · Confiança global: <strong className={ocrOverallConfidence >= 80 ? "text-emerald-400" : ocrOverallConfidence >= 60 ? "text-yellow-400" : "text-red-400"}>{ocrOverallConfidence}%</strong>
+              <span className="ml-auto flex items-center gap-1 text-[10px] text-gray-500">
+                Confiança global:
+                <strong className={ocrOverallConfidence >= 80 ? "text-emerald-400" : ocrOverallConfidence >= 60 ? "text-yellow-400" : "text-red-400"}>{ocrOverallConfidence}%</strong>
               </span>
             )}
-          </summary>
+          </div>
+
           {ocrWeights.length > 0 ? (
-            <div className="mt-1 overflow-x-auto rounded border border-white/10 bg-black/40 p-2">
-              <table className="w-full text-[10px]">
-                <thead>
-                  <tr className="text-left text-gray-500 uppercase tracking-wider">
-                    <th className="py-1 pr-2">Item</th>
-                    <th className="py-1 pr-2 text-right">Qtd</th>
-                    <th className="py-1 pr-2 text-right">Peso un.</th>
-                    <th className="py-1 pr-2 text-right">Peso total</th>
-                    <th className="py-1 px-2 text-center">Confiança</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {ocrWeights.map((w, i) => {
-                    const def = ITEM_BY_NAME.get(w.item);
-                    const confBadge =
-                      w.confidenceLevel === "high"
-                        ? "bg-emerald-500/20 text-emerald-300"
-                        : w.confidenceLevel === "medium"
-                          ? "bg-yellow-500/20 text-yellow-300"
-                          : "bg-red-500/20 text-red-300";
-                    const confBar =
-                      w.confidenceLevel === "high"
-                        ? "bg-emerald-500"
-                        : w.confidenceLevel === "medium"
-                          ? "bg-yellow-500"
-                          : "bg-red-500";
-                    return (
-                      <tr key={i} className="align-top">
-                        <td className="py-1 pr-2 text-gray-200">
-                          <div className="flex flex-col">
-                            <span>
-                              {def?.displayName || w.item}
-                              {(def?.illegal || (w.item === "dinheiro" && w.qty > 10000)) && (
-                                <span className="ml-1 px-1 rounded bg-red-500/20 text-red-400 text-[8px] uppercase">ilegal</span>
+            <div className={ocrPreview ? "grid items-start gap-3 md:grid-cols-[2fr_3fr]" : ""}>
+              {ocrPreview && (
+                <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                  <p className="px-2 pt-1.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">Imagem analisada</p>
+                  <img src={ocrPreview} alt="Imagem analisada" className="max-h-80 w-full object-cover" />
+                </div>
+              )}
+              <div className="overflow-x-auto rounded-lg border border-white/10 bg-black/40 p-2">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="text-left text-[9px] uppercase tracking-wider text-gray-500">
+                      <th className="py-1.5 pr-2">Item</th>
+                      <th className="py-1.5 pr-2 text-right">Qtd</th>
+                      <th className="py-1.5 pr-2 text-right">Peso un.</th>
+                      <th className="py-1.5 pr-2 text-right">Peso total</th>
+                      <th className="py-1.5 px-2 text-center">Confiança</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {ocrWeights.map((w, i) => {
+                      const def = ITEM_BY_NAME.get(w.item);
+                      const confBadge =
+                        w.confidenceLevel === "high"
+                          ? "bg-emerald-500/20 text-emerald-300"
+                          : w.confidenceLevel === "medium"
+                            ? "bg-yellow-500/20 text-yellow-300"
+                            : "bg-red-500/20 text-red-300";
+                      const confBar =
+                        w.confidenceLevel === "high"
+                          ? "bg-emerald-500"
+                          : w.confidenceLevel === "medium"
+                            ? "bg-yellow-500"
+                            : "bg-red-500";
+                      const reasonTone =
+                        w.matchReason.startsWith("Peso perfeito")
+                          ? "text-emerald-400/80"
+                          : w.matchReason.startsWith("Peso próximo")
+                            ? "text-yellow-400/80"
+                            : w.matchReason.startsWith("Peso divergente")
+                              ? "text-red-400/80"
+                              : "text-gray-500";
+                      return (
+                        <tr key={i} className="align-top">
+                          <td className="py-1.5 pr-2">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-medium text-gray-100">
+                                {def?.displayName || w.item}
+                                {(def?.illegal || (w.item === "dinheiro" && w.qty > 10000)) && (
+                                  <span className="ml-1.5 rounded bg-red-500/20 px-1 py-0.5 text-[8px] font-bold uppercase text-red-400">ilegal</span>
+                                )}
+                              </span>
+                              {w.matchReason && (
+                                <span className={`text-[9px] ${reasonTone}`}>{w.matchReason}</span>
                               )}
-                            </span>
-                            {w.matchReason && (
-                              <span className="text-[9px] text-gray-500">{w.matchReason}</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-1 pr-2 text-right text-gray-300 font-mono">{w.qty.toLocaleString("pt-PT")}</td>
-                        <td className="py-1 pr-2 text-right text-gray-500 font-mono">{w.unitKg != null ? `${w.unitKg} kg` : "—"}</td>
-                        <td className="py-1 pr-2 text-right text-gray-300 font-mono">{w.kg > 0 ? `${w.kg.toLocaleString("pt-PT")} kg` : "—"}</td>
-                        <td className="py-1 px-2 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <span className={`px-1.5 py-0.5 rounded font-bold ${confBadge}`}>{w.confidence}%</span>
-                            <div className="h-1 w-12 overflow-hidden rounded-full bg-gray-700">
-                              <div className={`h-full ${confBar}`} style={{ width: `${w.confidence}%` }} />
                             </div>
-                          </div>
-                        </td>
+                          </td>
+                          <td className="py-1.5 pr-2 text-right font-mono text-gray-200">{w.qty.toLocaleString("pt-PT")}</td>
+                          <td className="py-1.5 pr-2 text-right font-mono text-gray-500">{w.unitKg != null ? `${w.unitKg} kg` : "—"}</td>
+                          <td className="py-1.5 pr-2 text-right font-mono font-semibold text-gray-100">{w.kg > 0 ? `${w.kg.toLocaleString("pt-PT")} kg` : "—"}</td>
+                          <td className="py-1.5 px-2 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={`rounded px-1.5 py-0.5 font-bold ${confBadge}`}>{w.confidence}%</span>
+                              <div className="h-1 w-12 overflow-hidden rounded-full bg-gray-700">
+                                <div className={`h-full ${confBar}`} style={{ width: `${w.confidence}%` }} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {ocrWeights.length > 0 && (
+                    <tfoot>
+                      <tr className="border-t border-white/10 bg-white/5">
+                        <td className="py-1.5 pr-2 font-bold text-gray-300">Total</td>
+                        <td className="py-1.5 pr-2 text-right font-bold text-gray-200">{ocrTotalQty.toLocaleString("pt-PT")}</td>
+                        <td className="py-1.5 pr-2" />
+                        <td className="py-1.5 pr-2 text-right font-bold text-gray-100">{ocrTotalKg.toLocaleString("pt-PT")} kg</td>
+                        <td className="py-1.5 px-2" />
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
             </div>
           ) : (
             <div className="mt-1 rounded border border-white/10 bg-black/40 p-2 text-[10px] text-gray-500">
               Nenhum peso reconhecido.
             </div>
           )}
-        </details>
+        </div>
       )}
 
       {ocrRawText && (
