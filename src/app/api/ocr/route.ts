@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tmpdir } from "os";
 import { join } from "path";
+import { existsSync, mkdirSync } from "fs";
 import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
@@ -12,11 +12,52 @@ const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "helloworld";
 // suficiente para a chave normal responder; acima disso usamos o tesseract.
 const OCR_SPACE_TIMEOUT_MS = 15_000;
 const IMAGE_FETCH_TIMEOUT_MS = 20_000;
+// Nenhum motor pode exceder isto — a rota responde sempre com JSON.
+const ENGINES_CAP_MS = 30_000;
 
-let workerPromise: ReturnType<typeof createWorker> | null = null;
+// Cache persistente do modelo por.traineddata (ficheiro ~11MB). O tmpdir é
+// limpo a cada reboot e obriga a re-download em cada arranque.
+const TESS_CACHE_PATH = join(process.cwd(), ".cache", "tessdata");
+try {
+  mkdirSync(TESS_CACHE_PATH, { recursive: true });
+} catch { /* empty */ }
+
+let workerPromise: Promise<Awaited<ReturnType<typeof createWorker>>> | null = null;
+
+// Em Next.js (Turbopack) o `__dirname` interno do tesseract.js é reescrito para
+// um caminho inválido ("C:\ROOT\node_modules\..."), o que rebenta o spawn do
+// worker (`new Worker(workerPath)`) e deixa o OCR pendurado. Resolve aqui o
+// caminho real do worker-script a partir da raiz do projeto.
+function resolveTesseractWorkerPath(): string {
+  const viaCwd = join(
+    process.cwd(),
+    "node_modules",
+    "tesseract.js",
+    "src",
+    "worker-script",
+    "node",
+    "index.js"
+  );
+  if (existsSync(viaCwd)) return viaCwd;
+  try {
+    return require.resolve("tesseract.js/src/worker-script/node/index.js");
+  } catch {
+    return viaCwd;
+  }
+}
+
 function getWorker() {
   if (!workerPromise) {
-    workerPromise = createWorker("por", 1, { cachePath: join(tmpdir(), "tesseract-ocr") });
+    workerPromise = createWorker("por", 1, {
+      workerPath: resolveTesseractWorkerPath(),
+      langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/por/4.0.0_best_int",
+      cachePath: TESS_CACHE_PATH,
+      errorHandler: (e: unknown) => console.error("tesseract worker error:", e),
+    }).catch((e) => {
+      console.error("tesseract worker init failed:", e);
+      workerPromise = null;
+      throw e;
+    });
   }
   return workerPromise;
 }
@@ -93,7 +134,8 @@ async function tesseractOcr(processed: Buffer): Promise<string> {
 }
 
 // Devolve o primeiro texto útil entre os dois motores (tesseract local é
-// rápido; OCR.space é melhor mas pode pendurar até ao timeout).
+// rápido; OCR.space é melhor mas pode pendurar até ao timeout). Um cap garante
+// que a rota responde sempre com JSON, mesmo que um motor fique pendurado.
 function firstUsefulText(a: Promise<string>, b: Promise<string>): Promise<string> {
   return new Promise((resolve) => {
     let done = false;
@@ -107,8 +149,14 @@ function firstUsefulText(a: Promise<string>, b: Promise<string>): Promise<string
     };
     a.then(finish);
     b.then(finish);
+    const capTimer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      resolve("");
+    }, ENGINES_CAP_MS);
     Promise.all([a, b]).then(([av, bv]) => {
       if (done) return;
+      clearTimeout(capTimer);
       done = true;
       const preferred = av && av.trim().length >= 3 ? av : bv && bv.trim().length >= 3 ? bv : "";
       resolve(preferred.trim());
