@@ -83,6 +83,7 @@ function fixOcrTypos(text: string): string {
     [/\bSUNO\b/gi, "SUMO"],
     // OCR: "HEDACHI/HOHOSHU/CARTAD/ENCOHENDA" são misreads de itens
     [/\bHEDACHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
+    [/\bMEOWCHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
     [/\bHOHOSHU\b/gi, "MONOSHU"],
     [/\bMOMOSHU\b/gi, "MONOSHU"],
     [/\bCARTAD\b/gi, "CARTAO"],
@@ -300,7 +301,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/carta\s+de\b/i, "carta de conducao"],
   [/encomenda/i, "encomenda"],
   [/[aá]gua\b/i, "agua"],
-  [/medwch[ií]\s*mochi|hedach[ií]\s*mochi/i, "medwchi mochi"],
+  [/meowch[ií]\s*mochi|medwch[ií]\s*mochi|hedach[ií]\s*mochi/i, "medwchi mochi"],
   [/monoshu|momoshu|moonshine/i, "monoshu"],
   [/saco\s*do\s*gin[aá]sio/i, "saco do ginasio"],
   [/\bhammer\b/i, "hammer"],
@@ -634,6 +635,28 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
       const removeIdx = Math.max(firstIdx, secondIdx);
       result[keepIdx] = mergedName;
       result.splice(removeIdx, 1);
+    }
+  }
+
+  // "CARREGADOR DE" pode aparecer dividido em N células quando há N
+  // carregadores lado a lado (ex.: "CARREGADOR DE | CARREGADOR DE" + colunas
+  // "SMG | PISTOLA"). A regra genérica acima só junta UM par; aqui emparelhamos
+  // cada fragmento "CARREGADOR DE" com a célula do tipo seguinte, na ordem.
+  {
+    const weaponType = /^(pistola|smg|rifle|shotgun)$/i;
+    const carregadorFrag = /^CARREGADOR\s+DE$/i;
+    const carregadorIdxs: number[] = [];
+    const weaponIdxs: number[] = [];
+    result.forEach((c, i) => {
+      if (carregadorFrag.test(c)) carregadorIdxs.push(i);
+      else if (weaponType.test(c)) weaponIdxs.push(i);
+    });
+    const pairs = Math.min(carregadorIdxs.length, weaponIdxs.length);
+    for (let k = 0; k < pairs; k++) {
+      result[weaponIdxs[k]] = "CARREGADOR DE " + result[weaponIdxs[k]].toUpperCase();
+    }
+    for (let k = pairs - 1; k >= 0; k--) {
+      result.splice(carregadorIdxs[k], 1);
     }
   }
   return result;
