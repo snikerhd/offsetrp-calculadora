@@ -7,6 +7,11 @@ import { parseInventoryOCR } from "@/lib/ocr-parser";
 
 const OCR_SPACE_URL = "https://api.ocr.space/parse/image";
 const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "helloworld";
+// O OCR.space (chave demo "helloworld") pode ficar pendurado sem resposta. Sem
+// timeout, o pedido fica "A analisar imagem com OCR..." para sempre. 15s é o
+// suficiente para a chave normal responder; acima disso usamos o tesseract.
+const OCR_SPACE_TIMEOUT_MS = 15_000;
+const IMAGE_FETCH_TIMEOUT_MS = 20_000;
 
 let workerPromise: ReturnType<typeof createWorker> | null = null;
 function getWorker() {
@@ -19,15 +24,96 @@ function getWorker() {
 // OCR.space (OCREngine 2) devolve texto vazio em PNGs RGBA e em screenshots
 // pequenas. Upscale 2x + conversão para JPEG resolve; o tesseract.js local
 // serve de fallback quando a API externa falha ou fica sem quota.
+// O scale é limitado: nunca ultrapassa ~2400px na maior dimensão. Aplicar 2x
+// a screenshots grandes só quadruplica os pixels e torna a API e o tesseract
+// mais lentos sem ganho de precisão.
 async function preprocessImage(base64Data: string): Promise<Buffer> {
   const buf = Buffer.from(base64Data, "base64");
   const meta = await sharp(buf).metadata();
-  const scale = 2;
+  const w = meta.width || 0;
+  const h = meta.height || 0;
+  const scale = Math.min(2, 2400 / Math.max(w || 1, h || 1));
   return sharp(buf)
-    .resize(Math.round((meta.width || 0) * scale), Math.round((meta.height || 0) * scale))
+    .resize(Math.round(Math.max(1, w * scale)), Math.round(Math.max(1, h * scale)))
     .flatten({ background: "#ffffff" })
     .jpeg({ quality: 90 })
     .toBuffer();
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function ocrSpace(processed: Buffer): Promise<string> {
+  try {
+    const formBody = new URLSearchParams();
+    formBody.append("base64Image", `data:image/jpeg;base64,${processed.toString("base64")}`);
+    formBody.append("language", "por");
+    formBody.append("isOverlayRequired", "false");
+    formBody.append("isTable", "true");
+    formBody.append("OCREngine", "2");
+
+    const ocrResp = await fetchWithTimeout(
+      OCR_SPACE_URL,
+      {
+        method: "POST",
+        headers: {
+          apikey: OCR_SPACE_KEY,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: formBody.toString(),
+      },
+      OCR_SPACE_TIMEOUT_MS
+    );
+
+    if (!ocrResp.ok) return "";
+    const ocrData = await ocrResp.json();
+    return (ocrData.ParsedResults?.[0]?.ParsedText || "").trim();
+  } catch (err) {
+    console.error("OCR.space error:", err);
+    return "";
+  }
+}
+
+async function tesseractOcr(processed: Buffer): Promise<string> {
+  try {
+    const worker = await getWorker();
+    const { data } = await worker.recognize(processed);
+    return (data.text || "").trim();
+  } catch (err) {
+    console.error("tesseract fallback error:", err);
+    return "";
+  }
+}
+
+// Devolve o primeiro texto útil entre os dois motores (tesseract local é
+// rápido; OCR.space é melhor mas pode pendurar até ao timeout).
+function firstUsefulText(a: Promise<string>, b: Promise<string>): Promise<string> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (val: string) => {
+      if (done) return;
+      const t = val.trim();
+      if (t.length >= 3) {
+        done = true;
+        resolve(t);
+      }
+    };
+    a.then(finish);
+    b.then(finish);
+    Promise.all([a, b]).then(([av, bv]) => {
+      if (done) return;
+      done = true;
+      const preferred = av && av.trim().length >= 3 ? av : bv && bv.trim().length >= 3 ? bv : "";
+      resolve(preferred.trim());
+    });
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -52,13 +138,17 @@ export async function POST(req: NextRequest) {
         if (id) directUrl = `https://i.imgur.com/${id}.png`;
       }
 
-      const imgResp = await fetch(directUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          Accept: "image/*,*/*",
+      const imgResp = await fetchWithTimeout(
+        directUrl,
+        {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            Accept: "image/*,*/*",
+          },
+          redirect: "follow",
         },
-        redirect: "follow",
-      });
+        IMAGE_FETCH_TIMEOUT_MS
+      );
 
       if (!imgResp.ok) {
         return NextResponse.json(
@@ -76,46 +166,13 @@ export async function POST(req: NextRequest) {
 
     const preview = `data:${mimeType};base64,${base64Data}`;
     const processed = await preprocessImage(base64Data);
-    let ocrText = "";
 
-    try {
-      const formBody = new URLSearchParams();
-      formBody.append("base64Image", `data:image/jpeg;base64,${processed.toString("base64")}`);
-      formBody.append("language", "por");
-      formBody.append("isOverlayRequired", "false");
-      formBody.append("isTable", "true");
-      formBody.append("OCREngine", "2");
+    // Corre OCR.space (com timeout) e o tesseract local em paralelo e usa o
+    // primeiro que devolver texto útil. Assim, se a API externa pendurar ou
+    // estiver sem quota, o tesseract (rápido) responde logo.
+    const ocrText = await firstUsefulText(ocrSpace(processed), tesseractOcr(processed));
 
-      const ocrResp = await fetch(OCR_SPACE_URL, {
-        method: "POST",
-        headers: {
-          apikey: OCR_SPACE_KEY,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: formBody.toString(),
-      });
-
-      if (ocrResp.ok) {
-        const ocrData = await ocrResp.json();
-        if (ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
-          ocrText = ocrData.ParsedResults.map((r: { ParsedText?: string }) => r.ParsedText || "").join("\n");
-        }
-      }
-    } catch (ocrErr) {
-      console.error("OCR.space error:", ocrErr);
-    }
-
-    if (!ocrText || ocrText.trim().length < 3) {
-      try {
-        const worker = await getWorker();
-        const { data } = await worker.recognize(processed);
-        ocrText = (data.text || "").trim();
-      } catch (tessErr) {
-        console.error("tesseract fallback error:", tessErr);
-      }
-    }
-
-    if (!ocrText || ocrText.trim().length < 3) {
+    if (ocrText.length < 3) {
       return NextResponse.json({
         result: "",
         ocrRaw: ocrText || "",
