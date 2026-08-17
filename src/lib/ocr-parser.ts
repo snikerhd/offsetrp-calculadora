@@ -907,7 +907,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   // "CRIANE") desalinha colunas e gera itens falsos (ex.: "cartao 64×0.1"
   // em vez de "1× Cartão de Cidadão — 0,0 kg"). Quando são detetadas pelo
   // menos 2 linhas de síntese, são a fonte autoritativa e a grelha é ignorada.
-  const SUMMARY_RE = /(\d+)\s*[×x]\s*(.+?)\s*[—–-]\s*([\d.,]+)\s*kg\s*$/i;
+  const SUMMARY_RE = /(\d[\d.,]*)\s*[×x]\s*(.+?)\s*[—–-]\s*([\d.,]+)\s*kg\s*$/i;
   const summaryItems: { name: string; qty: number; totalKg: number; lineIdx: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(SUMMARY_RE);
@@ -1223,6 +1223,61 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
     // ── PASS 3: Weight-validated recovery for remaining numeric cells ──
     const allTextForPass3 = lines.join(" ");
+    // Nomes genéricos que NÃO podem casar quando a variante específica já está
+    // no texto (ex.: "lockpick" quando existe "LOCKPICK AVANÇADA"). Sem isto,
+    // "4 (2.0)" de um stack de tigres era atribuído a "lockpick" porque o peso
+    // unitário (0.5 kg) é igual e "LOCKPICK AVANÇADA" aparece no texto.
+    const genericShadow = (itemName: string): boolean => {
+      switch (itemName) {
+        case "lockpick":
+          return /lockpick[\s\S]*?avan[cç]ad/i.test(allTextForPass3);
+        case "colete":
+          return /colete\s*fortalecid/i.test(allTextForPass3);
+        case "cristal":
+          return /cristal\s*processado/i.test(allTextForPass3);
+        case "diamante":
+          return /diamante\s*bruto/i.test(allTextForPass3) ||
+            (merged.has("anel") && /anel\s*(de\s*)?diamante/i.test(allTextForPass3));
+        case "sumo":
+          return /sumo\s*(maracu|laranja|manga|ananas)/i.test(allTextForPass3) ||
+            merged.has("sumo maracuja") || merged.has("sumo laranja") || merged.has("sumo ananas");
+        case "corrente":
+          return /corrente\s*10k/i.test(allTextForPass3);
+        case "cartao":
+          return /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextForPass3) ||
+            /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3);
+        default:
+          return false;
+      }
+    };
+
+    // Proximidade entre a célula órfã e o nome do item: procura a linha de
+    // texto vizinha (até 3 linhas) que contenha o nome e pontua com a coluna
+    // (peso 100) e a distância da linha (peso 1). A coluna é o sinal mais
+    // forte: na grelha do jogo a célula numérica N alinha com o nome N. Isto
+    // resolve stacks órfãos (ex.: "4 (2.0)" → TIGRE e não LOCKPICK AVANÇADA,
+    // apesar de ambos pesarem 0.5 kg). Sem nome perto, cai no comportamento
+    // antigo (nome em qualquer parte do texto) com pontuação pior.
+    const proximityScore = (itemName: string, cellLine: number, cellCol: number): number => {
+      let best = Infinity;
+      for (let d = 1; d <= 3; d++) {
+        for (const dir of [-1, 1]) {
+          const adj = cellLine + dir * d;
+          if (adj < 0 || adj >= parsedLines.length) continue;
+          const adjLine = parsedLines[adj];
+          if (adjLine.textCells.length === 0) continue;
+          for (const tc of adjLine.textCells) {
+            if (matchItemName(tc.text) !== itemName) continue;
+            best = Math.min(best, Math.abs(tc.cellIdx - cellCol) * 100 + d);
+          }
+        }
+      }
+      if (Number.isFinite(best)) return best;
+      const patterns = ITEM_MAP.filter(([, name]) => name === itemName).map(([p]) => p);
+      if (patterns.some((p) => p.test(allTextForPass3))) return 1000;
+      return Infinity;
+    };
+
     for (let i = 0; i < parsedLines.length; i++) {
       const line = parsedLines[i];
       for (const qc of line.numCells) {
@@ -1230,14 +1285,15 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (qc.totalKg == null || qc.totalKg <= 0) continue;
         const computed = qc.totalKg / qc.qty;
 
-        let bestMatch: { name: string; diff: number } | null = null;
+        let bestMatch: { name: string; diff: number; score: number } | null = null;
         for (const itemDef of ITEM_CATALOG) {
           if (itemDef.unitKg <= 0) continue;
           if (itemDef.name === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextForPass3)) continue;
           if (itemDef.name === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3)) continue;
+          if (genericShadow(itemDef.name)) continue;
+
           const diff = Math.abs(computed - itemDef.unitKg);
           if (diff > Math.max(0.03, itemDef.unitKg * 0.15)) continue;
-          if (merged.has(itemDef.name)) continue;
 
           let altMatch = false;
           const alts = ALT_WEIGHTS[itemDef.name];
@@ -1249,15 +1305,17 @@ export function parseInventoryOCR(rawText: string): ParseResult {
               }
             }
           }
-
           if (!altMatch && diff > Math.max(0.03, itemDef.unitKg * 0.15)) continue;
-          const nameFound = ITEM_MAP.some(
-            ([pattern, name]) => name === itemDef.name && pattern.test(allTextForPass3)
-          );
-          if (!nameFound) continue;
 
-          if (!bestMatch || diff < bestMatch.diff) {
-            bestMatch = { name: itemDef.name, diff };
+          const score = proximityScore(itemDef.name, i, qc.cellIdx);
+          if (!Number.isFinite(score)) continue;
+
+          if (
+            !bestMatch ||
+            diff < bestMatch.diff - 1e-9 ||
+            (Math.abs(diff - bestMatch.diff) <= 1e-9 && score < bestMatch.score)
+          ) {
+            bestMatch = { name: itemDef.name, diff, score };
           }
         }
         if (bestMatch) {
