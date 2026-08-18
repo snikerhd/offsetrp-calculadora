@@ -1547,6 +1547,12 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           if (adj < 0 || adj >= parsedLines.length) continue;
           const adjLine = parsedLines[adj];
           if (adjLine.textCells.length === 0) continue;
+          // Uma linha de nomes já consumida pelo CORE/PASS 3.5 (ex.: a fila
+          // "LICENÇA PESCA … TRUTA" que já serviu a linha numérica de cima) não
+          // pode voltar a atribuir itens a células órfãs de outra fila — senão
+          // "8 (1.6)"/"14 (2.8)" de uma segunda fila sem nomes eram somados à
+          // TRUTA (regressão introduzida em 3bb3af5).
+          if (usedLines.has(adj)) continue;
           for (const tc of adjLine.textCells) {
             if (matchItemName(tc.text) !== itemName) continue;
             best = Math.min(best, Math.abs(tc.cellIdx - cellCol) * 100 + d);
@@ -1554,8 +1560,17 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         }
       }
       if (Number.isFinite(best)) return best;
+      // Fallback amplo de texto (nome em qualquer parte do OCR, pontuação
+      // fraca) — mas só quando ainda existe um nome do item numa linha livre.
+      // Se TODOS os nomes já foram consumidos (ex.: a TRUTA da fila de cima),
+      // o fallback reutilizaria um nome já atribuído e duplicaria o item.
       const patterns = ITEM_MAP.filter(([, name]) => name === itemName).map(([p]) => p);
-      if (patterns.some((p) => p.test(deaccent(allTextForPass3)))) return 1000;
+      if (patterns.length === 0) return Infinity;
+      const freeText = parsedLines
+        .filter((pl) => !usedLines.has(pl.lineIdx))
+        .map((pl) => pl.cells.join(" "))
+        .join(" ");
+      if (patterns.some((p) => p.test(deaccent(freeText)))) return 1000;
       return Infinity;
     };
 

@@ -381,5 +381,50 @@ if (!cartaoFalso19) { p++; console.log("PASS sem cartao generico falso na sínte
 const totalKg19 = r19.weights.reduce((s, w) => s + w.kg, 0);
 if (Math.abs(totalKg19 - 32.9) < 0.05) { p++; console.log("PASS total síntese 32.9 kg"); } else { f++; console.log("FAIL total síntese got " + totalKg19.toFixed(2) + " exp 32.9"); }
 
+// Grelha de 1 célula por linha: os stacks "65 (13.0)" (Meowchi Mochi lido como
+// "HEOWCHI MOCHI") e "187 (37.4)" (HOHOSHU) têm de ser somados ao MONOSHU
+// (0.2 kg/un) — total 252×0.2 = 50.4 kg — sem perder nenhuma célula.
+const ocr20 = `27 (2.7)
+1 (1.0)
+65 (13.0)
+187 (37.4)
+44
+BANDAGEN
+PETROL CAN
+HEOWCHI MOCHI
+HOHOSHU
+6 (3.0)
+3 (6.0)
+1 (5.0)
+1 (0.5)
+1 (1.0)
+ÁGUA
+KIT REPARAÇÃO
+MACHINE PISTOL
+LOCKPICK AVANÇADA
+RADIO
+1 (0.7)
+17:23
+TELENÓVEL Repo offset calculadora 65 mochi`;
+const r20 = parseInventoryOCR(ocr20);
+const e20: [string, number, number][] = [
+  ["agua", 6, 3],
+  ["kit reparacao", 3, 6],
+  ["arma medio calibre", 1, 5],
+  ["lockpick avancada", 1, 0.5],
+  ["radio", 1, 1],
+  ["bandagem", 27, 2.7],
+  ["petrol can", 1, 1],
+  ["monoshu", 252, 50.4],
+  ["telemovel", 1, 0.7],
+];
+for (const [item, qty, kg] of e20) {
+  const w = r20.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01) { p++; console.log("PASS " + item + " " + qty + "x" + kg); }
+  else { f++; console.log("FAIL " + item + " got " + (w ? w.qty + "x" + w.kg : "N/A") + " exp " + qty + "x" + kg); }
+}
+const totalQty20 = r20.weights.reduce((s, w) => s + w.qty, 0);
+const totalKg20 = r20.weights.reduce((s, w) => s + w.kg, 0);
+if (totalQty20 === 293 && Math.abs(totalKg20 - 70.3) < 0.05) { p++; console.log("PASS total grelha 293×70.3 kg"); } else { f++; console.log("FAIL total got " + totalQty20 + "x" + totalKg20.toFixed(2) + " exp 293x70.3"); }
 
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
