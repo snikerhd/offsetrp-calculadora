@@ -7,6 +7,12 @@ import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { openaiOcr } from "@/lib/openai-ocr";
 import { puterOcr } from "@/lib/puter-ocr";
 
+// Vercel (Hobby) corta funções aos 10s por omissão; o OCR pode demorar até
+// 30s (cap dos motores). Este limite evita 504 quando o Puter/fallbacks
+// penduram (máximo permitido no Hobby: 60s).
+export const maxDuration = 60;
+export const runtime = "nodejs";
+
 const OCR_SPACE_URL = "https://api.ocr.space/parse/image";
 const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "helloworld";
 // O OCR.space (chave demo "helloworld") pode ficar pendurado sem resposta. Sem
