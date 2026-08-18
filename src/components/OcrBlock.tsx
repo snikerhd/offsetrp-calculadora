@@ -36,6 +36,38 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   const ocrTotalQty = ocrWeights.reduce((sum, w) => sum + w.qty, 0);
   const ocrTotalKg = ocrWeights.reduce((sum, w) => sum + (w.kg > 0 ? w.kg : 0), 0);
 
+  // OCR no navegador via Puter.js (user-pays: usa o saldo grátis do visitante,
+  // sem chave para o dono do site). Só faz sentido para URLs públicas; ficheiros
+  // locais são convertidos para data URL antes de chamar.
+  const runServerOcr = useCallback(async (payload: { imageUrl?: string; imageBase64?: string; mimeType?: string; rawText?: string }) => {
+    const resp = await fetch("/api/ocr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return resp.json() as Promise<{
+      result?: string;
+      preview?: string;
+      error?: string;
+      ocrRaw?: string;
+      detectedWeights?: DetectedWeight[];
+      overallConfidence?: number;
+      weaponCapture?: { weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null;
+    }>;
+  }, []);
+
+  const runWithPuter = useCallback(async (source: string): Promise<string> => {
+    if (typeof window === "undefined" || !window.puter?.ai?.img2txt) return "";
+    try {
+      setOcrStatus("🔍 A analisar imagem com OCR no navegador (Puter)...");
+      const text = await window.puter.ai.img2txt(source);
+      return (text || "").trim();
+    } catch (error) {
+      console.warn("Puter.js OCR falhou, a cair para o servidor:", error);
+      return "";
+    }
+  }, []);
+
   const handleResult = useCallback((data: {
     result?: string;
     preview?: string;
@@ -90,20 +122,23 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     setOcrStatus("🔍 A analisar imagem com OCR...");
 
     try {
-      const resp = await fetch("/api/ocr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: ocrUrl.trim() }),
-      });
-      const data = await resp.json();
-      if (!resp.ok && !data.result) throw new Error(data.error || `Erro ${resp.status}`);
+      const puterText = await runWithPuter(ocrUrl.trim());
+      if (puterText.length >= 3) {
+        const data = await runServerOcr({ rawText: puterText, imageUrl: ocrUrl.trim() });
+        if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
+        handleResult(data);
+        return;
+      }
+
+      const data = await runServerOcr({ imageUrl: ocrUrl.trim() });
+      if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
       handleResult(data);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Erro desconhecido";
       setOcrStatus(`❌ ${msg}`);
       setOcrProcessing(false);
     }
-  }, [ocrUrl, handleResult]);
+  }, [ocrUrl, handleResult, runWithPuter, runServerOcr]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,13 +158,16 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         if (!match) { setOcrStatus("❌ Formato inválido."); setOcrProcessing(false); return; }
 
         try {
-          const resp = await fetch("/api/ocr", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageBase64: match[2], mimeType: match[1] }),
-          });
-          const data = await resp.json();
-          if (!resp.ok && !data.result) throw new Error(data.error || `Erro ${resp.status}`);
+          const puterText = await runWithPuter(dataUrl);
+          if (puterText.length >= 3) {
+            const pdata = await runServerOcr({ rawText: puterText });
+            if (!pdata.result && !pdata.weaponCapture && pdata.error) throw new Error(pdata.error);
+            handleResult(pdata);
+            return;
+          }
+
+          const data = await runServerOcr({ imageBase64: match[2], mimeType: match[1] });
+          if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
           handleResult(data);
         } catch (error) {
           const msg = error instanceof Error ? error.message : "Erro desconhecido";
@@ -139,7 +177,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       };
       reader.readAsDataURL(file);
     },
-    [handleResult]
+    [handleResult, runWithPuter, runServerOcr]
   );
 
   return (

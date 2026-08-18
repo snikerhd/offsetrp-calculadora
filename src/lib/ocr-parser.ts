@@ -199,6 +199,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/martelo/i, "arma branca"],
   // Baixo calibre
   [/sns\s*pistol\s+hk\s*2/i, "arma sns hk2 dupla"],
+  [/sns\s*pistol\s+mk\s*2/i, "arma baixo calibre"],
   [/sns\s*pistol/i, "arma baixo calibre"],
   [/vintage\s*pistol/i, "arma baixo calibre"],
   [/pistol\s*\.?50/i, "arma baixo calibre"],
@@ -280,6 +281,7 @@ const ITEM_MAP: [RegExp, string][] = [
   // Crafting / Materiais
   [/alum[ií]nio/i, "aluminio"],
   [/borracha/i, "borracha"],
+  [/ferro\s*-?\s*velho/i, "ferro velho"],
   [/kit\s*repara[cç][aã]?[o]?[d]?/i, "kit reparacao"],
   // Itens legais comuns
   [/bandagem/i, "bandagem"],
@@ -288,6 +290,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/sumo\s*laranja/i, "sumo laranja"],
   [/sumo/i, "sumo"],
   [/bifana/i, "bifana"],
+  [/copo\s*(de\s*)?cart[aã]o/i, "copo de cartao"],
   [/r[aá]dio/i, "radio"],
   [/telem[oó]vel/i, "telemovel"],
   [/petrol\s*can/i, "petrol can"],
@@ -463,6 +466,13 @@ function matchItemName(text: string): string {
   return best ? best.name : normalized.toLowerCase();
 }
 
+// Remove acentos preservando o comprimento (1:1): NFD adiciona combining marks
+// que mudariam os índices; este replace troca cada carácter acentuado pelo seu
+// carácter base sem alterar a posição no texto.
+function deaccent(text: string): string {
+  return text.replace(/[\u00C0-\u024F\u1E00-\u1EFF]/g, (ch) => ch.normalize("NFD").charAt(0));
+}
+
 // ── Split a line into cells ──────────────────────────────────────────────
 function splitCells(line: string): string[] {
   if (line.includes("\t")) {
@@ -491,7 +501,7 @@ function splitCells(line: string): string[] {
     let i = 0;
     while (i < words.length) {
       const compoundRules = [
-        /^(ANEL|CORRENTE|COLETE|MESA|SACO|LOCKPICK|SUMO|CARREGADOR|DIAMANTE|KIT|MICRO|ASSAULT|MACHINE|BULLPUP|DOUBLE|COMPACT|ADVANCED|TACTICAL|MILITARY|SNS|VINTAGE|AP|COMBAT|FOLHA|CABE[CÇ]O|SEMENTE|[OÓ]LEO|PACOTE|BLUEPRINT|TACO|CHAVE|GARRAFA|PEDACO|CART[AÃ]O|ARMA|TV|BA[UÚ]|DI[AÁ]RIO|CRYPTO|[AÁ]GUIA|TUBAR[AÃ]O|REVOLVER|RIFLE|PETROL|TUNA|LICEN[CÇ]A|CANA|PACK)$/i,
+        /^(ANEL|CORRENTE|COLETE|MESA|SACO|LOCKPICK|SUMO|CARREGADOR|DIAMANTE|KIT|MICRO|ASSAULT|MACHINE|BULLPUP|DOUBLE|COMPACT|ADVANCED|TACTICAL|MILITARY|SNS|VINTAGE|AP|COMBAT|FOLHA|CABE[CÇ]O|SEMENTE|[OÓ]LEO|PACOTE|BLUEPRINT|TACO|CHAVE|GARRAFA|PEDACO|CART[AÃ]O|ARMA|TV|BA[UÚ]|DI[AÁ]RIO|CRYPTO|[AÁ]GUIA|TUBAR[AÃ]O|REVOLVER|RIFLE|PETROL|TUNA|LICEN[CÇ]A|CANA|PACK|COPO)$/i,
       ];
       let merged = false;
       for (const rule of compoundRules) {
@@ -749,12 +759,12 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const weaponCapture = parseWeaponCapture(rawText);
   const merged = new Map<string, number>();
   const weightTotals = new Map<string, number>();
-  // Pares "qty (peso)" já atribuídos pelo CORE/PASS 3 — o PASS 4 não pode
-  // reutilizá-los noutro item (ex.: "71 (10.7)" é da corrente 10K, não do
-  // sumo laranja).
-  const consumedPairKeys = new Set<string>();
-  // Células numéricas já atribuídas a um item (linha:índice da célula). O
-  // PASS 3 recupera células órfãs mesmo em linhas parcialmente usadas.
+  // Células numéricas já atribuídas a um item (linha:índice da célula). Usada
+  // por TODOS os passes como fonte única de verdade para "quem já foi
+  // consumido": dois pares idênticos no OCR (ex.: dois "2(1.0)") são células
+  // distintas, por isso consumir um não bloqueia o outro (ex.: computador
+  // consome um "2(1.0)" e o tigre fica com o segundo; relógio com "2(0.4)"
+  // e o medwchi mochi com o outro).
   const consumedCells = new Set<string>();
   if (weaponCapture) {
     if (weaponCapture.ammo > 0) {
@@ -768,6 +778,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const lines = correctedText
     .split(/\r?\n/)
     .map((l) => l.trim())
+    // Remove acentos preservando o comprimento (1:1): os padrões do ITEM_MAP
+    // e a mesclagem de compostos (splitCells, mergeCompoundNamesInList) são
+    // sem acentos, e o OCR traz "MESA QUÍMICA", "Sumo Ananás", etc. Sem isto,
+    // "MESA QUÍMICA" fica dividido em "MESA"+"QUÍMICA" e o bloco é perdido.
+    .map(deaccent)
     .filter(Boolean)
     .filter((l) => !NOISE_LINE_RE.test(l))
     .filter((l) => {
@@ -781,6 +796,26 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       if (WEAPON_RULES.some((r) => r.pattern.test(l))) return false;
       return true;
     });
+
+  // "CARREGADOR DE" e o tipo (SMG/PISTOLA/RIFLE/SHOTGUN) podem ser lidos pelo
+  // OCR em linhas separadas (grelha lida célula a célula). Cada fragmento
+  // "CARREGADOR DE" é fundido com o primeiro tipo livre numa linha seguinte,
+  // na ordem — como o mergeCompoundNamesInList, mas entre linhas distintas.
+  {
+    const carregadorFrag = /^CARREGADOR\s+DE$/i;
+    const weaponType = /^(pistola|smg|rifle|shotgun)$/i;
+    let n = 0;
+    while (n < lines.length) {
+      if (carregadorFrag.test(lines[n])) {
+        const typeIdx = lines.findIndex((l, j) => j > n && weaponType.test(l));
+        if (typeIdx >= 0) {
+          lines[n] = "CARREGADOR DE " + lines[typeIdx].toUpperCase();
+          lines.splice(typeIdx, 1);
+        }
+      }
+      n++;
+    }
+  }
 
   interface ParsedLine {
     lineIdx: number;
@@ -939,8 +974,22 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     const totalKg = parseFloat(m[3].replace(".", "").replace(",", "."));
     if (!Number.isFinite(totalKg)) continue;
     const item = matchItemName(m[2]);
-    if (!ITEM_BY_NAME.get(item)) continue;
-    summaryItems.push({ name: item, qty, totalKg, lineIdx: i });
+    if (ITEM_BY_NAME.get(item)) {
+      summaryItems.push({ name: item, qty, totalKg, lineIdx: i });
+    } else {
+      // Nome cortado/ilegível na síntese (ex.: "2× [item cortado na imagem] —
+      // 1,4 kg"). O item fica irrecuperável por nome, mas o peso unitário pode
+      // ser distintivo: se casa com EXATAMENTE UM item do catálogo, é seguro
+      // atribuir (ex.: 1.4 kg / 2 = 0.7 kg só existe no telemóvel).
+      const unit = totalKg / qty;
+      const uniques = ITEM_CATALOG.filter((def) => {
+        if (def.unitKg <= 0) return false;
+        return Math.abs(unit - def.unitKg) <= Math.max(0.03, def.unitKg * 0.15);
+      });
+      if (uniques.length === 1) {
+        summaryItems.push({ name: uniques[0].name, qty, totalKg, lineIdx: i });
+      }
+    }
   }
 
   const useSummaryOnly = summaryItems.length >= 2;
@@ -1189,7 +1238,6 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (qc.totalKg != null) {
           weightTotals.set(c.item, (weightTotals.get(c.item) || 0) + qc.totalKg);
         }
-        if (qc.totalKg != null) consumedPairKeys.add(qc.qty + "|" + qc.totalKg);
         consumedCells.add(i + ":" + qc.cellIdx);
         matched++;
       }
@@ -1244,6 +1292,211 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       if (matched > 0) usedLines.add(i);
     }
 
+    // ── PASS 3.5: Alinhamento por blocos (OCR em grelha) ──
+    // No inventário em grelha as quantidades aparecem em linhas consecutivas
+    // ("1 (5.0)", "30 (3.0)", ...) e os nomes logo a seguir noutras ("SNS
+    // PISTOL MK2", "BANDAGEM", ...), uma célula por linha. A posição relativa
+    // engana nesta forma — o "par mais próximo" do PASS 4 troca itens de peso
+    // igual (cristal 430 ficava com 43 de saco). Aqui alinham-se os dois
+    // blocos pela ordem de aparição (índice + penalização posicional), tal
+    // como o CORE faz com linhas de várias células.
+    {
+      const knownItem = (name: string): boolean => !!ITEM_BY_NAME.get(name);
+      const mergeBlockNames = (names: string[]): string[] => {
+        // splitCells pode dividir um nome composto em várias células ("SNS
+        // PISTOL"+"MK2", "MESA"+"QUÍMICA", "MEDWCHI"+"MOCHI"). Reutiliza a
+        // mesma mesclagem geral do CORE, que junta compostos adjacentes e não
+        // adjacentes (ex.: "CRISTAL ... PROCESSADO").
+        return mergeCompoundNamesInList(names);
+      };
+
+      let bi = 0;
+      while (bi < parsedLines.length) {
+        if (usedLines.has(bi)) { bi++; continue; }
+        const numRun: { lineIdx: number; qty: number; totalKg: number | null; cellIdx: number }[] = [];
+        let p = bi;
+        while (p < parsedLines.length && !usedLines.has(p)) {
+          const pl = parsedLines[p];
+          if (pl.numCells.length > 0 && pl.textCells.length === 0) {
+            for (const nc of pl.numCells) {
+              numRun.push({ lineIdx: p, qty: nc.qty, totalKg: nc.totalKg, cellIdx: nc.cellIdx });
+            }
+            p++;
+          } else break;
+        }
+        if (numRun.length < 2) { bi++; continue; }
+        const nameRun: { lineIdx: number; text: string }[] = [];
+        while (p < parsedLines.length && !usedLines.has(p)) {
+          const pl = parsedLines[p];
+          if (pl.textCells.length > 0 && pl.numCells.length === 0) {
+            for (const tc of pl.textCells) nameRun.push({ lineIdx: p, text: tc.text });
+            p++;
+          } else break;
+        }
+        bi = p;
+        if (nameRun.length < 2) continue;
+
+        const mergedNames = mergeBlockNames(nameRun.map((n) => n.text));
+        if (mergedNames.length < 2) continue;
+        // Só alinhar se TODOS os nomes forem itens conhecidos — caso contrário
+        // o bloco é ruído OCR e o PASS 4 (posição relativa) decide melhor.
+        if (!mergedNames.every((m) => knownItem(matchItemName(m)))) continue;
+
+        const usedName = new Set<number>();
+        const blockMatched: { item: string; qty: number; totalKg: number; lineIdx: number; cellIdx: number }[] = [];
+        for (let qi = 0; qi < numRun.length; qi++) {
+          const nc = numRun[qi];
+          let best: { ni: number; item: string; score: number } | null = null;
+          for (let ni = 0; ni < mergedNames.length; ni++) {
+            if (usedName.has(ni)) continue;
+            const item = matchItemName(mergedNames[ni]);
+            let score = 0;
+            if (nc.totalKg != null && nc.totalKg > 0) {
+              if (weightMatches(item, nc.qty, nc.totalKg)) score += 1000;
+              else if (weightMatchesLoose(item, nc.qty, nc.totalKg)) score += 900;
+            }
+            score -= Math.abs(ni - qi) * 50;
+            if (!best || score > best.score) best = { ni, item, score };
+          }
+          if (best && best.score >= 900) {
+            usedName.add(best.ni);
+            blockMatched.push({ item: best.item, qty: nc.qty, totalKg: nc.totalKg ?? 0, lineIdx: nc.lineIdx, cellIdx: nc.cellIdx });
+          }
+        }
+        if (blockMatched.length === 0) continue;
+        for (const m of blockMatched) {
+          merged.set(m.item, (merged.get(m.item) || 0) + m.qty);
+          weightTotals.set(m.item, (weightTotals.get(m.item) || 0) + m.totalKg);
+          consumedCells.add(m.lineIdx + ":" + m.cellIdx);
+        }
+        for (const n of nameRun) usedLines.add(n.lineIdx);
+        for (const n of numRun) usedLines.add(n.lineIdx);
+      }
+    }
+
+    // ── PASS 4: Name-based recovery from full text ──
+    {
+      const allText = lines.join(" ");
+      // Texto sem acentos mas com o MESMO comprimento (posições 1:1) — os
+      // padrões do ITEM_MAP são sem acentos e o OCR traz "MESA QUÍMICA",
+      // "Sumo Ananás", etc.; sem normalização o /mesa\s*quimica/i não casa.
+      const allTextNorm = deaccent(allText);
+      // Deslocamento de cada linha no allText, para mapear a posição de um par
+      // "qty (peso)" de volta à célula exata (linha:célula) que o gerou. Assim o
+      // PASS 4 marca em consumedCells apenas a célula que consumiu — e um par
+      // idêntico repetido noutra célula continua disponível para outro item.
+      const lineStarts: number[] = [];
+      {
+        let acc = 0;
+        for (const l of lines) {
+          lineStarts.push(acc);
+          acc += l.length + 1;
+        }
+      }
+      const cellOf = (pos: number): string => {
+        let i = 0;
+        while (i < lines.length - 1 && pos >= lineStarts[i] + lines[i].length) i++;
+        const charInLine = pos - lineStarts[i];
+        let searchFrom = 0;
+        for (let c = 0; c < parsedLines[i].cells.length; c++) {
+          const cell = parsedLines[i].cells[c];
+          const idx = lines[i].indexOf(cell, searchFrom);
+          const start = idx >= 0 ? idx : searchFrom;
+          const end = start + cell.length;
+          if (charInLine >= start && charInLine < end) return i + ":" + c;
+          searchFrom = Math.max(searchFrom, end);
+        }
+        return i + ":0";
+      };
+      const pairPattern = /(\d[\d.,]*)\s*\(\s*([^)]+)\s*\)/g;
+      const allPairs: { qty: number; totalKg: number; pos: number; matched: boolean; raw: string }[] = [];
+      let pm: RegExpExecArray | null;
+      while ((pm = pairPattern.exec(allText))) {
+        const { qty, totalKg } = parseQtyWeight(pm[0]);
+        const raw = pm[0];
+        if (qty > 0 && totalKg != null && Number.isFinite(totalKg)) {
+          allPairs.push({ qty, totalKg, pos: pm.index, matched: false, raw });
+        }
+      }
+
+      for (const [pattern, itemName] of ITEM_MAP) {
+        if (merged.has(itemName)) continue;
+        if (itemName === "arma sns hk2 dupla") continue;
+        if (itemName === "lockpick" && merged.has("lockpick avancada")) continue;
+        if (itemName === "lockpick" && /lockpick[\s\S]*?avan[cç]ad/i.test(allTextNorm)) continue;
+        if (itemName === "colete" && merged.has("colete fortalecido")) continue;
+        // cristal puro (0.1 kg/un) NÃO é sombreado pelo cristal processado
+        // (0.3 kg/un): pesos distintos, nunca há cross-match. Sombrear faria
+        // perder o stack real de cristal puro (ex.: "65 (6.5)" junto de um
+        // "140 (42.0)" de cristal processado).
+        if (itemName === "colete" && /colete\s*fortalecid/i.test(allTextNorm)) continue;
+        if (itemName === "diamante" && /diamante\s*bruto/i.test(allTextNorm)) continue;
+        // Skip generic "diamante" if "anel" (from "anel de diamante") is already matched
+        if (itemName === "diamante" && merged.has("anel") && /anel\s*(de\s*)?diamante/i.test(allTextNorm)) continue;
+        if (itemName === "sumo" && /sumo\s*(maracu|laranja|manga|ananas)/i.test(allTextNorm)) continue;
+        if (itemName === "sumo" && (merged.has("sumo maracuja") || merged.has("sumo laranja") || merged.has("sumo ananas"))) continue;
+        if (itemName === "corrente" && /corrente\s*10k/i.test(allTextNorm)) continue;
+        // Skip do "cartão" genérico (peso 0.1kg) quando o texto tem "cartão de
+        // cidadão" ou "carta de condução" (documentos sem peso) — evita roubar
+        // pares (qty, peso) de outros itens (ex.: semente de erva 295 (29.5)).
+        if (itemName === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextNorm)) continue;
+        if (itemName === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextNorm)) continue;
+
+        // Nome do item no texto. Compostos podem aparecer separados na grelha
+        // (ex.: "CRISTAL" e "PROCESSADO" em linhas diferentes com outras palavras
+        // pelo meio), por isso há um fallback amplo; o par só casa por peso, o
+        // que torna o match amplo seguro.
+        const findName = (pattern: RegExp, itemName: string, text: string): RegExpExecArray | null => {
+          const m = new RegExp(pattern.source, "i").exec(text);
+          if (m) return m;
+          switch (itemName) {
+            case "cristal processado": return /cristal[\s\S]*?processad/i.exec(text);
+            case "colete fortalecido": return /colete[\s\S]*?fortalecid/i.exec(text);
+            case "diamante bruto": return /diamante[\s\S]*?brut/i.exec(text);
+            case "corrente 10k": return /corrente[\s\S]*?10k/i.exec(text);
+            default: return null;
+          }
+        };
+        const nameMatch = findName(pattern, itemName, allTextNorm);
+        if (!nameMatch) continue;
+        const namePos = nameMatch.index;
+
+        let bestPair: (typeof allPairs)[0] | null = null;
+        let bestDist = Infinity;
+        // Lockpicks são ferramentas: o jogador carrega poucas unidades, enquanto
+        // outros itens de 0.5 kg (ex.: minérios) acumulam em stacks grandes. Com
+        // o OCR em grelha (quantidades primeiro, nomes depois), a distância
+        // posicional é enganadora — preferir o par de menor quantidade resolve
+        // "lockpick e 1 e minérios e 61" (lockpick=1, minerios=61).
+        const preferSmallQty = itemName === "lockpick avancada" || itemName === "lockpick";
+        let bestPairQty = Infinity;
+        for (const pair of allPairs) {
+          if (pair.matched) continue;
+          if (consumedCells.has(cellOf(pair.pos))) continue;
+          const strict = weightMatches(itemName, pair.qty, pair.totalKg);
+          const loose = !strict && weightMatchesLoose(itemName, pair.qty, pair.totalKg);
+          if (!strict && !loose) continue;
+          const dist = Math.abs(pair.pos - namePos);
+          if (preferSmallQty) {
+            if (pair.qty < bestPairQty || (pair.qty === bestPairQty && dist < bestDist)) {
+              bestPairQty = pair.qty;
+              bestDist = dist;
+              bestPair = pair;
+            }
+          } else if (dist < bestDist) {
+            bestDist = dist;
+            bestPair = pair;
+          }
+        }
+        if (bestPair) {
+          bestPair.matched = true;
+          consumedCells.add(cellOf(bestPair.pos));
+          merged.set(itemName, (merged.get(itemName) || 0) + bestPair.qty);
+          weightTotals.set(itemName, (weightTotals.get(itemName) || 0) + bestPair.totalKg);
+        }
+      }
+    }
+
     // ── PASS 3: Weight-validated recovery for remaining numeric cells ──
     const allTextForPass3 = lines.join(" ");
     // Nomes genéricos que NÃO podem casar quando a variante específica já está
@@ -1257,7 +1510,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         case "colete":
           return /colete\s*fortalecid/i.test(allTextForPass3);
         case "cristal":
-          return /cristal\s*processado/i.test(allTextForPass3);
+          // cristal (0.1) e cristal processado (0.3) têm pesos distintos — o
+          // sombreamento deixaria perder o stack de cristal puro quando o
+          // processado também existe. Nunca sombreia.
+          return false;
         case "diamante":
           return /diamante\s*bruto/i.test(allTextForPass3) ||
             (merged.has("anel") && /anel\s*(de\s*)?diamante/i.test(allTextForPass3));
@@ -1268,7 +1524,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           return /corrente\s*10k/i.test(allTextForPass3);
         case "cartao":
           return /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextForPass3) ||
-            /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3);
+            /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3) ||
+            /copo\s*de\s*cart[aã]o/i.test(allTextForPass3) ||
+            merged.has("copo de cartao");
         default:
           return false;
       }
@@ -1297,7 +1555,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       }
       if (Number.isFinite(best)) return best;
       const patterns = ITEM_MAP.filter(([, name]) => name === itemName).map(([p]) => p);
-      if (patterns.some((p) => p.test(allTextForPass3))) return 1000;
+      if (patterns.some((p) => p.test(deaccent(allTextForPass3)))) return 1000;
       return Infinity;
     };
 
@@ -1341,73 +1599,50 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             bestMatch = { name: itemDef.name, diff, score };
           }
         }
+        if (!bestMatch) {
+          // Fallback por peso unitário único: quando o nome está cortado no OCR
+          // (ex.: telemóvel a "1 (0.7)"), o PASS 3 não encontra proximidade de
+          // nome. Se o peso calculado da célula órfã casa com EXATAMENTE UM item
+          // do catálogo, atribuímo-lo — é seguro porque o peso é distintivo
+          // (0.7 kg só existe no telemóvel). Pesos partilhados (ex.: 1.0 kg,
+          // 0.5 kg) ficam sem match e a célula é ignorada.
+          const unique: { name: string; diff: number }[] = [];
+          for (const itemDef of ITEM_CATALOG) {
+            if (itemDef.unitKg <= 0) continue;
+            if (itemDef.name === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextForPass3)) continue;
+            if (itemDef.name === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3)) continue;
+            if (genericShadow(itemDef.name)) continue;
+            let ok = Math.abs(computed - itemDef.unitKg) <= Math.max(0.03, itemDef.unitKg * 0.15);
+            if (!ok && ALT_WEIGHTS[itemDef.name]) {
+              ok = ALT_WEIGHTS[itemDef.name].some(
+                (alt) => Math.abs(computed - alt) <= Math.max(0.03, alt * 0.15)
+              );
+            }
+            if (!ok) continue;
+            unique.push({ name: itemDef.name, diff: Math.abs(computed - itemDef.unitKg) });
+          }
+          if (unique.length === 1) {
+            bestMatch = { name: unique[0].name, diff: unique[0].diff, score: Infinity };
+          }
+        }
+        // Match fraco (score 1000 = o nome do item existe noutra parte do texto,
+        // não junto à célula; ex.: uma "1 (1.0)" no canto cortado). Para uma
+        // célula órfã de ~1.0 kg, a ordem do catálogo decidiria entre arma de
+        // coleção/hammer — mas o rádio é quase universal no inventário do jogo,
+        // logo é o palpite mais provável para um "1 (1.0)" sem nome lido.
+        if (
+          bestMatch &&
+          bestMatch.score >= 1000 &&
+          !merged.has("radio") &&
+          Math.abs(computed - 1) <= Math.max(0.03, 1 * 0.15)
+        ) {
+          bestMatch = { name: "radio", diff: Math.abs(computed - 1), score: Infinity };
+        }
         if (bestMatch) {
           merged.set(bestMatch.name, (merged.get(bestMatch.name) || 0) + qc.qty);
           weightTotals.set(bestMatch.name, (weightTotals.get(bestMatch.name) || 0) + qc.totalKg);
-          consumedPairKeys.add(qc.qty + "|" + qc.totalKg);
           consumedCells.add(i + ":" + qc.cellIdx);
           usedLines.add(i);
-        }
-      }
-    }
-
-    // ── PASS 4: Name-based recovery from full text ──
-    {
-      const allText = lines.join(" ");
-      const pairPattern = /(\d[\d.,]*)\s*\(\s*([^)]+)\s*\)/g;
-      const allPairs: { qty: number; totalKg: number; pos: number; matched: boolean; raw: string }[] = [];
-      let pm: RegExpExecArray | null;
-      while ((pm = pairPattern.exec(allText))) {
-        const { qty, totalKg } = parseQtyWeight(pm[0]);
-        const raw = pm[0];
-        if (qty > 0 && totalKg != null && Number.isFinite(totalKg)) {
-          allPairs.push({ qty, totalKg, pos: pm.index, matched: false, raw });
-        }
-      }
-
-      for (const [pattern, itemName] of ITEM_MAP) {
-        if (merged.has(itemName)) continue;
-        if (itemName === "arma sns hk2 dupla") continue;
-        if (itemName === "lockpick" && merged.has("lockpick avancada")) continue;
-        if (itemName === "lockpick" && /lockpick[\s\S]*?avan[cç]ad/i.test(allText)) continue;
-        if (itemName === "colete" && merged.has("colete fortalecido")) continue;
-        if (itemName === "cristal" && /cristal\s*processado/i.test(allText)) continue;
-        if (itemName === "colete" && /colete\s*fortalecid/i.test(allText)) continue;
-        if (itemName === "diamante" && /diamante\s*bruto/i.test(allText)) continue;
-        // Skip generic "diamante" if "anel" (from "anel de diamante") is already matched
-        if (itemName === "diamante" && merged.has("anel") && /anel\s*(de\s*)?diamante/i.test(allText)) continue;
-        if (itemName === "sumo" && /sumo\s*(maracu|laranja|manga|ananas)/i.test(allText)) continue;
-        if (itemName === "sumo" && (merged.has("sumo maracuja") || merged.has("sumo laranja") || merged.has("sumo ananas"))) continue;
-        if (itemName === "corrente" && /corrente\s*10k/i.test(allText)) continue;
-        // Skip do "cartão" genérico (peso 0.1kg) quando o texto tem "cartão de
-        // cidadão" ou "carta de condução" (documentos sem peso) — evita roubar
-        // pares (qty, peso) de outros itens (ex.: semente de erva 295 (29.5)).
-        if (itemName === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allText)) continue;
-        if (itemName === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allText)) continue;
-        if (!pattern.test(allText)) continue;
-
-        const nameMatch = new RegExp(pattern.source, "i").exec(allText);
-        if (!nameMatch) continue;
-        const namePos = nameMatch.index;
-
-        let bestPair: (typeof allPairs)[0] | null = null;
-        let bestDist = Infinity;
-        for (const pair of allPairs) {
-          if (pair.matched) continue;
-          if (consumedPairKeys.has(pair.qty + "|" + pair.totalKg)) continue;
-          const strict = weightMatches(itemName, pair.qty, pair.totalKg);
-          const loose = !strict && weightMatchesLoose(itemName, pair.qty, pair.totalKg);
-          if (!strict && !loose) continue;
-          const dist = Math.abs(pair.pos - namePos);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestPair = pair;
-          }
-        }
-        if (bestPair) {
-          bestPair.matched = true;
-          merged.set(itemName, (merged.get(itemName) || 0) + bestPair.qty);
-          weightTotals.set(itemName, (weightTotals.get(itemName) || 0) + bestPair.totalKg);
         }
       }
     }

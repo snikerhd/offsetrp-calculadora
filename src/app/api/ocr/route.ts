@@ -4,6 +4,8 @@ import { existsSync, mkdirSync } from "fs";
 import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
+import { openaiOcr } from "@/lib/openai-ocr";
+import { puterOcr } from "@/lib/puter-ocr";
 
 const OCR_SPACE_URL = "https://api.ocr.space/parse/image";
 const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "helloworld";
@@ -14,6 +16,10 @@ const OCR_SPACE_TIMEOUT_MS = 15_000;
 const IMAGE_FETCH_TIMEOUT_MS = 20_000;
 // Nenhum motor pode exceder isto — a rota responde sempre com JSON.
 const ENGINES_CAP_MS = 30_000;
+// OpenAI é o motor primário; acima disto caímos para OCR.space/tesseract.
+const OPENAI_TIMEOUT_MS = 25_000;
+// Puter.js (img2txt) é o novo primário; timeout folgado para o modelo dar resposta.
+const PUTER_TIMEOUT_MS = 25_000;
 
 // Cache persistente do modelo por.traineddata (ficheiro ~11MB). O tmpdir é
 // limpo a cada reboot e obriga a re-download em cada arranque.
@@ -133,33 +139,92 @@ async function tesseractOcr(processed: Buffer): Promise<string> {
   }
 }
 
-// Devolve o primeiro texto útil entre os dois motores (tesseract local é
-// rápido; OCR.space é melhor mas pode pendurar até ao timeout). Um cap garante
-// que a rota responde sempre com JSON, mesmo que um motor fique pendurado.
-function firstUsefulText(a: Promise<string>, b: Promise<string>): Promise<string> {
+// OpenAI com timeout próprio — se ultrapassar, devolve "" e os outros motores
+// assumem.
+async function openaiOcrWithTimeout(processed: Buffer): Promise<string> {
+  const b64 = processed.toString("base64");
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(""), OPENAI_TIMEOUT_MS);
+    openaiOcr(b64)
+      .then((t) => {
+        clearTimeout(timer);
+        resolve(t);
+      })
+      .catch((e) => {
+        console.error("OpenAI OCR error:", e);
+        clearTimeout(timer);
+        resolve("");
+      });
+  });
+}
+
+// Puter.js (img2txt) com timeout próprio — usa o auth token da tua conta
+// (sem login do visitante). Devolve "" se falhar e os outros motores assumem.
+async function puterOcrWithTimeout(processed: Buffer): Promise<string> {
+  const b64 = processed.toString("base64");
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(""), PUTER_TIMEOUT_MS);
+    puterOcr(b64)
+      .then((t) => {
+        clearTimeout(timer);
+        resolve(t);
+      })
+      .catch((e) => {
+        console.error("Puter OCR error:", e);
+        clearTimeout(timer);
+        resolve("");
+      });
+  });
+}
+
+// OpenAI é o motor primário (rotação de chaves em openai-ocr.ts). Usa-se o
+// primeiro texto útil entre os motores; OpenAI tem precedência quando devolve
+// texto, e o cap garante resposta JSON mesmo que tudo pendure.
+function firstUsefulText(
+  primary: Promise<string>,
+  a: Promise<string>,
+  b: Promise<string>
+): Promise<string> {
   return new Promise((resolve) => {
     let done = false;
-    const finish = (val: string) => {
+    let primaryText = "";
+    const finish = (val: string, isPrimary: boolean) => {
       if (done) return;
       const t = val.trim();
-      if (t.length >= 3) {
+      if (isPrimary && t.length >= 3) {
         done = true;
         resolve(t);
+        return;
+      }
+      if (!isPrimary && t.length >= 3) {
+        primaryText = primaryText || t;
       }
     };
-    a.then(finish);
-    b.then(finish);
+    primary.then((v) => {
+      const t = (v || "").trim();
+      if (t.length >= 3) {
+        if (done) return;
+        done = true;
+        resolve(t);
+        return;
+      }
+      finish(v, false);
+      // Se o primário falhou, deixa os secundários decidirem.
+    });
+    a.then((v) => finish(v, false));
+    b.then((v) => finish(v, false));
     const capTimer = setTimeout(() => {
       if (done) return;
       done = true;
-      resolve("");
+      const p = primaryText.trim();
+      resolve(p.length >= 3 ? p : "");
     }, ENGINES_CAP_MS);
-    Promise.all([a, b]).then(([av, bv]) => {
+    Promise.all([primary, a, b]).then(([pv, av, bv]) => {
       if (done) return;
       clearTimeout(capTimer);
       done = true;
-      const preferred = av && av.trim().length >= 3 ? av : bv && bv.trim().length >= 3 ? bv : "";
-      resolve(preferred.trim());
+      const candidates = [pv, av, bv].map((v) => (v || "").trim()).filter((v) => v.length >= 3);
+      resolve(candidates[0] || "");
     });
   });
 }
@@ -167,7 +232,46 @@ function firstUsefulText(a: Promise<string>, b: Promise<string>): Promise<string
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { imageUrl, imageBase64, mimeType: inputMime } = body;
+    const { imageUrl, imageBase64, mimeType: inputMime, rawText } = body;
+
+    // Modo "só parsing": o texto já foi extraído no navegador (Puter.js). O
+    // servidor recebe o rawText e apenas o converte em itens/pesos. O preview
+    // é devolvido tal como no fluxo normal (imagem ou placeholder quando o
+    // cliente só enviou texto).
+    if (rawText && typeof rawText === "string" && rawText.trim().length >= 3) {
+      const parsed = parseInventoryOCR(rawText.trim());
+      let rawPreview: string | undefined;
+      if (imageUrl) {
+        try {
+          let directUrl = imageUrl as string;
+          if (directUrl.includes("gyazo.com") && !directUrl.includes("i.gyazo.com")) {
+            const id = directUrl.split("/").pop()?.split("?")[0];
+            if (id) directUrl = `https://i.gyazo.com/${id}.png`;
+          }
+          if (directUrl.includes("imgur.com") && !directUrl.includes("i.imgur.com")) {
+            const id = directUrl.split("/").pop()?.split("?")[0];
+            if (id) directUrl = `https://i.imgur.com/${id}.png`;
+          }
+          const imgResp = await fetchWithTimeout(directUrl, { headers: { "User-Agent": "Mozilla/5.0" }, redirect: "follow" }, IMAGE_FETCH_TIMEOUT_MS);
+          if (imgResp.ok) {
+            const ab = await imgResp.arrayBuffer();
+            const mt = imgResp.headers.get("content-type") || "image/png";
+            rawPreview = `data:${mt};base64,${Buffer.from(ab).toString("base64")}`;
+          }
+        } catch {
+          rawPreview = undefined;
+        }
+      }
+      return NextResponse.json({
+        result: parsed.text,
+        detectedWeights: parsed.weights,
+        overallConfidence: parsed.overallConfidence,
+        weaponCapture: parsed.weaponCapture ?? null,
+        ocrRaw: rawText.trim(),
+        preview: rawPreview,
+        error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente.",
+      });
+    }
 
     let base64Data: string;
     let mimeType: string;
@@ -215,10 +319,14 @@ export async function POST(req: NextRequest) {
     const preview = `data:${mimeType};base64,${base64Data}`;
     const processed = await preprocessImage(base64Data);
 
-    // Corre OCR.space (com timeout) e o tesseract local em paralelo e usa o
-    // primeiro que devolver texto útil. Assim, se a API externa pendurar ou
-    // estiver sem quota, o tesseract (rápido) responde logo.
-    const ocrText = await firstUsefulText(ocrSpace(processed), tesseractOcr(processed));
+    // Corre Puter (primário), OCR.space (com timeout) e o tesseract local em
+    // paralelo. Puter tem precedência quando devolve texto; os restantes são
+    // fallback quando a API externa falha, fica sem quota ou pendura.
+    const ocrText = await firstUsefulText(
+      puterOcrWithTimeout(processed),
+      ocrSpace(processed),
+      tesseractOcr(processed)
+    );
 
     if (ocrText.length < 3) {
       return NextResponse.json({

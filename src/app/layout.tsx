@@ -12,6 +12,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="pt">
       <body className="bg-[#0a0e17] text-gray-100 antialiased min-h-screen">
         {children}
+        <script src="https://js.puter.com/v2/" async />
       </body>
     </html>
   );
