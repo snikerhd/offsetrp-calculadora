@@ -325,27 +325,25 @@ export async function POST(req: NextRequest) {
     const preview = `data:${mimeType};base64,${base64Data}`;
     const processed = await preprocessImage(base64Data);
 
-    // Modo diagnóstico (?diag=1): corre cada motor em sequência e devolve
-    // timings e resultados parciais, para verificar se o token do Puter está
-    // configurado no ambiente e se o SDK responde no serverless.
+    // Modo diagnóstico (?diag=1): só o motor primário (Puter), com timeout
+    // curto, para verificar se o token está configurado no ambiente e se o
+    // SDK responde no serverless (os fallbacks penduram em sandbox).
     if (req.nextUrl.searchParams.get("diag") === "1") {
       const tok = process.env.PUTER_AUTH_TOKEN || "";
+      const b64 = processed.toString("base64");
       const d0 = Date.now();
-      const puter = await puterOcrWithTimeout(processed);
+      const puter = await new Promise<string>((resolve) => {
+        const timer = setTimeout(() => resolve(""), 12_000);
+        puterOcr(b64)
+          .then((t) => { clearTimeout(timer); resolve(t); })
+          .catch((e) => { clearTimeout(timer); console.error("Puter diag error:", e); resolve(""); });
+      });
       const puterMs = Date.now() - d0;
-      const d1 = Date.now();
-      const space = await ocrSpace(processed);
-      const spaceMs = Date.now() - d1;
-      const d2 = Date.now();
-      const tess = await tesseractOcr(processed);
-      const tessMs = Date.now() - d2;
       return NextResponse.json({
         diag: {
           puterTokenConfigured: tok.length >= 10,
           puterTokenLen: tok.length,
           puter: { ms: puterMs, len: puter.length, preview: puter.slice(0, 150) },
-          ocrSpace: { ms: spaceMs, len: space.length, preview: space.slice(0, 150) },
-          tesseract: { ms: tessMs, len: tess.length, preview: tess.slice(0, 150) },
         },
       });
     }
