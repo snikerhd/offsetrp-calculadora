@@ -57,7 +57,12 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   }, []);
 
   const runWithPuter = useCallback(async (source: string): Promise<string> => {
+    // Só usa o Puter.js no navegador se o visitante já tiver sessão (saldo
+    // grátis dele). Se não estiver autenticado, chamar img2txt abriria o popup
+    // de login do Puter — por isso cai-se direto para o servidor, que usa o
+    // token da conta do dono do site (sem popup).
     if (typeof window === "undefined" || !window.puter?.ai?.img2txt) return "";
+    if (!window.puter.auth || typeof window.puter.auth.isSignedIn !== "function" || !window.puter.auth.isSignedIn()) return "";
     try {
       setOcrStatus("🔍 A analisar imagem com OCR no navegador (Puter)...");
       const text = await window.puter.ai.img2txt(source);
