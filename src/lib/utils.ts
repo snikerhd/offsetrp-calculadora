@@ -653,6 +653,16 @@ export function parseQuickInput(input: string): ParseResult {
     const nome = normalizeText(match[2]);
     const originalNome = match[2].trim();
 
+    // OCR formato especial: "51438 (0.5)" ou "51438 (0,5 kg)" -> quantidade + peso entre parênteses
+    // Se o "nome" for só um peso entre parênteses e a quantidade > 10000, trata como dinheiro
+    const pesoParenteses = originalNome.match(/^\(\s*[\d.,]+\s*kg?\s*\)$/i);
+    if (pesoParenteses && qtd > 10000) {
+      const multa = qtd * 0.75;
+      result.dinheiro.resultados.push(`  ${fmt(qtd)} € x 75% = ${fmt(multa)} €`);
+      result.dinheiro.total += multa;
+      continue;
+    }
+
     // ITENS DO CATÁLOGO QUE NÃO TÊM COIMA RÁPIDA:
     // Têm de ser filtrados ANTES de obterDrogaPorSinonimo/obterItemPorSinonimo.
     // Essas funções fazem correspondências parciais (ex.: "saco"), o que
