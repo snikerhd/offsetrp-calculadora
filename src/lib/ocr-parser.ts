@@ -332,45 +332,118 @@ function getUnitWeight(itemName: string): number | null {
   return def ? def.unitKg : null;
 }
 
-function parseQtyWeight(cell: string): { qty: number; totalKg: number | null } {
-  const cleaned = cell;
-  const m = cleaned.match(/^(\d[\d.,]*)\s*\(\s*([^)]+)\s*\)/);
+// ── Noise detection ────────────────────────────────────────────────────────
+function isNoiseCell(cell: string): boolean {
+  const s = cell.trim();
+  if (/^\d{1,2}:\d{2}$/.test(s)) return true; // timestamps
+  if (/peso\s*:/i.test(s)) return true;
+  if (/jogador\s*[-:]/i.test(s)) return true;
+  if (/^(invent[aá]rio|mochila|equipamento)$/i.test(s)) return true;
+  // Standalone numbers >20 without parenthesized weight = OCR noise (e.g., "56", "64", "80")
+  if (/^\d+$/.test(s) && parseInt(s, 10) > 20) return true;
+  // Standalone decimals >20 (e.g., "83.00", "120.00" from weight bar)
+  if (/^\d+\.\d+$/.test(s) && parseFloat(s) > 20) return true;
+  // Single letter noise
+  if (/^[a-z]$/i.test(s)) return true;
+  return false;
+}
+
+// ── Qty/weight parsing with decimal-correction alternatives ────────────────
+interface QtyWeightParsed {
+  qty: number;
+  totalKg: number | null;
+  altWeights: number[]; // decimal-corrected alternatives
+  raw: string;
+}
+
+function parseQtyWeight(cell: string): QtyWeightParsed {
+  const raw = cell.trim();
+  const m = raw.match(/^(\d[\d.,]*)\s*\(\s*([^)]+)\s*\)/);
   if (!m) {
-    const q = cleaned.match(/^(\d[\d.,]*)/);
+    const q = raw.match(/^(\d[\d.,]*)/);
     return {
       qty: q ? Math.round(parseFloat(q[1].replace(/\./g, "").replace(",", ".")) || 1) : 1,
-      totalKg: null,
+      totalKg: null, altWeights: [], raw,
     };
   }
+
   const qty = Math.round(parseFloat(m[1].replace(/\./g, "").replace(",", ".")) || 1);
   let weightStr = m[2]
-    .replace(/B/g, "8")
-    .replace(/O/gi, "0")
-    .replace(/l/g, "1")
-    .replace(/S/g, "5")
-    .replace(/G/g, "6")
-    .replace(/Z/g, "2")
+    .replace(/B/g, "8").replace(/O/gi, "0").replace(/l/g, "1")
+    .replace(/S/g, "5").replace(/G/g, "6").replace(/Z/g, "2")
     .trim();
-  let totalKg = parseFloat(weightStr.replace(",", "."));
 
-  if (Number.isFinite(totalKg) && totalKg > 0) {
-    const unitWeight = totalKg / qty;
-    if (unitWeight > 2 && qty > 1 && !unitWeightMatchesKnown(unitWeight)) {
-      const str = String(totalKg);
-      for (let pos = 1; pos < str.length; pos++) {
-        const candidate = parseFloat(str.slice(0, pos) + "." + str.slice(pos));
-        if (Number.isFinite(candidate) && candidate > 0) {
+  const totalKg = parseFloat(weightStr.replace(",", "."));
+  if (!Number.isFinite(totalKg) || totalKg <= 0) {
+    return { qty, totalKg: null, altWeights: [], raw };
+  }
+
+  // ── Aggressive decimal recovery ──
+  // Always try decimal insertion when weight has no decimal and 2+ digits
+  const altWeights: number[] = [];
+  const hasDecimal = weightStr.includes(".") || weightStr.includes(",");
+
+  if (!hasDecimal) {
+    const digits = weightStr.replace(/[^0-9]/g, "");
+    if (digits.length >= 2) {
+      for (let pos = 1; pos < digits.length; pos++) {
+        const candidate = parseFloat(digits.slice(0, pos) + "." + digits.slice(pos));
+        if (candidate > 0 && candidate !== totalKg) {
           const candUnit = candidate / qty;
-          if (candUnit >= 0.05 && unitWeightMatchesKnown(candUnit)) {
-            totalKg = candidate;
-            break;
+          if (unitWeightMatchesKnown(candUnit)) {
+            altWeights.push(candidate);
           }
         }
       }
     }
   }
 
-  return { qty, totalKg: Number.isFinite(totalKg) ? totalKg : null };
+  // Also try when unit weight is suspiciously large (>2kg and qty>1)
+  if (totalKg / qty > 2 && qty > 1) {
+    const str = String(totalKg).replace(".", "");
+    for (let pos = 1; pos < str.length; pos++) {
+      const candidate = parseFloat(str.slice(0, pos) + "." + str.slice(pos));
+      if (candidate > 0 && candidate !== totalKg && !altWeights.includes(candidate)) {
+        const candUnit = candidate / qty;
+        if (candUnit >= 0.05 && unitWeightMatchesKnown(candUnit)) {
+          altWeights.push(candidate);
+        }
+      }
+    }
+  }
+
+  return { qty, totalKg, altWeights, raw };
+}
+
+// Try decimal correction to match a specific item
+function tryDecimalCorrection(
+  itemName: string, qty: number, totalKg: number, altWeights: number[]
+): number | null {
+  if (weightMatches(itemName, qty, totalKg)) return null; // already matches
+  for (const alt of altWeights) {
+    // Only allow corrections that don't change totalKg by more than 50%
+    const changeRatio = Math.abs(alt - totalKg) / totalKg;
+    if (changeRatio > 0.5) continue;
+    if (weightMatches(itemName, qty, alt)) return alt;
+  }
+  // Manual fallback: try inserting decimal at every position
+  const def = ITEM_BY_NAME.get(itemName);
+  if (!def || def.unitKg <= 0) return null;
+  const allTargets = [def.unitKg, ...(ALT_WEIGHTS[itemName] || [])];
+  const str = String(totalKg).replace(".", "");
+  for (let pos = 1; pos < str.length; pos++) {
+    const candidate = parseFloat(str.slice(0, pos) + "." + str.slice(pos));
+    if (candidate > 0 && candidate !== totalKg) {
+      // Only allow corrections that don't change totalKg by more than 50%
+      const changeRatio = Math.abs(candidate - totalKg) / totalKg;
+      if (changeRatio > 0.5) continue;
+      const candUnit = candidate / qty;
+      for (const target of allTargets) {
+        if (Math.abs(candUnit - target) <= Math.max(0.03, target * 0.15)) return candidate;
+      }
+    }
+  }
+  return null;
 }
 
 const ALT_WEIGHTS: Record<string, number[]> = {
@@ -841,19 +914,21 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   interface ParsedLine {
     lineIdx: number;
     cells: string[];
-    numCells: { qty: number; totalKg: number | null; cellIdx: number; raw: string }[];
+    numCells: { qty: number; totalKg: number | null; cellIdx: number; raw: string; altWeights: number[] }[];
     textCells: { text: string; cellIdx: number }[];
   }
 
   const parsedLines: ParsedLine[] = lines.map((line, lineIdx) => {
     const cells = splitCells(line);
-    const numCells = cells
+    // Filter out noise cells first
+    const filteredCells = cells.filter((c) => !isNoiseCell(c));
+    const numCells = filteredCells
       .map((c, cellIdx) => ({ ...parseQtyWeight(c), cellIdx, raw: c }))
       .filter((x) => isNumericCell(x.raw));
-    const textCells = cells
+    const textCells = filteredCells
       .map((c, cellIdx) => ({ text: c, cellIdx }))
       .filter((x) => isTextCell(x.text));
-    return { lineIdx, cells, numCells, textCells };
+    return { lineIdx, cells: filteredCells, numCells, textCells };
   });
   if (process.env.OCR_DEBUG) {
     console.error("LINES:", JSON.stringify(lines));
@@ -1086,6 +1161,243 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           merged.set(item, qty);
           weightTotals.set(item, totalKg);
         }
+      }
+    }
+
+    // ── PASS 1V: Vertical list format (qty/weight lines followed by name lines) ──
+    // OCR sometimes outputs each cell on its own line:
+    //   1 (0.5)
+    //   1 (1.0)
+    //   LOCKPICK
+    //   AVANÇADA
+    // This pass detects consecutive single-cell numeric lines followed by
+    // consecutive text lines, merges compound names across lines, and pairs them in order.
+    {
+      const knownItem = (name: string): boolean => !!ITEM_BY_NAME.get(name);
+
+      // Infer item from weight alone (for cells without a corresponding name, e.g., 5(25))
+      const inferItemFromWeight = (qty: number, totalKg: number): string | null => {
+        const unitKg = totalKg / qty;
+        if (unitKg <= 0) return null;
+        
+        // Collect all matching items
+        const matches: string[] = [];
+        for (const def of ITEM_CATALOG) {
+          if (def.unitKg > 0 && Math.abs(def.unitKg - unitKg) <= Math.max(0.03, def.unitKg * 0.15)) {
+            matches.push(def.name);
+          }
+        }
+        
+        if (matches.length === 0) return null;
+        if (matches.length === 1) return matches[0];
+        
+        // Multiple items with same weight (e.g., arma baixo/medio calibre both 5kg)
+        // Prefer "arma medio calibre" over "arma baixo calibre" when no weapon name in text
+        if (matches.includes("arma medio calibre") && matches.includes("arma baixo calibre")) {
+          // Check if any weapon name appears in the full OCR text
+          const hasWeaponName = /\b(SNS|VINTAGE|AP\s+PISTOL|REVOLVER|MICRO\s+SMG|MACHINE\s+PISTOL|HK\s*2|COMBAT\s+PDW|ASSAULT\s+SMG|BULLPUP|GUSENBERG|DOUBLE\s+BARREL|COMPACT\s+RIFLE|ADVANCED\s+RIFLE|SPAS|TACTICAL|MILITARY)\b/i.test(correctedText);
+          if (!hasWeaponName) {
+            return "arma medio calibre"; // default to medio when ambiguous
+          }
+        }
+        
+        return matches[0];
+      };
+
+      let vi = 0;
+      while (vi < parsedLines.length) {
+        if (usedLines.has(vi)) { vi++; continue; }
+        const pl = parsedLines[vi];
+        // Skip empty lines
+        if (pl.numCells.length === 0 && pl.textCells.length === 0) { vi++; continue; }
+        // Start of a vertical numeric run: lines with exactly 1 numeric cell (with weight) and no text
+        if (!(pl.numCells.length === 1 && pl.textCells.length === 0 && pl.numCells[0].totalKg != null)) {
+          vi++; continue;
+        }
+
+        // Collect consecutive numeric lines (single cell, with OR without weight)
+        // Include qty-only cells (e.g., "56" for Água) since they may pair with names
+        // Skip empty lines
+        const numRun: { lineIdx: number; qty: number; totalKg: number | null; cellIdx: number; altWeights: number[]; raw: string }[] = [];
+        let p = vi;
+        while (p < parsedLines.length && !usedLines.has(p)) {
+          const pl2 = parsedLines[p];
+          // Skip empty lines
+          if (pl2.numCells.length === 0 && pl2.textCells.length === 0) { p++; continue; }
+          if (pl2.numCells.length === 1 && pl2.textCells.length === 0) {
+            const nc = pl2.numCells[0];
+            numRun.push({ lineIdx: p, qty: nc.qty, totalKg: nc.totalKg, cellIdx: nc.cellIdx, altWeights: nc.altWeights || [], raw: nc.raw });
+            p++;
+          } else break;
+        }
+        // Require at least 2 cells with weight to consider it a vertical block
+        if (numRun.filter(n => n.totalKg != null).length < 2) { vi++; continue; }
+
+        // Collect consecutive text lines after the numeric run
+        // Skip noise lines that are just a number without weight (e.g., "1" between LOCKPICK and AVANÇADA)
+        // Also skip empty lines
+        const isNoiseLine = (pl: ParsedLine): boolean =>
+          pl.textCells.length === 0 &&
+          pl.numCells.length === 1 &&
+          pl.numCells[0].totalKg == null &&
+          /^\d+$/.test(pl.numCells[0].raw.trim());
+
+        const textRun: { lineIdx: number; text: string }[] = [];
+        while (p < parsedLines.length && !usedLines.has(p)) {
+          const pl2 = parsedLines[p];
+          // Skip empty lines
+          if (pl2.numCells.length === 0 && pl2.textCells.length === 0) { p++; continue; }
+          if (pl2.textCells.length > 0 && pl2.numCells.length === 0) {
+            for (const tc of pl2.textCells) textRun.push({ lineIdx: p, text: tc.text });
+            p++;
+          } else if (isNoiseLine(pl2)) {
+            // Skip noise line but continue collecting
+            p++;
+          } else break;
+        }
+        if (textRun.length < 2) { vi = p; continue; }
+
+        // Merge compound names across adjacent text lines (e.g., LOCKPICK + AVANÇADA)
+        const mergedNames = mergeCompoundNamesInList(textRun.map((n) => n.text))
+          .filter((m) => !/^[a-z]{1}$/i.test(m));
+
+        if (mergedNames.length < 2) { vi = p; continue; }
+
+        // Require all merged names to be known items (avoid noise)
+        if (!mergedNames.every((m) => knownItem(matchItemName(m)))) {
+          if (process.env.OCR_DEBUG) console.error("[1V] block skipped (unknown name):", mergedNames.join(" | "));
+          vi = p; continue;
+        }
+
+        // STRICT ORDER MATCHING: numeric[i] ↔ name[i], validated by weight
+        // Track which indices were matched
+        const matchedNumIndices = new Set<number>();
+        const matchedNameIndices = new Set<number>();
+        const blockMatched: { item: string; qty: number; totalKg: number; lineIdx: number; cellIdx: number }[] = [];
+
+        // Pass 1: positional match with weight validation + decimal correction
+        for (let qi = 0; qi < numRun.length && qi < mergedNames.length; qi++) {
+          const nc = numRun[qi];
+          const name = mergedNames[qi];
+          const item = matchItemName(name);
+
+          if (nc.totalKg != null) {
+            // Has weight: try strict validation, then decimal correction
+            if (weightMatches(item, nc.qty, nc.totalKg)) {
+              blockMatched.push({ item, qty: nc.qty, totalKg: nc.totalKg, lineIdx: nc.lineIdx, cellIdx: nc.cellIdx });
+              matchedNumIndices.add(qi);
+              matchedNameIndices.add(qi);
+            } else {
+              const corrected = tryDecimalCorrection(item, nc.qty, nc.totalKg, nc.altWeights);
+              if (corrected != null) {
+                blockMatched.push({ item, qty: nc.qty, totalKg: corrected, lineIdx: nc.lineIdx, cellIdx: nc.cellIdx });
+                matchedNumIndices.add(qi);
+                matchedNameIndices.add(qi);
+                if (process.env.OCR_DEBUG) {
+                  console.error(`[1V] decimal corrected: ${item} ${nc.raw} → ${nc.qty}×${(corrected/nc.qty).toFixed(2)}=${corrected}kg`);
+                }
+              } else if (process.env.OCR_DEBUG) {
+                console.error(`[1V] weight mismatch: ${item} qty=${nc.qty} totalKg=${nc.totalKg} (expected unit ~${getUnitWeight(item)})`);
+              }
+            }
+          } else {
+            // Qty-only cell: infer totalKg from item's unit weight
+            const unitW = getUnitWeight(item);
+            if (unitW != null && unitW > 0) {
+              const totalKg = Math.round(nc.qty * unitW * 100) / 100;
+              blockMatched.push({ item, qty: nc.qty, totalKg, lineIdx: nc.lineIdx, cellIdx: nc.cellIdx });
+              matchedNumIndices.add(qi);
+              matchedNameIndices.add(qi);
+              if (process.env.OCR_DEBUG) {
+                console.error(`[1V] qty-only match: ${item} qty=${nc.qty} → totalKg=${totalKg} (unit=${unitW})`);
+              }
+            }
+          }
+        }
+
+        // Pass 2: for unmatched numeric cells WITH weight, try weight-only inference
+        for (let qi = 0; qi < numRun.length; qi++) {
+          if (matchedNumIndices.has(qi)) continue;
+          const nc = numRun[qi];
+          if (nc.totalKg == null) continue; // qty-only without name match can't be inferred
+          const inferred = inferItemFromWeight(nc.qty, nc.totalKg);
+          if (inferred && weightMatches(inferred, nc.qty, nc.totalKg)) {
+            blockMatched.push({ item: inferred, qty: nc.qty, totalKg: nc.totalKg, lineIdx: nc.lineIdx, cellIdx: nc.cellIdx });
+            matchedNumIndices.add(qi);
+          }
+        }
+
+        // Pass 3: for unmatched qty-only cells that have a corresponding name (by position)
+        for (let qi = 0; qi < numRun.length && qi < mergedNames.length; qi++) {
+          if (matchedNumIndices.has(qi)) continue;
+          const nc = numRun[qi];
+          if (nc.totalKg != null) continue; // already handled
+          // Qty-only cell at position qi with a name at same position
+          const name = mergedNames[qi];
+          const item = matchItemName(name);
+          const unitW = getUnitWeight(item);
+          if (unitW != null && unitW > 0) {
+            const totalKg = Math.round(nc.qty * unitW * 100) / 100;
+            blockMatched.push({ item, qty: nc.qty, totalKg, lineIdx: nc.lineIdx, cellIdx: nc.cellIdx });
+            matchedNumIndices.add(qi);
+            if (process.env.OCR_DEBUG) {
+              console.error(`[1V] qty-only match (pass 3): ${item} qty=${nc.qty} → totalKg=${totalKg} (unit=${unitW})`);
+            }
+          }
+        }
+
+        // Pass 4: for remaining unmatched qty-only cells, try to match with any unmatched name
+        // by unit weight compatibility (handles misalignment from extra numeric cells)
+        const unmatchedNameIndices: number[] = [];
+        for (let ni = 0; ni < mergedNames.length; ni++) {
+          if (!matchedNameIndices.has(ni)) unmatchedNameIndices.push(ni);
+        }
+
+        for (let qi = 0; qi < numRun.length; qi++) {
+          if (matchedNumIndices.has(qi)) continue;
+          const nc = numRun[qi];
+          if (nc.totalKg != null) continue; // only qty-only cells
+
+          // Try each unmatched name, pick the one with matching unit weight
+          let bestMatch: { ni: number; item: string; unitW: number } | null = null;
+          for (const ni of unmatchedNameIndices) {
+            const name = mergedNames[ni];
+            const item = matchItemName(name);
+            const unitW = getUnitWeight(item);
+            if (unitW != null && unitW > 0) {
+              // Check if this unit weight is plausible for the qty (no way to verify totalKg, but prefer unique weights)
+              if (!bestMatch || unitW < bestMatch.unitW) {
+                // Prefer more distinctive weights (less common)
+                bestMatch = { ni, item, unitW };
+              }
+            }
+          }
+
+          if (bestMatch) {
+            const totalKg = Math.round(nc.qty * bestMatch.unitW * 100) / 100;
+            blockMatched.push({ item: bestMatch.item, qty: nc.qty, totalKg, lineIdx: nc.lineIdx, cellIdx: nc.cellIdx });
+            matchedNumIndices.add(qi);
+            matchedNameIndices.add(bestMatch.ni);
+            if (process.env.OCR_DEBUG) {
+              console.error(`[1V] qty-only match (pass 4): ${bestMatch.item} qty=${nc.qty} → totalKg=${totalKg} (unit=${bestMatch.unitW})`);
+            }
+          }
+        }
+
+        if (blockMatched.length > 0) {
+          for (const m of blockMatched) {
+            merged.set(m.item, (merged.get(m.item) || 0) + m.qty);
+            weightTotals.set(m.item, (weightTotals.get(m.item) || 0) + m.totalKg);
+            consumedCells.add(m.lineIdx + ":" + m.cellIdx);
+          }
+          if (process.env.OCR_DEBUG) {
+            console.error("[1V] vertical block num=", numRun.map((n) => `${n.qty}(${n.totalKg})`).join(" "), "names=", mergedNames.join(" | "), "→", blockMatched.map((m) => `${m.item} ${m.qty}x${m.totalKg}`).join(", "));
+          }
+          for (const n of textRun) usedLines.add(n.lineIdx);
+          for (const n of numRun) usedLines.add(n.lineIdx);
+        }
+
+        vi = p;
       }
     }
 
