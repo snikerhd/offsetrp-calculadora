@@ -1,5 +1,5 @@
-﻿// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// INVENTORY OCR PARSER â€” Offset RP
+// ══════════════════════════════════════════════════════════════════════════════
+// INVENTORY OCR PARSER — Offset RP
 //
 // The game inventory OCR produces a grid of quantity/weight cells paired with
 // item name cells. OCR can split compound names across cells AND lines.
@@ -8,12 +8,12 @@
 // 1. Fix OCR typos
 // 2. Group lines into "blocks": each block = a numeric row + nearby text rows
 // 3. Collect ALL text cells from the text rows, merge compound names
-// 4. Match quantity cells to name cells by position (first num â†” first name)
+// 4. Match quantity cells to name cells by position (first num ↔ first name)
 // 5. Use unit weight as validation, not as primary matching signal
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════════════════════
 import { ITEM_BY_NAME, ITEM_CATALOG } from "./item-weights";
 
-// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Types ────────────────────────────────────────────────────────────────
 export interface WeaponCapture {
   weapon: string;
   weaponItem: "arma baixo calibre" | "arma medio calibre" | "arma alto calibre";
@@ -39,7 +39,7 @@ export interface ParseResult {
   overallConfidence: number;
 }
 
-// â”€â”€ OCR typo corrections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── OCR typo corrections ───────────────────────────────────────────────────
 function fixOcrTypos(text: string): string {
   const typoRules: [RegExp, string][] = [
     [/\bHEDIC?KIT\b/gi, "MEDIKIT"],
@@ -81,7 +81,7 @@ function fixOcrTypos(text: string): string {
     [/\bSUHO\s+MARACUJA\b/gi, "SUMO MARACUJA"],
     [/\bSUHO\s+HARACUJA\b/gi, "SUMO MARACUJA"],
     [/\bSUNO\b/gi, "SUMO"],
-    // OCR: "HEDACHI/HOHOSHU/CARTAD/ENCOHENDA" sÃ£o misreads de itens
+    // OCR: "HEDACHI/HOHOSHU/CARTAD/ENCOHENDA" são misreads de itens
     [/\bHEDACHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
     [/\bMEOWCHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
     [/\bHOHOSHU\b/gi, "MONOSHU"],
@@ -89,55 +89,55 @@ function fixOcrTypos(text: string): string {
     [/\bCARTAD\b/gi, "CARTAO"],
     [/\bENCOHENDA\b/gi, "ENCOMENDA"],
     [/\bBTFANA\b/gi, "BIFANA"],
-    [/\bSACO\s+PL[AÃ]STICO\b/gi, "SACO PLASTICO"],
-    [/\bSACO\s+PLÃSTTCO\b/gi, "SACO PLASTICO"],
-    [/\bREBARBADOÃRA\b/gi, "REBARBADORA"],
+    [/\bSACO\s+PL[AÁ]STICO\b/gi, "SACO PLASTICO"],
+    [/\bSACO\s+PLÁSTTCO\b/gi, "SACO PLASTICO"],
+    [/\bREBARBADOÍRA\b/gi, "REBARBADORA"],
     [/\bHACO\s+TABACO\b/gi, "MACO TABACO"],
-    [/\bMAÃ‡O\s+TABACO\b/gi, "MACO TABACO"],
+    [/\bMAÇO\s+TABACO\b/gi, "MACO TABACO"],
     // OCR: "OURO" is often misread as "DURO"
     [/\bCORRENTE\s+DE\s+DURO\b/gi, "CORRENTE DE OURO"],
     // OCR: "TELENOVEL" is a misread of "TELEMOVEL"
     [/\bTELENOVEL\b/gi, "TELEMOVEL"],
-    // Variante acentuada ("TELENÃ“VEL"): o Ã“ agudo nÃ£o casa na regra sem acento
-    // nem no trema Ã–â†’O, logo precisa da sua prÃ³pria regra.
-    [/\bTELEN[OÃ“]VEL\b/gi, "TELEMOVEL"],
+    // Variante acentuada ("TELENÓVEL"): o Ó agudo não casa na regra sem acento
+    // nem no trema Ö→O, logo precisa da sua própria regra.
+    [/\bTELEN[OÓ]VEL\b/gi, "TELEMOVEL"],
     // OCR: "TELEHOVEL" is a misread of "TELEMOVEL"
     [/\bTELEHOVEL\b/gi, "TELEMOVEL"],
-    // OCR: "1BK" Ã© misread de "10K" (o jogo sÃ³ tem corrente 10K, nÃ£o 18K)
+    // OCR: "1BK" é misread de "10K" (o jogo só tem corrente 10K, não 18K)
     [/\b1BK\b/gi, "10K"],
-    // OCR: "1OK" â†’ "10K", "14K" etc. digit misreads in karat labels
+    // OCR: "1OK" → "10K", "14K" etc. digit misreads in karat labels
     [/\b1OK\b/gi, "10K"],
-    // OCR lÃª trema/acentos errados: "TELEHÃ–VEL" Ã© "TELEMOVEL", etc.
-    [/\bTELEH[OÃ–]VEL\b/gi, "TELEMOVEL"],
-    // Nomes truncados no canto direito da imagem (ex.: "KIT REPARAÃ‡AD").
-    [/\bREPARA[CÃ‡]AD\b/gi, "REPARACAO"],
-    [/\bREPARA[CÃ‡]AR\b/gi, "REPARACAO"],
-    // C4 lido com espaÃ§o ou como outro carÃ¡ter (ex.: "C 4", "L4").
+    // OCR lê trema/acentos errados: "TELEHÖVEL" é "TELEMOVEL", etc.
+    [/\bTELEH[OÖ]VEL\b/gi, "TELEMOVEL"],
+    // Nomes truncados no canto direito da imagem (ex.: "KIT REPARAÇAD").
+    [/\bREPARA[CÇ]AD\b/gi, "REPARACAO"],
+    [/\bREPARA[CÇ]AR\b/gi, "REPARACAO"],
+    // C4 lido com espaço ou como outro caráter (ex.: "C 4", "L4").
     [/\bC\s*4\b/gi, "C4"],
     [/\bL4\b/gi, "C4"],
-    // C4 armado mostra um temporizador (ex.: "1:23") em vez do nome â€” o OCR lÃª
-    // esse token isolado. Tratamo-lo como C4; o PASS 3 liga-o Ã  cÃ©lula de peso
-    // Ã³rfÃ£ "1 (1.0)".
+    // C4 armado mostra um temporizador (ex.: "1:23") em vez do nome — o OCR lê
+    // esse token isolado. Tratamo-lo como C4; o PASS 3 liga-o à célula de peso
+    // órfã "1 (1.0)".
     [/(^|[\t \n])1:23(?=[\t \n]|$)/g, "$1C4"],
   ];
   let result = text;
-  // Trema comum em texto OCR (Ã–â†’O, Ãœâ†’U, Ã„â†’A) para os padrÃµes abaixo casarem.
+  // Trema comum em texto OCR (Ö→O, Ü→U, Ä→A) para os padrões abaixo casarem.
   result = result
-    .replace(/Ã–/g, "O").replace(/Ã¶/g, "o")
-    .replace(/Ãœ/g, "U").replace(/Ã¼/g, "u")
-    .replace(/Ã„/g, "A").replace(/Ã¤/g, "a");
+    .replace(/Ö/g, "O").replace(/ö/g, "o")
+    .replace(/Ü/g, "U").replace(/ü/g, "u")
+    .replace(/Ä/g, "A").replace(/ä/g, "a");
   for (const [pattern, replacement] of typoRules) {
     result = result.replace(pattern, replacement);
   }
   return result;
 }
 
-// â”€â”€ ITEM_MAP: regex â†’ canonical name â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── ITEM_MAP: regex → canonical name ─────────────────────────────────────
 const ITEM_MAP: [RegExp, string][] = [
-  [/lockpick\s*avan[cÃ§]ad/i, "lockpick avancada"],
-  [/lockpeck\s*avan[cÃ§]ad/i, "lockpick avancada"],
+  [/lockpick\s*avan[cç]ad/i, "lockpick avancada"],
+  [/lockpeck\s*avan[cç]ad/i, "lockpick avancada"],
   [/lockpick|lockpeck/i, "lockpick"],
-  [/acess[oÃ³]rio[s]?\s*(para\s*)?arma[s]?/i, "acessorios para armas"],
+  [/acess[oó]rio[s]?\s*(para\s*)?arma[s]?/i, "acessorios para armas"],
   [/algema/i, "algemas"],
   [/medikit|medick/i, "medickits"],
   [/mesa\s*quimica/i, "mesa quimica"],
@@ -147,14 +147,14 @@ const ITEM_MAP: [RegExp, string][] = [
   [/safira/i, "safiras"],
   [/barra[s]?\s*(de\s*)?(ouro|outro)/i, "barras ouro"],
   [/pepita/i, "pepitas"],
-  [/p[oÃ³]lvora/i, "polvora"],
+  [/p[oó]lvora/i, "polvora"],
   [/esquema/i, "esquemas"],
-  [/pe[cÃ§]as?\s*(de\s*)?arma/i, "pecas"],
+  [/pe[cç]as?\s*(de\s*)?arma/i, "pecas"],
   [/rebarbadora/i, "rebarbadora"],
   [/mining\s*drill/i, "mining drill"],
   [/quadro/i, "quadro"],
   [/pulseira/i, "pulseira ouro"],
-  [/rel[oÃ³]gio\s*(de\s*)?ouro/i, "relogio ouro"],
+  [/rel[oó]gio\s*(de\s*)?ouro/i, "relogio ouro"],
   [/corrente\s*(de\s*)?ouro\s*10k|(?:^|\s)10k\s*corrente/i, "corrente 10k"],
   [/corrente\s*(de\s*)?ouro/i, "corrente"],
   [/^(?:10|14|18|22)k$/i, "corrente 10k"],
@@ -165,10 +165,10 @@ const ITEM_MAP: [RegExp, string][] = [
   [/computador/i, "computador"],
   [/pack\s*vinho/i, "pack vinhos"],
   [/ouro\s*estatal/i, "ouro estatal"],
-  [/arma\s*de\s*cole[cÃ§]/i, "arma de colecao"],
+  [/arma\s*de\s*cole[cç]/i, "arma de colecao"],
   [/tigre/i, "tigre"],
   [/documento/i, "documentos"],
-  [/[aÃ¡]guia\s*(de\s*)?bronze/i, "aguia de bronze"],
+  [/[aá]guia\s*(de\s*)?bronze/i, "aguia de bronze"],
   [/crypto?\s*pen/i, "crypto pen"],
   [/coroa/i, "coroa"],
   [/garrafa\s*(de\s*)?nitro/i, "garrafa de nitro"],
@@ -179,17 +179,17 @@ const ITEM_MAP: [RegExp, string][] = [
   [/cristal\s*processado/i, "cristal processado"],
   [/cristal/i, "cristal"],
   [/folha\s*tabaco/i, "folha tabaco"],
-  [/ma[cÃ§]o\s*tabaco/i, "maÃ§o"],
-  [/maco\s*tabaco/i, "maÃ§o"],
-  [/ma[cÃ§]o/i, "maÃ§o"],
+  [/ma[cç]o\s*tabaco/i, "maço"],
+  [/maco\s*tabaco/i, "maço"],
+  [/ma[cç]o/i, "maço"],
   [/estimulante/i, "estimulante"],
   [/semente\s*(de\s*)?(erva|cannabis)/i, "semente erva"],
   [/semente\s*(de\s*)?tabaco/i, "semente tabaco"],
-  [/cabe[cÃ§]o\s*(de\s*)?(erva|cannabis)/i, "cabeco erva"],
-  [/cabe[cÃ§]o/i, "cabeco erva"],
-  [/[oÃ³]leo\s*medicinal/i, "oleo medicinal"],
+  [/cabe[cç]o\s*(de\s*)?(erva|cannabis)/i, "cabeco erva"],
+  [/cabe[cç]o/i, "cabeco erva"],
+  [/[oó]leo\s*medicinal/i, "oleo medicinal"],
   [/saco\s*(de\s*)?(erva|cannabis)/i, "saco erva"],
-  [/saco\s*pl[aÃ¡]stico/i, "saco plastico"],
+  [/saco\s*pl[aá]stico/i, "saco plastico"],
   // Armas brancas ilegais
   [/taco\s*(de\s*)?baseball/i, "arma branca ilegal"],
   [/taco\s*(de\s*)?snooker/i, "arma branca ilegal"],
@@ -208,7 +208,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/pistol\s*\.?50/i, "arma baixo calibre"],
   [/revolver\s*mk\s*2/i, "arma baixo calibre"],
   [/ap\s*pistol/i, "arma baixo calibre"],
-  // MÃ©dio calibre
+  // Médio calibre
   [/machine\s*pistol/i, "arma medio calibre"],
   [/hk\s*2\b|hk2\b/i, "arma medio calibre"],
   [/micro\s*smg/i, "arma medio calibre"],
@@ -229,20 +229,20 @@ const ITEM_MAP: [RegExp, string][] = [
   [/carregador\s*(de\s*)?pistola/i, "carregador baixo calibre"],
   [/carregador\s*(de\s*)?smg/i, "carregador medio calibre"],
   [/carregador\s*(de\s*)?rifle/i, "carregador alto calibre"],
-  // "CARREGADOR DE" e "RIFLE" podem ficar separados por outra cÃ©lula quando o
+  // "CARREGADOR DE" e "RIFLE" podem ficar separados por outra célula quando o
   // OCR parte a linha (ex.: "CARREGADOR DE" ... "RIFLE").
   [/carregador\s+de\b[\s\S]*?\brifle\b/i, "carregador alto calibre"],
   [/carregador\s*(de\s*)?shotgun/i, "carregador alto calibre"],
   [/carregador\s*(de\s*)?baixo\s*calibre/i, "carregador baixo calibre"],
-  [/carregador\s*(de\s*)?m[eÃ©]dio\s*calibre/i, "carregador medio calibre"],
+  [/carregador\s*(de\s*)?m[eé]dio\s*calibre/i, "carregador medio calibre"],
   [/carregador\s*(de\s*)?alto\s*calibre/i, "carregador alto calibre"],
   // Blueprints
   [/blueprint\s*pistola/i, "blueprint pistola"],
   [/blueprint\s*smg/i, "blueprint smg"],
   [/blueprint\s*rifle/i, "blueprint rifle"],
   [/esquemas?\s+de\s+armas/i, "esquemas"],
-  [/pe[cÃ§]a\s*avan[cÃ§]ada/i, "peca avancada"],
-  [/pe[cÃ§]a\s*b[aÃ¡]sica/i, "peca basica"],
+  [/pe[cç]a\s*avan[cç]ada/i, "peca avancada"],
+  [/pe[cç]a\s*b[aá]sica/i, "peca basica"],
   // Outros ilegais
   [/colete\s*fortalecido/i, "colete fortalecido"],
   [/colete/i, "colete"],
@@ -250,44 +250,44 @@ const ITEM_MAP: [RegExp, string][] = [
   [/garrafa/i, "garrafa de nitro"],
   [/nitro/i, "nitro"],
   [/adaga/i, "adaga"],
-  [/idolo|[iÃ­]dolo/i, "idolo"],
+  [/idolo|[ií]dolo/i, "idolo"],
   [/enxofre/i, "enxofre"],
   [/estanho/i, "estanho"],
-  [/n[iÃ­]quel/i, "niquel"],
-  [/min[eÃ©]rio/i, "minerios"],
+  [/n[ií]quel/i, "niquel"],
+  [/min[eé]rio/i, "minerios"],
   [/chifre/i, "chifres"],
   [/anel/i, "anel"],
   [/corrente/i, "corrente"],
-  [/rel[oÃ³]gio/i, "relogio ouro"],
+  [/rel[oó]gio/i, "relogio ouro"],
   [/bomba/i, "bomba"],
   [/orca/i, "orca"],
-  [/tubar[aÃ£]o\s*martelo/i, "tubarao martelo"],
-  [/tubar[aÃ£]o\s*branco/i, "tubarao branco"],
-  [/tubar[aÃ£]o/i, "tubarao branco"],
+  [/tubar[aã]o\s*martelo/i, "tubarao martelo"],
+  [/tubar[aã]o\s*branco/i, "tubarao branco"],
+  [/tubar[aã]o/i, "tubarao branco"],
   [/raia/i, "raia"],
   [/polvo/i, "polvo"],
-  [/ba[uÃº]\s*(de\s*)?especiaria/i, "bau"],
-  [/di[aÃ¡]rio\s*(de\s*)?bordo/i, "diario"],
+  [/ba[uú]\s*(de\s*)?especiaria/i, "bau"],
+  [/di[aá]rio\s*(de\s*)?bordo/i, "diario"],
   [/pacote\s*ilegal/i, "pacote ilegal"],
-  [/muni[cÃ§][aÃ£]o/i, "balas baixo"],
+  [/muni[cç][aã]o/i, "balas baixo"],
   [/bala\b/i, "balas baixo"],
   [/c4/i, "c4"],
   [/c\s*4\b/i, "c4"],
   [/pack\s*safira/i, "pack safira"],
   // Pesca
   [/truta/i, "truta"],
-  [/salm[aÃ£]o/i, "salmao"],
+  [/salm[aã]o/i, "salmao"],
   [/atum/i, "atum"],
   [/sardinha/i, "sardinha"],
   [/cana\s*(de\s*)?pesca/i, "cana de pesca"],
-  [/licen[cÃ§]a\s*(de\s*)?pesca/i, "licenca pesca"],
+  [/licen[cç]a\s*(de\s*)?pesca/i, "licenca pesca"],
   // Crafting / Materiais
-  [/alum[iÃ­]nio/i, "aluminio"],
+  [/alum[ií]nio/i, "aluminio"],
   [/borracha/i, "borracha"],
-  [/pl[aÃ¡]stic[o0]/i, "plastico"],
+  [/pl[aá]stic[o0]/i, "plastico"],
   [/tecido/i, "tecido"],
   [/ferro\s*-?\s*velho/i, "ferro velho"],
-  [/kit\s*repara[cÃ§][aÃ£]?[o]?[d]?/i, "kit reparacao"],
+  [/kit\s*repara[cç][aã]?[o]?[d]?/i, "kit reparacao"],
   // Itens legais comuns
   [/bandagem/i, "bandagem"],
   [/sumo\s*ananas/i, "sumo ananas"],
@@ -295,24 +295,24 @@ const ITEM_MAP: [RegExp, string][] = [
   [/sumo\s*laranja/i, "sumo laranja"],
   [/sumo/i, "sumo"],
   [/bifana/i, "bifana"],
-  [/caipirinha|c[aÃ¡]ipirinha|caipirina/i, "caipirinha"],
-  [/copo\s*(de\s*)?cart[aÃ£]o/i, "copo de cartao"],
-  [/r[aÃ¡]dio/i, "radio"],
-  [/telem[oÃ³]vel/i, "telemovel"],
+  [/caipirinha|c[aá]ipirinha|caipirina/i, "caipirinha"],
+  [/copo\s*(de\s*)?cart[aã]o/i, "copo de cartao"],
+  [/r[aá]dio/i, "radio"],
+  [/telem[oó]vel/i, "telemovel"],
   [/petrol\s*can/i, "petrol can"],
   [/tuna\s*deluxe/i, "tuna deluxe"],
   [/tesoura/i, "tesoura"],
-  [/peda[cÃ§]o\s*de\s*metal/i, "pedaco de metal"],
+  [/peda[cç]o\s*de\s*metal/i, "pedaco de metal"],
   [/fotografia/i, "fotografia"],
-  [/cart[aÃ£]o\s*de\s*cidad[aÃ£]o/i, "cartao de cidadao"],
-  [/carta\s*de\s*condu[cÃ§][aÃ£]o/i, "carta de conducao"],
-  [/cart[aÃ£]o\b/i, "cartao"],
+  [/cart[aã]o\s*de\s*cidad[aã]o/i, "cartao de cidadao"],
+  [/carta\s*de\s*condu[cç][aã]o/i, "carta de conducao"],
+  [/cart[aã]o\b/i, "cartao"],
   [/carta\s+de\b/i, "carta de conducao"],
   [/encomenda/i, "encomenda"],
-  [/[aÃ¡]gua\b/i, "agua"],
-  [/meowch[iÃ­]\s*mochi|medwch[iÃ­]\s*mochi|hedach[iÃ­]\s*mochi/i, "medwchi mochi"],
+  [/[aá]gua\b/i, "agua"],
+  [/meowch[ií]\s*mochi|medwch[ií]\s*mochi|hedach[ií]\s*mochi/i, "medwchi mochi"],
   [/monoshu|momoshu|moonshine/i, "monoshu"],
-  [/saco\s*do\s*gin[aÃ¡]sio/i, "saco do ginasio"],
+  [/saco\s*do\s*gin[aá]sio/i, "saco do ginasio"],
   [/\bhammer\b/i, "hammer"],
   [/casca\s*de\s*banana/i, "casca de banana"],
   [/nobel\s*tudo/i, "nobel tudo"],
@@ -320,25 +320,25 @@ const ITEM_MAP: [RegExp, string][] = [
   [/passaporte/i, "passaporte"],
 ];
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Linhas de ruÃ­do OCR que nunca sÃ£o nomes de itens (timestamps, peso do
-// jogador, header do inventÃ¡rio). Se entrassem na coleÃ§Ã£o de nomes podiam
+// ── Helpers ──────────────────────────────────────────────────────────────
+// Linhas de ruído OCR que nunca são nomes de itens (timestamps, peso do
+// jogador, header do inventário). Se entrassem na coleção de nomes podiam
 // roubar o papel de "linha principal" e desalinhar as quantidades.
 const NOISE_LINE_RE =
-  /^(\d{1,2}:\d{2}\s*$|peso\s*:.*|jogador\s*[-:].*|(?:invent[aÃ¡]rio|mochila|equipamento)\s*$)/i;
+  /^(\d{1,2}:\d{2}\s*$|peso\s*:.*|jogador\s*[-:].*|(?:invent[aá]rio|mochila|equipamento)\s*$)/i;
 
 function getUnitWeight(itemName: string): number | null {
   const def = ITEM_BY_NAME.get(itemName);
   return def ? def.unitKg : null;
 }
 
-// â”€â”€ Noise detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Noise detection ────────────────────────────────────────────────────────
 function isNoiseCell(cell: string): boolean {
   const s = cell.trim();
   if (/^\d{1,2}:\d{2}$/.test(s)) return true; // timestamps
   if (/peso\s*:/i.test(s)) return true;
   if (/jogador\s*[-:]/i.test(s)) return true;
-  if (/^(invent[aÃ¡]rio|mochila|equipamento)$/i.test(s)) return true;
+  if (/^(invent[aá]rio|mochila|equipamento)$/i.test(s)) return true;
   // Standalone numbers >20 without parenthesized weight = OCR noise (e.g., "56", "64", "80")
   if (/^\d+$/.test(s) && parseInt(s, 10) > 20) return true;
   // Standalone decimals >20 (e.g., "83.00", "120.00" from weight bar)
@@ -348,7 +348,7 @@ function isNoiseCell(cell: string): boolean {
   return false;
 }
 
-// â”€â”€ Qty/weight parsing with decimal-correction alternatives â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Qty/weight parsing with decimal-correction alternatives ────────────────
 interface QtyWeightParsed {
   qty: number;
   totalKg: number | null;
@@ -378,7 +378,7 @@ function parseQtyWeight(cell: string): QtyWeightParsed {
     return { qty, totalKg: null, altWeights: [], raw };
   }
 
-  // â”€â”€ Aggressive decimal recovery â”€â”€
+  // ── Aggressive decimal recovery ──
   // Always try decimal insertion when weight has no decimal and 2+ digits
   const altWeights: number[] = [];
   const hasDecimal = weightStr.includes(".") || weightStr.includes(",");
@@ -450,15 +450,15 @@ const ALT_WEIGHTS: Record<string, number[]> = {
   "arma medio calibre": [5, 7.5, 10],
   "arma alto calibre": [15, 10],
   "arma baixo calibre": [5, 3],
-  // O relÃ³gio de ouro pesa 0.1 kg/un no jogo (ex.: 5 un = 0.5 kg), mas alguns
-  // screenshots antigos/catÃ¡logo apontam 0.2 kg/un. Aceitamos ambos para o
-  // peso nÃ£o "vazar" para outro item com o mesmo peso (ex.: corrente de ouro).
+  // O relógio de ouro pesa 0.1 kg/un no jogo (ex.: 5 un = 0.5 kg), mas alguns
+  // screenshots antigos/catálogo apontam 0.2 kg/un. Aceitamos ambos para o
+  // peso não "vazar" para outro item com o mesmo peso (ex.: corrente de ouro).
   "relogio ouro": [0.1, 0.2],
 };
 
-// Alguns itens pesam >2 kg/un (ex.: mesa quÃ­mica = 5 kg). A correÃ§Ã£o de
-// "ponto decimal perdido" no OCR (ex.: "2 (10.0)" lido como "2 (1.0)") sÃ³ Ã©
-// aplicada quando o resultado bate com um peso conhecido do catÃ¡logo.
+// Alguns itens pesam >2 kg/un (ex.: mesa química = 5 kg). A correção de
+// "ponto decimal perdido" no OCR (ex.: "2 (10.0)" lido como "2 (1.0)") só é
+// aplicada quando o resultado bate com um peso conhecido do catálogo.
 let knownUnitWeightsCache: Set<number> | null = null;
 function getKnownUnitWeights(): Set<number> {
   if (!knownUnitWeightsCache) {
@@ -509,9 +509,9 @@ function weightMatchesLoose(itemName: string, qty: number, totalKg: number | nul
   return false;
 }
 
-// Peso unitÃ¡rio de referÃªncia mais prÃ³ximo do OCR (primÃ¡rio ou alternativo).
-// Ex.: Micro SMG pesa 10 kg e Machine Pistol 5 kg â€” um mix (5+10) dÃ¡ 7.5,
-// todos pesos vÃ¡lidos de "arma medio calibre".
+// Peso unitário de referência mais próximo do OCR (primário ou alternativo).
+// Ex.: Micro SMG pesa 10 kg e Machine Pistol 5 kg — um mix (5+10) dá 7.5,
+// todos pesos válidos de "arma medio calibre".
 function bestUnitWeight(itemName: string, qty: number, totalKg: number | null): number | null {
   if (totalKg == null || qty <= 0) return null;
   const computed = totalKg / qty;
@@ -532,8 +532,8 @@ function bestUnitWeight(itemName: string, qty: number, totalKg: number | null): 
 }
 
 function matchItemName(text: string): string {
-  // A sÃ­ntese do jogo usa acentos ("Sumo AnanÃ¡s") que os padrÃµes do ITEM_MAP
-  // nÃ£o tÃªm â€” normaliza (remove diacrÃ­ticos) antes de casar.
+  // A síntese do jogo usa acentos ("Sumo Ananás") que os padrões do ITEM_MAP
+  // não têm — normaliza (remove diacríticos) antes de casar.
   const normalized = text.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   let best: { name: string; len: number } | null = null;
   for (const [pattern, name] of ITEM_MAP) {
@@ -546,13 +546,13 @@ function matchItemName(text: string): string {
 }
 
 // Remove acentos preservando o comprimento (1:1): NFD adiciona combining marks
-// que mudariam os Ã­ndices; este replace troca cada carÃ¡cter acentuado pelo seu
-// carÃ¡cter base sem alterar a posiÃ§Ã£o no texto.
+// que mudariam os índices; este replace troca cada carácter acentuado pelo seu
+// carácter base sem alterar a posição no texto.
 function deaccent(text: string): string {
   return text.replace(/[\u00C0-\u024F\u1E00-\u1EFF]/g, (ch) => ch.normalize("NFD").charAt(0));
 }
 
-// â”€â”€ Split a line into cells â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Split a line into cells ──────────────────────────────────────────────
 function splitCells(line: string): string[] {
   if (line.includes("\t")) {
     return line.split("\t").map((c) => c.trim()).filter(Boolean);
@@ -580,7 +580,7 @@ function splitCells(line: string): string[] {
     let i = 0;
     while (i < words.length) {
       const compoundRules = [
-        /^(ANEL|CORRENTE|COLETE|MESA|SACO|LOCKPICK|SUMO|CARREGADOR|DIAMANTE|KIT|MICRO|ASSAULT|MACHINE|BULLPUP|DOUBLE|COMPACT|ADVANCED|TACTICAL|MILITARY|SNS|VINTAGE|AP|COMBAT|FOLHA|CABE[CÃ‡]O|SEMENTE|[OÃ“]LEO|PACOTE|BLUEPRINT|TACO|CHAVE|GARRAFA|PEDACO|CART[AÃƒ]O|ARMA|TV|BA[UÃš]|DI[AÃ]RIO|CRYPTO|[AÃ]GUIA|TUBAR[AÃƒ]O|REVOLVER|RIFLE|PETROL|TUNA|LICEN[CÃ‡]A|CANA|PACK|COPO|RELOGIO)$/i,
+        /^(ANEL|CORRENTE|COLETE|MESA|SACO|LOCKPICK|SUMO|CARREGADOR|DIAMANTE|KIT|MICRO|ASSAULT|MACHINE|BULLPUP|DOUBLE|COMPACT|ADVANCED|TACTICAL|MILITARY|SNS|VINTAGE|AP|COMBAT|FOLHA|CABE[CÇ]O|SEMENTE|[OÓ]LEO|PACOTE|BLUEPRINT|TACO|CHAVE|GARRAFA|PEDACO|CART[AÃ]O|ARMA|TV|BA[UÚ]|DI[AÁ]RIO|CRYPTO|[AÁ]GUIA|TUBAR[AÃ]O|REVOLVER|RIFLE|PETROL|TUNA|LICEN[CÇ]A|CANA|PACK|COPO|RELOGIO)$/i,
       ];
       let merged = false;
       for (const rule of compoundRules) {
@@ -642,12 +642,12 @@ function splitCells(line: string): string[] {
 }
 
 // A numeric cell is a qty/weight pair like "28 (2.B)" or "1 (0.7)" or "24".
-// OCR can misread digits inside parentheses as letters (Bâ†’8, Oâ†’0, Sâ†’5, etc.)
+// OCR can misread digits inside parentheses as letters (B→8, O→0, S→5, etc.)
 // so we must allow letters INSIDE the parenthesised weight portion.
 const isNumericCell = (c: string): boolean => {
   if (!/^\d/.test(c)) return false;
-  // OCR pode deixar um ponto final a seguir Ã  cÃ©lula (ex.: "3 (4.5).") â€”
-  // isso nÃ£o a torna texto.
+  // OCR pode deixar um ponto final a seguir à célula (ex.: "3 (4.5).") —
+  // isso não a torna texto.
   const s = c.trim().replace(/\.$/, "");
   // If the cell matches the qty(weight) pattern, it's numeric even with OCR letter misreads
   if (/^\d[\d.,]*\s*\(\s*[^)]+\s*\)$/.test(s)) return true;
@@ -658,25 +658,25 @@ const isNumericCell = (c: string): boolean => {
 };
 const isTextCell = (c: string) => c.trim() !== "" && !isNumericCell(c);
 
-// Uma linha Ã© uma "fila numÃ©rica real" se tiver pelo menos 2 cÃ©lulas com peso
-// (ex.: "26 (5.2)"). NÃºmeros puros sem peso sÃ£o ruÃ­do OCR (ex.: "64", "80",
-// "SANTOS" noutras colunas) e nÃ£o devem bloquear o alinhamento do CORE.
+// Uma linha é uma "fila numérica real" se tiver pelo menos 2 células com peso
+// (ex.: "26 (5.2)"). Números puros sem peso são ruído OCR (ex.: "64", "80",
+// "SANTOS" noutras colunas) e não devem bloquear o alinhamento do CORE.
 const isRealNumericLine = (pl: { numCells: { totalKg: number | null }[] }): boolean =>
   pl.numCells.filter((nc) => nc.totalKg != null).length >= 2;
 
-// â”€â”€ Merge compound names within a flat list of text cells â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Merge compound names within a flat list of text cells ──────────────
 function mergeCompoundNamesInList(cells: string[]): string[] {
   const step1: string[] = [];
   let i = 0;
   while (i < cells.length) {
     if (i + 1 < cells.length) {
       const mergedStr = cells[i] + " " + cells[i + 1];
-      // Um "10K"/"14K" isolado Ã© um sufixo de quilates (ex.: "CORRENTE DE OURO
-      // 10K") e nunca o inÃ­cio de um composto. Sem este guard, o padrÃ£o
+      // Um "10K"/"14K" isolado é um sufixo de quilates (ex.: "CORRENTE DE OURO
+      // 10K") e nunca o início de um composto. Sem este guard, o padrão
       // /10k\s*corrente/ do ITEM_MAP fundia "10K"+"CORRENTE DE OURO" em
       // "10K CORRENTE DE OURO" (ordem errada) e o matchItemName devolvia
-      // "corrente" em vez de "corrente 10k" â€” o bloco de grelha trocava os
-      // itens de 0.1 kg (anel/relÃ³gio/corrente) e a 10K perdia o "101 (15.2)".
+      // "corrente" em vez de "corrente 10k" — o bloco de grelha trocava os
+      // itens de 0.1 kg (anel/relógio/corrente) e a 10K perdia o "101 (15.2)".
       const isRatingSuffix = /^\d{1,2}k$/i.test(cells[i]);
       // Only merge if the pattern match actually spans BOTH cells.
       // A substring match of just one cell (e.g. /micro\s*smg/ matching
@@ -711,11 +711,11 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
     { first: /^corrente$/i, second: /^(10|14|18|22)k$/i, merged: "CORRENTE DE OURO $1K" },
     { first: /^diamante$/i, second: /^bruto$/i, merged: "DIAMANTE BRUTO" },
     { first: /^anel$/i, second: /^diamante$/i, merged: "ANEL DE DIAMANTE" },
-    { first: /^kit$/i, second: /^repara[cÃ§][aÃ£]?[o]?[d]?$/i, merged: "KIT REPARACAO" },
+    { first: /^kit$/i, second: /^repara[cç][aã]?[o]?[d]?$/i, merged: "KIT REPARACAO" },
     { first: /^carregador\s+de$/i, second: /^(pistola|smg|rifle|shotgun)$/i, merged: "CARREGADOR DE $1" },
-    { first: /^cart[aÃ£]o\s+de$/i, second: /^cidad[aÃ£]o$/i, merged: "CARTAO DE CIDADAO" },
-    { first: /^carta\s+de$/i, second: /^condu[cÃ§][aÃ£]o$/i, merged: "CARTA DE CONDUCAO" },
-    { first: /^lockpick$/i, second: /^avan[cÃ§]ad/i, merged: "LOCKPICK AVANCADA" },
+    { first: /^cart[aã]o\s+de$/i, second: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
+    { first: /^carta\s+de$/i, second: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
+    { first: /^lockpick$/i, second: /^avan[cç]ad/i, merged: "LOCKPICK AVANCADA" },
   ];
 
   for (const rule of nonAdjacentRules) {
@@ -736,10 +736,10 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
     }
   }
 
-  // "CARREGADOR DE" pode aparecer dividido em N cÃ©lulas quando hÃ¡ N
+  // "CARREGADOR DE" pode aparecer dividido em N células quando há N
   // carregadores lado a lado (ex.: "CARREGADOR DE | CARREGADOR DE" + colunas
-  // "SMG | PISTOLA"). A regra genÃ©rica acima sÃ³ junta UM par; aqui emparelhamos
-  // cada fragmento "CARREGADOR DE" com a cÃ©lula do tipo seguinte, na ordem.
+  // "SMG | PISTOLA"). A regra genérica acima só junta UM par; aqui emparelhamos
+  // cada fragmento "CARREGADOR DE" com a célula do tipo seguinte, na ordem.
   {
     const weaponType = /^(pistola|smg|rifle|shotgun)$/i;
     const carregadorFrag = /^CARREGADOR\s+DE$/i;
@@ -760,7 +760,7 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
   return result;
 }
 
-// â”€â”€ Weapon-detail popup parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Weapon-detail popup parser ───────────────────────────────────────────
 const WEAPON_RULES: {
   pattern: RegExp;
   item: WeaponCapture["weaponItem"];
@@ -783,36 +783,36 @@ const WEAPON_RULES: {
   { pattern: /pistol\s*\.\s*50/i, item: "arma baixo calibre", ammo: "balas baixo" },
 ];
 
-// Linhas de identificaÃ§Ã£o do popup de arma (nÂº de sÃ©rie, muniÃ§Ã£o, balas,
-// acessÃ³rios). SÃ£o apenas texto de identificaÃ§Ã£o â€” nÃ£o sÃ£o itens do inventÃ¡rio.
+// Linhas de identificação do popup de arma (nº de série, munição, balas,
+// acessórios). São apenas texto de identificação — não são itens do inventário.
 const WEAPON_POPUP_FIELD_RE =
-  /^(?:n[uÃº]mero\s+de\s+s[eÃ©]rie|muni[cÃ§][aÃ£]o|\bbalas?|acess[oÃ³]rios?)\s*:/i;
+  /^(?:n[uú]mero\s+de\s+s[eé]rie|muni[cç][aã]o|\bbalas?|acess[oó]rios?)\s*:/i;
 
 function parseWeaponCapture(text: string): WeaponCapture | null {
   const flat = text.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
 
   const isWeaponPopup =
-    /n[uÃº]mero\s+de\s+s[eÃ©]rie\s*:/i.test(flat) ||
-    /muni[cÃ§][aÃ£]o\s*:/i.test(flat) ||
-    /acess[oÃ³]rios?\s*:/i.test(flat);
+    /n[uú]mero\s+de\s+s[eé]rie\s*:/i.test(flat) ||
+    /muni[cç][aã]o\s*:/i.test(flat) ||
+    /acess[oó]rios?\s*:/i.test(flat);
   if (!isWeaponPopup) return null;
 
   const rule = WEAPON_RULES.find((r) => r.pattern.test(flat));
   if (!rule) return null;
 
   const ammoMatch =
-    flat.match(/muni[cÃ§][aÃ£]o\s*:\s*(\d{1,6})/i) ||
+    flat.match(/muni[cç][aã]o\s*:\s*(\d{1,6})/i) ||
     flat.match(/\bbalas?\s*:\s*(\d{1,6})/i);
   const ammo = ammoMatch ? parseInt(ammoMatch[1], 10) : 0;
 
   let accessoryCount = 0;
-  // Primeiro tenta sempre ler a lista explÃ­cita depois de "AcessÃ³rios:".
+  // Primeiro tenta sempre ler a lista explícita depois de "Acessórios:".
   // O regex anterior exigia whitespace antes do fim da string, falhava quando
-  // a lista acabava diretamente no Ãºltimo acessÃ³rio e caÃ­a no fallback.
-  // Nesse fallback, "Precision Muzzle" tambÃ©m fazia match em "Muzzle",
-  // contando o mesmo acessÃ³rio duas vezes.
+  // a lista acabava diretamente no último acessório e caía no fallback.
+  // Nesse fallback, "Precision Muzzle" também fazia match em "Muzzle",
+  // contando o mesmo acessório duas vezes.
   const accessoriesMatch = flat.match(
-    /acess[oÃ³]rios?\s*:\s*(.+?)(?=\s+(?:peso|durabilidade|condi[cÃ§][aÃ£]o|valor)\b|$)/i
+    /acess[oó]rios?\s*:\s*(.+?)(?=\s+(?:peso|durabilidade|condi[cç][aã]o|valor)\b|$)/i
   );
   if (accessoriesMatch) {
     accessoryCount = accessoriesMatch[1]
@@ -820,14 +820,14 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
       .map((item) => item.trim())
       .filter(Boolean)
       .length;
-  } else if (/acess[oÃ³]rios?\s*:/i.test(flat)) {
+  } else if (/acess[oó]rios?\s*:/i.test(flat)) {
     const knownAccessoryPatterns = [
       /extended\s*clip/i, /precision\s*muzzle/i, /scope/i, /\bgrip\b/i,
       /flashlight/i, /heavy\s*barrel/i, /suppressor/i, /magazine/i,
     ];
     accessoryCount = knownAccessoryPatterns.filter((p) => p.test(flat)).length;
-    // "Muzzle" genÃ©rico nÃ£o Ã© contado separadamente quando jÃ¡ existe
-    // "Precision Muzzle". Cada acessÃ³rio fÃ­sico vale apenas 1.
+    // "Muzzle" genérico não é contado separadamente quando já existe
+    // "Precision Muzzle". Cada acessório físico vale apenas 1.
   }
 
   return {
@@ -839,19 +839,19 @@ function parseWeaponCapture(text: string): WeaponCapture | null {
   };
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════════════════════
 // MAIN PARSER
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════════════════════
 export function parseInventoryOCR(rawText: string): ParseResult {
   const correctedText = fixOcrTypos(rawText);
   const weaponCapture = parseWeaponCapture(rawText);
   const merged = new Map<string, number>();
   const weightTotals = new Map<string, number>();
-  // CÃ©lulas numÃ©ricas jÃ¡ atribuÃ­das a um item (linha:Ã­ndice da cÃ©lula). Usada
-  // por TODOS os passes como fonte Ãºnica de verdade para "quem jÃ¡ foi
-  // consumido": dois pares idÃªnticos no OCR (ex.: dois "2(1.0)") sÃ£o cÃ©lulas
-  // distintas, por isso consumir um nÃ£o bloqueia o outro (ex.: computador
-  // consome um "2(1.0)" e o tigre fica com o segundo; relÃ³gio com "2(0.4)"
+  // Células numéricas já atribuídas a um item (linha:índice da célula). Usada
+  // por TODOS os passes como fonte única de verdade para "quem já foi
+  // consumido": dois pares idênticos no OCR (ex.: dois "2(1.0)") são células
+  // distintas, por isso consumir um não bloqueia o outro (ex.: computador
+  // consome um "2(1.0)" e o tigre fica com o segundo; relógio com "2(0.4)"
   // e o medwchi mochi com o outro).
   const consumedCells = new Set<string>();
   if (weaponCapture) {
@@ -866,25 +866,25 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const lines = correctedText
     .split(/\r?\n/)
     .map((l) => l.trim())
-    // Remove acentos preservando o comprimento (1:1): os padrÃµes do ITEM_MAP
-    // e a mesclagem de compostos (splitCells, mergeCompoundNamesInList) sÃ£o
-    // sem acentos, e o OCR traz "MESA QUÃMICA", "Sumo AnanÃ¡s", etc. Sem isto,
-    // "MESA QUÃMICA" fica dividido em "MESA"+"QUÃMICA" e o bloco Ã© perdido.
+    // Remove acentos preservando o comprimento (1:1): os padrões do ITEM_MAP
+    // e a mesclagem de compostos (splitCells, mergeCompoundNamesInList) são
+    // sem acentos, e o OCR traz "MESA QUÍMICA", "Sumo Ananás", etc. Sem isto,
+    // "MESA QUÍMICA" fica dividido em "MESA"+"QUÍMICA" e o bloco é perdido.
     .map(deaccent)
     .filter(Boolean)
     .filter((l) => !NOISE_LINE_RE.test(l))
-    // Linhas de 1 letra (ex.: "G" que o OCR lÃª de separadores/guias da grelha
-    // do bag) nunca sÃ£o nomes de itens â€” o catÃ¡logo nÃ£o tem nomes de 1 letra.
+    // Linhas de 1 letra (ex.: "G" que o OCR lê de separadores/guias da grelha
+    // do bag) nunca são nomes de itens — o catálogo não tem nomes de 1 letra.
     // Se entrarem num nameRun, quebram o alinhamento por blocos do PASS 3.5
     // (ex.: o bag da Fleeca com "G" entre as quantidades e os nomes fazia o
-    // LOCKPICK + AVANÃ‡ADA sumirem e o telemÃ³vel roubar o "1 (0.5)").
+    // LOCKPICK + AVANÇADA sumirem e o telemóvel roubar o "1 (0.5)").
     .filter((l) => !/^[a-z]{1}$/i.test(l))
     .filter((l) => {
-      // Quando o OCR Ã© o popup de identificaÃ§Ã£o de uma arma ("NÃºmero de SÃ©rie:",
-      // "MuniÃ§Ã£o:", "AcessÃ³rios:"), a arma e esses campos sÃ£o apenas texto de
-      // identificaÃ§Ã£o â€” nÃ£o sÃ£o itens do inventÃ¡rio com peso. Exclui essas
-      // linhas para nÃ£o aparecer um "1 arma medio calibre" falso nem um
-      // "1 balas baixo" falso derivados da muniÃ§Ã£o (ex.: "MuniÃ§Ã£o: 0").
+      // Quando o OCR é o popup de identificação de uma arma ("Número de Série:",
+      // "Munição:", "Acessórios:"), a arma e esses campos são apenas texto de
+      // identificação — não são itens do inventário com peso. Exclui essas
+      // linhas para não aparecer um "1 arma medio calibre" falso nem um
+      // "1 balas baixo" falso derivados da munição (ex.: "Munição: 0").
       if (!weaponCapture) return true;
       if (WEAPON_POPUP_FIELD_RE.test(l)) return false;
       if (WEAPON_RULES.some((r) => r.pattern.test(l))) return false;
@@ -892,9 +892,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     });
 
   // "CARREGADOR DE" e o tipo (SMG/PISTOLA/RIFLE/SHOTGUN) podem ser lidos pelo
-  // OCR em linhas separadas (grelha lida cÃ©lula a cÃ©lula). Cada fragmento
-  // "CARREGADOR DE" Ã© fundido com o primeiro tipo livre numa linha seguinte,
-  // na ordem â€” como o mergeCompoundNamesInList, mas entre linhas distintas.
+  // OCR em linhas separadas (grelha lida célula a célula). Cada fragmento
+  // "CARREGADOR DE" é fundido com o primeiro tipo livre numa linha seguinte,
+  // na ordem — como o mergeCompoundNamesInList, mas entre linhas distintas.
   {
     const carregadorFrag = /^CARREGADOR\s+DE$/i;
     const weaponType = /^(pistola|smg|rifle|shotgun)$/i;
@@ -937,9 +937,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
   const usedLines = new Set<number>();
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════
   // WEAPON GRID DETECTOR
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════
   {
     const flatText = lines.join(" ").replace(/\s+/g, " ");
 
@@ -1056,16 +1056,16 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     }
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // PASS SUMMARY: Lista-sÃ­ntese do jogo ("NÃ— Item â€” X,kg")
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS SUMMARY: Lista-síntese do jogo ("N× Item — X,kg")
+  // ══════════════════════════════════════════════════════════════════════
   // O jogo mostra por baixo da grelha uma lista de cada item com a sua
-  // quantidade e peso total ("44Ã— Sumo AnanÃ¡s â€” 8,8 kg"). O OCR lÃª-a de forma
-  // muito mais fiÃ¡vel do que a grelha, onde ruÃ­do ("64", "80", "SANTOS",
-  // "CRIANE") desalinha colunas e gera itens falsos (ex.: "cartao 64Ã—0.1"
-  // em vez de "1Ã— CartÃ£o de CidadÃ£o â€” 0,0 kg"). Quando sÃ£o detetadas pelo
-  // menos 2 linhas de sÃ­ntese, sÃ£o a fonte autoritativa e a grelha Ã© ignorada.
-  const SUMMARY_RE = /(\d[\d.,]*)\s*[Ã—x]\s*(.+?)\s*[â€”â€“-]\s*([\d.,]+)\s*kg\s*$/i;
+  // quantidade e peso total ("44× Sumo Ananás — 8,8 kg"). O OCR lê-a de forma
+  // muito mais fiável do que a grelha, onde ruído ("64", "80", "SANTOS",
+  // "CRIANE") desalinha colunas e gera itens falsos (ex.: "cartao 64×0.1"
+  // em vez de "1× Cartão de Cidadão — 0,0 kg"). Quando são detetadas pelo
+  // menos 2 linhas de síntese, são a fonte autoritativa e a grelha é ignorada.
+  const SUMMARY_RE = /(\d[\d.,]*)\s*[×x]\s*(.+?)\s*[—–-]\s*([\d.,]+)\s*kg\s*$/i;
   const summaryItems: { name: string; qty: number; totalKg: number; lineIdx: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(SUMMARY_RE);
@@ -1077,10 +1077,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     if (ITEM_BY_NAME.get(item)) {
       summaryItems.push({ name: item, qty, totalKg, lineIdx: i });
     } else if (Number.isFinite(totalKg) && totalKg > 0) {
-      // Nome cortado/ilegÃ­vel na sÃ­ntese (ex.: "2Ã— [item cortado na imagem] â€”
-      // 1,4 kg"). O item fica irrecuperÃ¡vel por nome, mas o peso unitÃ¡rio pode
-      // ser distintivo: se casa com EXATAMENTE UM item do catÃ¡logo, Ã© seguro
-      // atribuir (ex.: 1.4 kg / 2 = 0.7 kg sÃ³ existe no telemÃ³vel).
+      // Nome cortado/ilegível na síntese (ex.: "2× [item cortado na imagem] —
+      // 1,4 kg"). O item fica irrecuperável por nome, mas o peso unitário pode
+      // ser distintivo: se casa com EXATAMENTE UM item do catálogo, é seguro
+      // atribuir (ex.: 1.4 kg / 2 = 0.7 kg só existe no telemóvel).
       const unit = totalKg / qty;
       const uniques = ITEM_CATALOG.filter((def) => {
         if (def.unitKg <= 0) return false;
@@ -1089,12 +1089,12 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       if (uniques.length === 1) {
         summaryItems.push({ name: uniques[0].name, qty, totalKg, lineIdx: i });
       } else {
-        // Peso unitÃ¡rio partilhado (ex.: 2.0 kg = Ã¡guia de bronze/kit reparaÃ§Ã£o;
-        // 0.2 kg = muitos itens) com nome cortado: nÃ£o hÃ¡ item certo, mas o peso
-        // Ã© real. MantÃ©m-se como "item nÃ£o identificado" para o total nÃ£o perder
-        // o peso â€” senÃ£o o total da app ficava sempre abaixo do Peso do jogo.
-        // Itens de 0 kg (ex.: "1Ã— [cortado] â€” 0,0 kg") sÃ£o descartados: sem peso
-        // nÃ£o afetam o total e eram atribuÃ­dos a "dinheiro" por engano.
+        // Peso unitário partilhado (ex.: 2.0 kg = águia de bronze/kit reparação;
+        // 0.2 kg = muitos itens) com nome cortado: não há item certo, mas o peso
+        // é real. Mantém-se como "item não identificado" para o total não perder
+        // o peso — senão o total da app ficava sempre abaixo do Peso do jogo.
+        // Itens de 0 kg (ex.: "1× [cortado] — 0,0 kg") são descartados: sem peso
+        // não afetam o total e eram atribuídos a "dinheiro" por engano.
         summaryItems.push({
           name: `item nao identificado (${Math.round(unit * 100) / 100} kg/un)`,
           qty,
@@ -1112,13 +1112,13 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       weightTotals.set(s.name, (weightTotals.get(s.name) || 0) + s.totalKg);
       usedLines.add(s.lineIdx);
     }
-    // Marca todas as linhas como usadas para a grelha nÃ£o ser processada.
+    // Marca todas as linhas como usadas para a grelha não ser processada.
     for (let i = 0; i < parsedLines.length; i++) usedLines.add(i);
   }
 
   // If weapon grid took all lines, skip standard parsing
   if (usedLines.size < parsedLines.length) {
-    // â”€â”€ PASS 0: Standalone item names without numeric cells â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── PASS 0: Standalone item names without numeric cells ──────────────
     // Only process text-only lines that are NOT adjacent to a numeric line.
     // If a text line is next to a numeric line, the Core Strategy will pair them.
     const allNumCells = parsedLines.flatMap((pl) => pl.numCells);
@@ -1128,7 +1128,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       if (line.numCells.length > 0) continue;
       if (line.textCells.length === 0) continue;
       // Check if any adjacent line (within 2 lines) has >= 2 numeric cells.
-      // If so, this text line will be collected by the Core Strategy â€” skip it here.
+      // If so, this text line will be collected by the Core Strategy — skip it here.
       let adjacentToNumeric = false;
       for (let d = 1; d <= 2; d++) {
         const above = i - d;
@@ -1150,9 +1150,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (existing >= qty) continue;
         const unitW = getUnitWeight(item);
         if (unitW != null && unitW > 0) {
-          // Se existe uma cÃ©lula numÃ©rica noutro local cujo peso bate com este
-          // item, a quantidade real vem dessa cÃ©lula (Core Strategy / PASS 3) â€”
-          // nÃ£o adivinhar qty=1 aqui (ex.: "ESTIMULANTE" solto + "102 (20.4)").
+          // Se existe uma célula numérica noutro local cujo peso bate com este
+          // item, a quantidade real vem dessa célula (Core Strategy / PASS 3) —
+          // não adivinhar qty=1 aqui (ex.: "ESTIMULANTE" solto + "102 (20.4)").
           const hasMatchingCell = allNumCells.some(
             (nc) => nc.totalKg != null && nc.qty > 0 && weightMatchesLoose(item, nc.qty, nc.totalKg)
           );
@@ -1164,12 +1164,12 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       }
     }
 
-    // â”€â”€ PASS 1V: Vertical list format (qty/weight lines followed by name lines) â”€â”€
+    // ── PASS 1V: Vertical list format (qty/weight lines followed by name lines) ──
     // OCR sometimes outputs each cell on its own line:
     //   1 (0.5)
     //   1 (1.0)
     //   LOCKPICK
-    //   AVANÃ‡ADA
+    //   AVANÇADA
     // This pass detects consecutive single-cell numeric lines followed by
     // consecutive text lines, merges compound names across lines, and pairs them in order.
     {
@@ -1216,7 +1216,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         }
 
         // Collect consecutive numeric lines (single cell, with OR without weight)
-        // Include qty-only cells (e.g., "56" for Ãgua) since they may pair with names
+        // Include qty-only cells (e.g., "56" for Água) since they may pair with names
         // Skip empty lines
         const numRun: { lineIdx: number; qty: number; totalKg: number | null; cellIdx: number; altWeights: number[]; raw: string }[] = [];
         let p = vi;
@@ -1234,7 +1234,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (numRun.filter(n => n.totalKg != null).length < 2) { vi++; continue; }
 
         // Collect consecutive text lines after the numeric run
-        // Skip noise lines that are just a number without weight (e.g., "1" between LOCKPICK and AVANÃ‡ADA)
+        // Skip noise lines that are just a number without weight (e.g., "1" between LOCKPICK and AVANÇADA)
         // Also skip empty lines
         const isNoiseLine = (pl: ParsedLine): boolean =>
           pl.textCells.length === 0 &&
@@ -1257,7 +1257,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         }
         if (textRun.length < 2) { vi = p; continue; }
 
-        // Merge compound names across adjacent text lines (e.g., LOCKPICK + AVANÃ‡ADA)
+        // Merge compound names across adjacent text lines (e.g., LOCKPICK + AVANÇADA)
         const mergedNames = mergeCompoundNamesInList(textRun.map((n) => n.text))
           .filter((m) => !/^[a-z]{1}$/i.test(m));
 
@@ -1269,7 +1269,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           vi = p; continue;
         }
 
-        // STRICT ORDER MATCHING: numeric[i] â†” name[i], validated by weight
+        // STRICT ORDER MATCHING: numeric[i] ↔ name[i], validated by weight
         // Track which indices were matched
         const matchedNumIndices = new Set<number>();
         const matchedNameIndices = new Set<number>();
@@ -1294,7 +1294,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
                 matchedNumIndices.add(qi);
                 matchedNameIndices.add(qi);
                 if (process.env.OCR_DEBUG) {
-                  console.error(`[1V] decimal corrected: ${item} ${nc.raw} â†’ ${nc.qty}Ã—${(corrected/nc.qty).toFixed(2)}=${corrected}kg`);
+                  console.error(`[1V] decimal corrected: ${item} ${nc.raw} → ${nc.qty}×${(corrected/nc.qty).toFixed(2)}=${corrected}kg`);
                 }
               } else if (process.env.OCR_DEBUG) {
                 console.error(`[1V] weight mismatch: ${item} qty=${nc.qty} totalKg=${nc.totalKg} (expected unit ~${getUnitWeight(item)})`);
@@ -1309,54 +1309,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
               matchedNumIndices.add(qi);
               matchedNameIndices.add(qi);
               if (process.env.OCR_DEBUG) {
-                console.error(`[1V] qty-only match: ${item} qty=${nc.qty} â†’ totalKg=${totalKg} (unit=${unitW})`);
-              }
-            }
-          }
-}
-
-        // Pass 1.5: detect swapped quantities between variants of same base item
-        // (e.g., "corrente" 0.1kg and "corrente 10k" 0.15kg with swapped qtys)
-        // Must run BEFORE Pass 2 to prevent weight-only inference from stealing cells
-        if (numRun.length === 2 && mergedNames.length === 2) {
-          const item0 = matchItemName(mergedNames[0]);
-          const item1 = matchItemName(mergedNames[1]);
-          const base0 = item0.replace(/\s+(10|14|18|22)k$/, "");
-          const base1 = item1.replace(/\s+(10|14|18|22)k$/, "");
-          const nc0 = numRun[0];
-          const nc1 = numRun[1];
-          
-          // Check if they're variants of the same base item (one has k suffix, one doesn't)
-          const isVariantPair = base0 === base1 && 
-            ((item0.endsWith("k") && !item1.endsWith("k")) || (!item0.endsWith("k") && item1.endsWith("k"))) &&
-            nc0.totalKg != null && nc1.totalKg != null;
-          
-          if (isVariantPair) {
-            const unit0 = getUnitWeight(item0);
-            const unit1 = getUnitWeight(item1);
-            if (unit0 && unit1 && unit0 !== unit1) {
-              // Check if swapping makes both match
-              const match0as1 = weightMatches(item0, nc1.qty, nc1.totalKg);
-              const match1as0 = weightMatches(item1, nc0.qty, nc0.totalKg);
-              const match0as0 = weightMatches(item0, nc0.qty, nc0.totalKg);
-              const match1as1 = weightMatches(item1, nc1.qty, nc1.totalKg);
-              
-              if (!match0as0 && !match1as1 && match0as1 && match1as0) {
-                // Swap matches perfectly
-                // nc0.totalKg and nc1.totalKg are guaranteed non-null by isVariantPair check
-                const totalKg0 = nc0.totalKg!;
-                const totalKg1 = nc1.totalKg!;
-                blockMatched.push(
-                  { item: item0, qty: nc1.qty, totalKg: totalKg1, lineIdx: nc1.lineIdx, cellIdx: nc1.cellIdx },
-                  { item: item1, qty: nc0.qty, totalKg: totalKg0, lineIdx: nc0.lineIdx, cellIdx: nc0.cellIdx }
-                );
-                matchedNumIndices.add(0);
-                matchedNumIndices.add(1);
-                matchedNameIndices.add(0);
-                matchedNameIndices.add(1);
-                if (process.env.OCR_DEBUG) {
-                  console.error(`[1V] SWAP DETECTED: ${item0}↔${item1} (${nc0.raw}↔${nc1.raw})`);
-                }
+                console.error(`[1V] qty-only match: ${item} qty=${nc.qty} → totalKg=${totalKg} (unit=${unitW})`);
               }
             }
           }
@@ -1388,7 +1341,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             blockMatched.push({ item, qty: nc.qty, totalKg, lineIdx: nc.lineIdx, cellIdx: nc.cellIdx });
             matchedNumIndices.add(qi);
             if (process.env.OCR_DEBUG) {
-              console.error(`[1V] qty-only match (pass 3): ${item} qty=${nc.qty} â†’ totalKg=${totalKg} (unit=${unitW})`);
+              console.error(`[1V] qty-only match (pass 3): ${item} qty=${nc.qty} → totalKg=${totalKg} (unit=${unitW})`);
             }
           }
         }
@@ -1426,7 +1379,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             matchedNumIndices.add(qi);
             matchedNameIndices.add(bestMatch.ni);
             if (process.env.OCR_DEBUG) {
-              console.error(`[1V] qty-only match (pass 4): ${bestMatch.item} qty=${nc.qty} â†’ totalKg=${totalKg} (unit=${bestMatch.unitW})`);
+              console.error(`[1V] qty-only match (pass 4): ${bestMatch.item} qty=${nc.qty} → totalKg=${totalKg} (unit=${bestMatch.unitW})`);
             }
           }
         }
@@ -1438,7 +1391,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             consumedCells.add(m.lineIdx + ":" + m.cellIdx);
           }
           if (process.env.OCR_DEBUG) {
-            console.error("[1V] vertical block num=", numRun.map((n) => `${n.qty}(${n.totalKg})`).join(" "), "names=", mergedNames.join(" | "), "â†’", blockMatched.map((m) => `${m.item} ${m.qty}x${m.totalKg}`).join(", "));
+            console.error("[1V] vertical block num=", numRun.map((n) => `${n.qty}(${n.totalKg})`).join(" "), "names=", mergedNames.join(" | "), "→", blockMatched.map((m) => `${m.item} ${m.qty}x${m.totalKg}`).join(", "));
           }
           for (const n of textRun) usedLines.add(n.lineIdx);
           for (const n of numRun) usedLines.add(n.lineIdx);
@@ -1448,7 +1401,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       }
     }
 
-    // â”€â”€ CORE STRATEGY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── CORE STRATEGY ────────────────────────────────────────────────────
     for (let i = 0; i < parsedLines.length; i++) {
       if (usedLines.has(i)) continue;
       const line = parsedLines[i];
@@ -1483,7 +1436,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           const adjLine = parsedLines[adj];
           if (isRealNumericLine(adjLine)) break;
           if (adjLine.textCells.length === 0) continue;
-          // Allow d=3 text lines even with multiple cells â€” they may contain
+          // Allow d=3 text lines even with multiple cells — they may contain
           // compound-name fragments (e.g., "CORRENTE DE OURO" + "10K") or the
           // real name row several lines below the numeric row (e.g., after
           // noise lines like "POLICIA"), and the exact-match logic below
@@ -1502,9 +1455,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
       const exactMatch = textLineData.find((t) => t.cells.length === numCellCount2);
       if (exactMatch) {
-        // Se vÃ¡rias linhas tÃªm o nÃºmero certo de cÃ©lulas, preferir a que tem
-        // mais nomes de itens reais (evita linhas de ruÃ­do OCR, ex.: "1- Ð¿Ñ–Ð¾:",
-        // ganharem Ã  linha de nomes quando ambas tÃªm a mesma contagem).
+        // Se várias linhas têm o número certo de células, preferir a que tem
+        // mais nomes de itens reais (evita linhas de ruído OCR, ex.: "1- піо:",
+        // ganharem à linha de nomes quando ambas têm a mesma contagem).
         const knownName = (c: string) => !!ITEM_BY_NAME.get(matchItemName(c));
         const exactMatches = textLineData.filter((t) => t.cells.length === numCellCount2);
         const scoreLine = (t: { cells: string[] }) => t.cells.filter((c) => knownName(c)).length;
@@ -1534,9 +1487,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         { standalonePrefix: /^bruto$/i, mainPart: /diamante/i, merged: "DIAMANTE BRUTO" },
         { standalonePrefix: /^(10|14|18|22)k$/i, mainPart: /corrente/i, merged: "CORRENTE DE OURO $1K" },
         { standalonePrefix: /^reparacao$/i, mainPart: /kit/i, merged: "KIT REPARACAO" },
-        { standalonePrefix: /^reparaÃ§Ã£o$/i, mainPart: /kit/i, merged: "KIT REPARACAO" },
-        { standalonePrefix: /^carta\s+de$/i, mainPart: /^condu[cÃ§][aÃ£]o$/i, merged: "CARTA DE CONDUCAO" },
-        { standalonePrefix: /^cart[aÃ£]o\s+de$/i, mainPart: /^cidad[aÃ£]o$/i, merged: "CARTAO DE CIDADAO" },
+        { standalonePrefix: /^reparação$/i, mainPart: /kit/i, merged: "KIT REPARACAO" },
+        { standalonePrefix: /^carta\s+de$/i, mainPart: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
+        { standalonePrefix: /^cart[aã]o\s+de$/i, mainPart: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
       ];
 
       for (let fi = 0; fi < standaloneFragments.length; fi++) {
@@ -1560,9 +1513,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         { mainCell: /^carregador\s+de$/i, fragment: /^rifle$/i, merged: "CARREGADOR DE RIFLE" },
         { mainCell: /^carregador\s+de$/i, fragment: /^shotgun$/i, merged: "CARREGADOR DE SHOTGUN" },
         { mainCell: /^porte\s+de\s+arma$/i, fragment: /^branca$/i, merged: "PORTE DE ARMA BRANCA" },
-        { mainCell: /^avan[cÃ§]ada$/i, fragment: /^lockpick$/i, merged: "LOCKPICK AVANCADA" },
-        { mainCell: /^cart[aÃ£]o\s+de$/i, fragment: /^cidad[aÃ£]o$/i, merged: "CARTAO DE CIDADAO" },
-        { mainCell: /^carta\s+de$/i, fragment: /^condu[cÃ§][aÃ£]o$/i, merged: "CARTA DE CONDUCAO" },
+        { mainCell: /^avan[cç]ada$/i, fragment: /^lockpick$/i, merged: "LOCKPICK AVANCADA" },
+        { mainCell: /^cart[aã]o\s+de$/i, fragment: /^cidad[aã]o$/i, merged: "CARTAO DE CIDADAO" },
+        { mainCell: /^carta\s+de$/i, fragment: /^condu[cç][aã]o$/i, merged: "CARTA DE CONDUCAO" },
       ];
       for (let mi = 0; mi < mainCells.length; mi++) {
         for (const rule of reverseRules) {
@@ -1647,7 +1600,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       }
     }
 
-    // â”€â”€ PASS 2: Handle mixed lines (both numbers and text on same line) â”€â”€
+    // ── PASS 2: Handle mixed lines (both numbers and text on same line) ──
     for (let i = 0; i < parsedLines.length; i++) {
       if (usedLines.has(i)) continue;
       const line = parsedLines[i];
@@ -1659,18 +1612,18 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       let matched = 0;
 
       for (const qc of line.numCells) {
-        // NÃºmeros puros sem peso (ex.: "65" numa linha mista com o nome de um
-        // item) sÃ£o ruÃ­do OCR, nÃ£o quantidades reais â€” sÃ³ pares (qty, peso)
+        // Números puros sem peso (ex.: "65" numa linha mista com o nome de um
+        // item) são ruído OCR, não quantidades reais — só pares (qty, peso)
         // alinham aqui. Sem isto, o "65" de uma linha suja era somado ao item
-        // cujo nome estava na mesma linha (ex.: telemÃ³vel 65Ã—0.7 no ocr20).
+        // cujo nome estava na mesma linha (ex.: telemóvel 65×0.7 no ocr20).
         if (qc.totalKg == null) continue;
         let best: { idx: number; item: string; score: number } | null = null;
         for (let ni = 0; ni < mergedNames.length; ni++) {
           if (usedText.has(ni)) continue;
           const item = matchItemName(mergedNames[ni]);
-          // SÃ³ alinhar com itens conhecidos do catÃ¡logo. Nomes desconhecidos
-          // (ruÃ­do OCR como "SANTOS", "CRIANE") nÃ£o devem consumir cÃ©lulas
-          // numÃ©ricas com peso â€” deixÃ¡-las para o PASS 3 recuperar por peso.
+          // Só alinhar com itens conhecidos do catálogo. Nomes desconhecidos
+          // (ruído OCR como "SANTOS", "CRIANE") não devem consumir células
+          // numéricas com peso — deixá-las para o PASS 3 recuperar por peso.
           if (!ITEM_BY_NAME.get(item)) continue;
           let score = 0;
           if (qc.totalKg != null && qc.totalKg > 0) {
@@ -1694,20 +1647,20 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       if (matched > 0) usedLines.add(i);
     }
 
-    // â”€â”€ PASS 3.5: Alinhamento por blocos (OCR em grelha) â”€â”€
-    // No inventÃ¡rio em grelha as quantidades aparecem em linhas consecutivas
+    // ── PASS 3.5: Alinhamento por blocos (OCR em grelha) ──
+    // No inventário em grelha as quantidades aparecem em linhas consecutivas
     // ("1 (5.0)", "30 (3.0)", ...) e os nomes logo a seguir noutras ("SNS
-    // PISTOL MK2", "BANDAGEM", ...), uma cÃ©lula por linha. A posiÃ§Ã£o relativa
-    // engana nesta forma â€” o "par mais prÃ³ximo" do PASS 4 troca itens de peso
+    // PISTOL MK2", "BANDAGEM", ...), uma célula por linha. A posição relativa
+    // engana nesta forma — o "par mais próximo" do PASS 4 troca itens de peso
     // igual (cristal 430 ficava com 43 de saco). Aqui alinham-se os dois
-    // blocos pela ordem de apariÃ§Ã£o (Ã­ndice + penalizaÃ§Ã£o posicional), tal
-    // como o CORE faz com linhas de vÃ¡rias cÃ©lulas.
+    // blocos pela ordem de aparição (índice + penalização posicional), tal
+    // como o CORE faz com linhas de várias células.
     {
       const knownItem = (name: string): boolean => !!ITEM_BY_NAME.get(name);
       const mergeBlockNames = (names: string[]): string[] => {
-        // splitCells pode dividir um nome composto em vÃ¡rias cÃ©lulas ("SNS
-        // PISTOL"+"MK2", "MESA"+"QUÃMICA", "MEDWCHI"+"MOCHI"). Reutiliza a
-        // mesma mesclagem geral do CORE, que junta compostos adjacentes e nÃ£o
+        // splitCells pode dividir um nome composto em várias células ("SNS
+        // PISTOL"+"MK2", "MESA"+"QUÍMICA", "MEDWCHI"+"MOCHI"). Reutiliza a
+        // mesma mesclagem geral do CORE, que junta compostos adjacentes e não
         // adjacentes (ex.: "CRISTAL ... PROCESSADO").
         return mergeCompoundNamesInList(names);
       };
@@ -1739,13 +1692,13 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (nameRun.length < 2) continue;
 
         const mergedNames = mergeBlockNames(nameRun.map((n) => n.text))
-          // CÃ©lulas de ruÃ­do de 1 letra (ex.: "G") no meio de uma fila de nomes
-          // nÃ£o sÃ£o itens â€” removÃª-las permite que o bloco seja alinhado quando
-          // o OCR as lÃª na mesma linha dos nomes (ex.: "G\tASSAULT SMG").
+          // Células de ruído de 1 letra (ex.: "G") no meio de uma fila de nomes
+          // não são itens — removê-las permite que o bloco seja alinhado quando
+          // o OCR as lê na mesma linha dos nomes (ex.: "G\tASSAULT SMG").
           .filter((m) => !/^[a-z]{1}$/i.test(m));
         if (mergedNames.length < 2) continue;
-        // SÃ³ alinhar se TODOS os nomes forem itens conhecidos â€” caso contrÃ¡rio
-        // o bloco Ã© ruÃ­do OCR e o PASS 4 (posiÃ§Ã£o relativa) decide melhor.
+        // Só alinhar se TODOS os nomes forem itens conhecidos — caso contrário
+        // o bloco é ruído OCR e o PASS 4 (posição relativa) decide melhor.
         if (!mergedNames.every((m) => knownItem(matchItemName(m)))) {
           if (process.env.OCR_DEBUG) console.error("[3.5] block skipped (unknown name):", mergedNames.join(" | "));
           continue;
@@ -1767,15 +1720,15 @@ export function parseInventoryOCR(rawText: string): ParseResult {
                 strong = true;
               } else if (weightMatchesLoose(item, nc.qty, nc.totalKg)) score += 900;
             }
-            // O peso perfeito Ã© o sinal mais forte: o nome e a cÃ©lula podem
+            // O peso perfeito é o sinal mais forte: o nome e a célula podem
             // estar desfasados (ex.: "CORRENTE DE OURO 10K" no topo do bloco
-            // mas "101 (15.2)" na 4Âª cÃ©lula) â€” penalidade pequena. Sem match de
-            // peso, a posiÃ§Ã£o decide (penalidade maior).
+            // mas "101 (15.2)" na 4ª célula) — penalidade pequena. Sem match de
+            // peso, a posição decide (penalidade maior).
             score -= Math.abs(ni - qi) * (strong ? 20 : 50);
-            // Em empate, o nome mais abaixo ganha: quando o OCR lÃª mais nomes
-            // do que cÃ©lulas, o nome "extra" fica no topo da coluna (ex.: o
+            // Em empate, o nome mais abaixo ganha: quando o OCR lê mais nomes
+            // do que células, o nome "extra" fica no topo da coluna (ex.: o
             // "CORRENTE DE OURO" partido de "CORRENTE DE OURO 10K") e o mapa
-            // verdadeiro Ã© nome[i] â†” cÃ©lula[i+1].
+            // verdadeiro é nome[i] ↔ célula[i+1].
             if (!best || score > best.score || (score === best.score && ni > best.ni)) {
               best = { ni, item, score };
             }
@@ -1792,24 +1745,24 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           consumedCells.add(m.lineIdx + ":" + m.cellIdx);
         }
         if (process.env.OCR_DEBUG) {
-          console.error("[3.5] block num=", numRun.map((n) => `${n.qty}(${n.totalKg})`).join(" "), "names=", mergedNames.join(" | "), "â†’", blockMatched.map((m) => `${m.item} ${m.qty}x${m.totalKg}`).join(", "));
+          console.error("[3.5] block num=", numRun.map((n) => `${n.qty}(${n.totalKg})`).join(" "), "names=", mergedNames.join(" | "), "→", blockMatched.map((m) => `${m.item} ${m.qty}x${m.totalKg}`).join(", "));
         }
         for (const n of nameRun) usedLines.add(n.lineIdx);
         for (const n of numRun) usedLines.add(n.lineIdx);
       }
     }
 
-    // â”€â”€ PASS 4: Name-based recovery from full text â”€â”€
+    // ── PASS 4: Name-based recovery from full text ──
     {
       const allText = lines.join(" ");
-      // Texto sem acentos mas com o MESMO comprimento (posiÃ§Ãµes 1:1) â€” os
-      // padrÃµes do ITEM_MAP sÃ£o sem acentos e o OCR traz "MESA QUÃMICA",
-      // "Sumo AnanÃ¡s", etc.; sem normalizaÃ§Ã£o o /mesa\s*quimica/i nÃ£o casa.
+      // Texto sem acentos mas com o MESMO comprimento (posições 1:1) — os
+      // padrões do ITEM_MAP são sem acentos e o OCR traz "MESA QUÍMICA",
+      // "Sumo Ananás", etc.; sem normalização o /mesa\s*quimica/i não casa.
       const allTextNorm = deaccent(allText);
-      // Deslocamento de cada linha no allText, para mapear a posiÃ§Ã£o de um par
-      // "qty (peso)" de volta Ã  cÃ©lula exata (linha:cÃ©lula) que o gerou. Assim o
-      // PASS 4 marca em consumedCells apenas a cÃ©lula que consumiu â€” e um par
-      // idÃªntico repetido noutra cÃ©lula continua disponÃ­vel para outro item.
+      // Deslocamento de cada linha no allText, para mapear a posição de um par
+      // "qty (peso)" de volta à célula exata (linha:célula) que o gerou. Assim o
+      // PASS 4 marca em consumedCells apenas a célula que consumiu — e um par
+      // idêntico repetido noutra célula continua disponível para outro item.
       const lineStarts: number[] = [];
       {
         let acc = 0;
@@ -1848,10 +1801,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (merged.has(itemName)) continue;
         if (itemName === "arma sns hk2 dupla") continue;
         if (itemName === "lockpick" && merged.has("lockpick avancada")) continue;
-        if (itemName === "lockpick" && /lockpick[\s\S]*?avan[cÃ§]ad/i.test(allTextNorm)) continue;
+        if (itemName === "lockpick" && /lockpick[\s\S]*?avan[cç]ad/i.test(allTextNorm)) continue;
         if (itemName === "colete" && merged.has("colete fortalecido")) continue;
-        // cristal puro (0.1 kg/un) NÃƒO Ã© sombreado pelo cristal processado
-        // (0.3 kg/un): pesos distintos, nunca hÃ¡ cross-match. Sombrear faria
+        // cristal puro (0.1 kg/un) NÃO é sombreado pelo cristal processado
+        // (0.3 kg/un): pesos distintos, nunca há cross-match. Sombrear faria
         // perder o stack real de cristal puro (ex.: "65 (6.5)" junto de um
         // "140 (42.0)" de cristal processado).
         if (itemName === "colete" && /colete\s*fortalecid/i.test(allTextNorm)) continue;
@@ -1861,15 +1814,15 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (itemName === "sumo" && /sumo\s*(maracu|laranja|manga|ananas)/i.test(allTextNorm)) continue;
         if (itemName === "sumo" && (merged.has("sumo maracuja") || merged.has("sumo laranja") || merged.has("sumo ananas"))) continue;
         if (itemName === "corrente" && /corrente\s*10k/i.test(allTextNorm)) continue;
-        // Skip do "cartÃ£o" genÃ©rico (peso 0.1kg) quando o texto tem "cartÃ£o de
-        // cidadÃ£o" ou "carta de conduÃ§Ã£o" (documentos sem peso) â€” evita roubar
+        // Skip do "cartão" genérico (peso 0.1kg) quando o texto tem "cartão de
+        // cidadão" ou "carta de condução" (documentos sem peso) — evita roubar
         // pares (qty, peso) de outros itens (ex.: semente de erva 295 (29.5)).
-        if (itemName === "cartao" && /cart[aÃ£]o\s*de\b[\s\S]*?\bcidad[aÃ£]o\b/i.test(allTextNorm)) continue;
-        if (itemName === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cÃ§][aÃ£]o\b/i.test(allTextNorm)) continue;
+        if (itemName === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextNorm)) continue;
+        if (itemName === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextNorm)) continue;
 
         // Nome do item no texto. Compostos podem aparecer separados na grelha
         // (ex.: "CRISTAL" e "PROCESSADO" em linhas diferentes com outras palavras
-        // pelo meio), por isso hÃ¡ um fallback amplo; o par sÃ³ casa por peso, o
+        // pelo meio), por isso há um fallback amplo; o par só casa por peso, o
         // que torna o match amplo seguro.
         const findName = (pattern: RegExp, itemName: string, text: string): RegExpExecArray | null => {
           const m = new RegExp(pattern.source, "i").exec(text);
@@ -1888,11 +1841,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
         let bestPair: (typeof allPairs)[0] | null = null;
         let bestDist = Infinity;
-        // Lockpicks sÃ£o ferramentas: o jogador carrega poucas unidades, enquanto
-        // outros itens de 0.5 kg (ex.: minÃ©rios) acumulam em stacks grandes. Com
-        // o OCR em grelha (quantidades primeiro, nomes depois), a distÃ¢ncia
-        // posicional Ã© enganadora â€” preferir o par de menor quantidade resolve
-        // "lockpick e 1 e minÃ©rios e 61" (lockpick=1, minerios=61).
+        // Lockpicks são ferramentas: o jogador carrega poucas unidades, enquanto
+        // outros itens de 0.5 kg (ex.: minérios) acumulam em stacks grandes. Com
+        // o OCR em grelha (quantidades primeiro, nomes depois), a distância
+        // posicional é enganadora — preferir o par de menor quantidade resolve
+        // "lockpick e 1 e minérios e 61" (lockpick=1, minerios=61).
         const preferSmallQty = itemName === "lockpick avancada" || itemName === "lockpick";
         let bestPairQty = Infinity;
         for (const pair of allPairs) {
@@ -1922,22 +1875,22 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       }
     }
 
-    // â”€â”€ PASS 3: Weight-validated recovery for remaining numeric cells â”€â”€
+    // ── PASS 3: Weight-validated recovery for remaining numeric cells ──
     const allTextForPass3 = lines.join(" ");
-    // Nomes genÃ©ricos que NÃƒO podem casar quando a variante especÃ­fica jÃ¡ estÃ¡
-    // no texto (ex.: "lockpick" quando existe "LOCKPICK AVANÃ‡ADA"). Sem isto,
-    // "4 (2.0)" de um stack de tigres era atribuÃ­do a "lockpick" porque o peso
-    // unitÃ¡rio (0.5 kg) Ã© igual e "LOCKPICK AVANÃ‡ADA" aparece no texto.
+    // Nomes genéricos que NÃO podem casar quando a variante específica já está
+    // no texto (ex.: "lockpick" quando existe "LOCKPICK AVANÇADA"). Sem isto,
+    // "4 (2.0)" de um stack de tigres era atribuído a "lockpick" porque o peso
+    // unitário (0.5 kg) é igual e "LOCKPICK AVANÇADA" aparece no texto.
     const genericShadow = (itemName: string): boolean => {
       switch (itemName) {
         case "lockpick":
-          return /lockpick[\s\S]*?avan[cÃ§]ad/i.test(allTextForPass3);
+          return /lockpick[\s\S]*?avan[cç]ad/i.test(allTextForPass3);
         case "colete":
           return /colete\s*fortalecid/i.test(allTextForPass3);
         case "cristal":
-          // cristal (0.1) e cristal processado (0.3) tÃªm pesos distintos â€” o
+          // cristal (0.1) e cristal processado (0.3) têm pesos distintos — o
           // sombreamento deixaria perder o stack de cristal puro quando o
-          // processado tambÃ©m existe. Nunca sombreia.
+          // processado também existe. Nunca sombreia.
           return false;
         case "diamante":
           return /diamante\s*bruto/i.test(allTextForPass3) ||
@@ -1948,22 +1901,22 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         case "corrente":
           return /corrente\s*10k/i.test(allTextForPass3);
         case "cartao":
-          return /cart[aÃ£]o\s*de\b[\s\S]*?\bcidad[aÃ£]o\b/i.test(allTextForPass3) ||
-            /carta\s*de\b[\s\S]*?\bcondu[cÃ§][aÃ£]o\b/i.test(allTextForPass3) ||
-            /copo\s*de\s*cart[aÃ£]o/i.test(allTextForPass3) ||
+          return /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextForPass3) ||
+            /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3) ||
+            /copo\s*de\s*cart[aã]o/i.test(allTextForPass3) ||
             merged.has("copo de cartao");
         default:
           return false;
       }
     };
 
-    // Proximidade entre a cÃ©lula Ã³rfÃ£ e o nome do item: procura a linha de
-    // texto vizinha (atÃ© 3 linhas) que contenha o nome e pontua com a coluna
-    // (peso 100) e a distÃ¢ncia da linha (peso 1). A coluna Ã© o sinal mais
-    // forte: na grelha do jogo a cÃ©lula numÃ©rica N alinha com o nome N. Isto
-    // resolve stacks Ã³rfÃ£os (ex.: "4 (2.0)" â†’ TIGRE e nÃ£o LOCKPICK AVANÃ‡ADA,
+    // Proximidade entre a célula órfã e o nome do item: procura a linha de
+    // texto vizinha (até 3 linhas) que contenha o nome e pontua com a coluna
+    // (peso 100) e a distância da linha (peso 1). A coluna é o sinal mais
+    // forte: na grelha do jogo a célula numérica N alinha com o nome N. Isto
+    // resolve stacks órfãos (ex.: "4 (2.0)" → TIGRE e não LOCKPICK AVANÇADA,
     // apesar de ambos pesarem 0.5 kg). Sem nome perto, cai no comportamento
-    // antigo (nome em qualquer parte do texto) com pontuaÃ§Ã£o pior.
+    // antigo (nome em qualquer parte do texto) com pontuação pior.
     const proximityScore = (itemName: string, cellLine: number, cellCol: number): number => {
       let best = Infinity;
       for (let d = 1; d <= 3; d++) {
@@ -1972,11 +1925,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           if (adj < 0 || adj >= parsedLines.length) continue;
           const adjLine = parsedLines[adj];
           if (adjLine.textCells.length === 0) continue;
-          // Uma linha de nomes jÃ¡ consumida pelo CORE/PASS 3.5 (ex.: a fila
-          // "LICENÃ‡A PESCA â€¦ TRUTA" que jÃ¡ serviu a linha numÃ©rica de cima) nÃ£o
-          // pode voltar a atribuir itens a cÃ©lulas Ã³rfÃ£s de outra fila â€” senÃ£o
-          // "8 (1.6)"/"14 (2.8)" de uma segunda fila sem nomes eram somados Ã 
-          // TRUTA (regressÃ£o introduzida em 3bb3af5).
+          // Uma linha de nomes já consumida pelo CORE/PASS 3.5 (ex.: a fila
+          // "LICENÇA PESCA … TRUTA" que já serviu a linha numérica de cima) não
+          // pode voltar a atribuir itens a células órfãs de outra fila — senão
+          // "8 (1.6)"/"14 (2.8)" de uma segunda fila sem nomes eram somados à
+          // TRUTA (regressão introduzida em 3bb3af5).
           if (usedLines.has(adj)) continue;
           for (const tc of adjLine.textCells) {
             if (matchItemName(tc.text) !== itemName) continue;
@@ -1985,10 +1938,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         }
       }
       if (Number.isFinite(best)) return best;
-      // Fallback amplo de texto (nome em qualquer parte do OCR, pontuaÃ§Ã£o
-      // fraca) â€” mas sÃ³ quando ainda existe um nome do item numa linha livre.
-      // Se TODOS os nomes jÃ¡ foram consumidos (ex.: a TRUTA da fila de cima),
-      // o fallback reutilizaria um nome jÃ¡ atribuÃ­do e duplicaria o item.
+      // Fallback amplo de texto (nome em qualquer parte do OCR, pontuação
+      // fraca) — mas só quando ainda existe um nome do item numa linha livre.
+      // Se TODOS os nomes já foram consumidos (ex.: a TRUTA da fila de cima),
+      // o fallback reutilizaria um nome já atribuído e duplicaria o item.
       const patterns = ITEM_MAP.filter(([, name]) => name === itemName).map(([p]) => p);
       if (patterns.length === 0) return Infinity;
       const freeText = parsedLines
@@ -2009,8 +1962,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         let bestMatch: { name: string; diff: number; score: number } | null = null;
         for (const itemDef of ITEM_CATALOG) {
           if (itemDef.unitKg <= 0) continue;
-          if (itemDef.name === "cartao" && /cart[aÃ£]o\s*de\b[\s\S]*?\bcidad[aÃ£]o\b/i.test(allTextForPass3)) continue;
-          if (itemDef.name === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cÃ§][aÃ£]o\b/i.test(allTextForPass3)) continue;
+          if (itemDef.name === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextForPass3)) continue;
+          if (itemDef.name === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3)) continue;
           if (genericShadow(itemDef.name)) continue;
 
           const diff = Math.abs(computed - itemDef.unitKg);
@@ -2040,17 +1993,17 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           }
         }
         if (!bestMatch) {
-          // Fallback por peso unitÃ¡rio Ãºnico: quando o nome estÃ¡ cortado no OCR
-          // (ex.: telemÃ³vel a "1 (0.7)"), o PASS 3 nÃ£o encontra proximidade de
-          // nome. Se o peso calculado da cÃ©lula Ã³rfÃ£ casa com EXATAMENTE UM item
-          // do catÃ¡logo, atribuÃ­mo-lo â€” Ã© seguro porque o peso Ã© distintivo
-          // (0.7 kg sÃ³ existe no telemÃ³vel). Pesos partilhados (ex.: 1.0 kg,
-          // 0.5 kg) ficam sem match e a cÃ©lula Ã© ignorada.
+          // Fallback por peso unitário único: quando o nome está cortado no OCR
+          // (ex.: telemóvel a "1 (0.7)"), o PASS 3 não encontra proximidade de
+          // nome. Se o peso calculado da célula órfã casa com EXATAMENTE UM item
+          // do catálogo, atribuímo-lo — é seguro porque o peso é distintivo
+          // (0.7 kg só existe no telemóvel). Pesos partilhados (ex.: 1.0 kg,
+          // 0.5 kg) ficam sem match e a célula é ignorada.
           const unique: { name: string; diff: number }[] = [];
           for (const itemDef of ITEM_CATALOG) {
             if (itemDef.unitKg <= 0) continue;
-            if (itemDef.name === "cartao" && /cart[aÃ£]o\s*de\b[\s\S]*?\bcidad[aÃ£]o\b/i.test(allTextForPass3)) continue;
-            if (itemDef.name === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cÃ§][aÃ£]o\b/i.test(allTextForPass3)) continue;
+            if (itemDef.name === "cartao" && /cart[aã]o\s*de\b[\s\S]*?\bcidad[aã]o\b/i.test(allTextForPass3)) continue;
+            if (itemDef.name === "cartao" && /carta\s*de\b[\s\S]*?\bcondu[cç][aã]o\b/i.test(allTextForPass3)) continue;
             if (genericShadow(itemDef.name)) continue;
             let ok = Math.abs(computed - itemDef.unitKg) <= Math.max(0.03, itemDef.unitKg * 0.15);
             if (!ok && ALT_WEIGHTS[itemDef.name]) {
@@ -2062,21 +2015,21 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             unique.push({ name: itemDef.name, diff: Math.abs(computed - itemDef.unitKg) });
           }
           if (unique.length === 1) {
-            // SÃ³ atribuir por peso Ãºnico se o nome do item aparecer algures no
-            // OCR. Quando uma coluna/fila de cÃ©lulas nÃ£o tem NENHUM nome lido
+            // Só atribuir por peso único se o nome do item aparecer algures no
+            // OCR. Quando uma coluna/fila de células não tem NENHUM nome lido
             // (ex.: o fundo de um bag cortado na imagem), o fallback por peso
-            // Ãºnico adivinhava itens falsos â€” "1 (0.7)" virava um telemÃ³vel
-            // que nÃ£o estÃ¡ no inventÃ¡rio. O nome cortado ainda aparece no
-            // texto (ex.: "TELEMOVEL"), o que preserva o caso legÃ­timo.
+            // único adivinhava itens falsos — "1 (0.7)" virava um telemóvel
+            // que não está no inventário. O nome cortado ainda aparece no
+            // texto (ex.: "TELEMOVEL"), o que preserva o caso legítimo.
             const patterns = ITEM_MAP.filter(([, n]) => n === unique[0].name).map(([p]) => p);
             if (patterns.some((p) => p.test(deaccent(allTextForPass3)))) {
               bestMatch = { name: unique[0].name, diff: unique[0].diff, score: Infinity };
             }
           }
-          // CÃ©lula Ã³rfÃ£ sem nome lido (itens do fundo de um bag cortado na
-          // imagem â€” ex.: "5(10.0)"). Preserva-se como "item nao identificado
-          // (X kg/un)" para o total nunca ficar abaixo do Peso do jogo. SÃ³
-          // quando o peso unitÃ¡rio Ã© plausÃ­vel (casa com â‰¥1 item do catÃ¡logo):
+          // Célula órfã sem nome lido (itens do fundo de um bag cortado na
+          // imagem — ex.: "5(10.0)"). Preserva-se como "item nao identificado
+          // (X kg/un)" para o total nunca ficar abaixo do Peso do jogo. Só
+          // quando o peso unitário é plausível (casa com ≥1 item do catálogo):
           // "88" sem peso, "1 (0.0)" ou timestamps ficam de fora.
           if (!bestMatch && qc.totalKg > 0) {
             const plausible = ITEM_CATALOG.some(
@@ -2094,10 +2047,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           }
         }
         // Match fraco (score 1000 = o nome do item existe noutra parte do texto,
-        // nÃ£o junto Ã  cÃ©lula; ex.: uma "1 (1.0)" no canto cortado). Para uma
-        // cÃ©lula Ã³rfÃ£ de ~1.0 kg, a ordem do catÃ¡logo decidiria entre arma de
-        // coleÃ§Ã£o/hammer â€” mas o rÃ¡dio Ã© quase universal no inventÃ¡rio do jogo,
-        // logo Ã© o palpite mais provÃ¡vel para um "1 (1.0)" sem nome lido.
+        // não junto à célula; ex.: uma "1 (1.0)" no canto cortado). Para uma
+        // célula órfã de ~1.0 kg, a ordem do catálogo decidiria entre arma de
+        // coleção/hammer — mas o rádio é quase universal no inventário do jogo,
+        // logo é o palpite mais provável para um "1 (1.0)" sem nome lido.
         if (
           bestMatch &&
           bestMatch.score >= 1000 &&
@@ -2116,67 +2069,20 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     }
   }
 
-  // â”€â”€ Build result â”€â”€
-  // Normaliza nomes (sem acentos) para tolerar diferenÃ§as entre o texto OCR
-  // (ex.: "kit reparaÃ§Ã£o") e as chaves do catÃ¡logo (ex.: "kit reparacao").
+  // ── Build result ──
+  // Normaliza nomes (sem acentos) para tolerar diferenças entre o texto OCR
+  // (ex.: "kit reparação") e as chaves do catálogo (ex.: "kit reparacao").
   const normKey = (s: string) =>
     s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const catalogByNorm = new Map<string, (typeof ITEM_CATALOG)[number]>();
   for (const def of ITEM_CATALOG) catalogByNorm.set(normKey(def.name), def);
 
-  // Remove ruÃ­do/truncamentos de OCR que nÃ£o correspondem a itens reais
+  // Remove ruído/truncamentos de OCR que não correspondem a itens reais
   // (ex.: "jogador-", "peso:", "/", "(1 (15.0)"), para que nem o texto nem
-  // os pesos os incluam. Todos os itens legÃ­timos estÃ£o no catÃ¡logo â€” exceto
-  // os "item nao identificado (X kg/un)" da sÃ­ntese, que sÃ£o peso real sem
-  // nome (cortado no OCR) e tÃªm de sobreviver para o total bater com o Peso.
+  // os pesos os incluam. Todos os itens legítimos estão no catálogo — exceto
+  // os "item nao identificado (X kg/un)" da síntese, que são peso real sem
+  // nome (cortado no OCR) e têm de sobreviver para o total bater com o Peso.
   const CUT_ITEM = "item nao identificado";
-
-  // â”€â”€ Post-process: detect and fix swapped quantities between similar items â”€â”€
-  // Ex.: "corrente" (0.1kg) with qty=178 (total=17.8) and "corrente 10k" (0.15kg) with qty=114 (total=17.1)
-  // but OCR shows corrente=26.7kg (should be 10k qty) and corrente 10k=11.4kg (should be corrente qty)
-  // If swapping qty makes BOTH weights match perfectly, do the swap.
-  function tryFixSwappedQuantities(): void {
-    const items = Array.from(merged.entries()).map(([name, qty]) => {
-      const def = catalogByNorm.get(normKey(name));
-      const totalKg = weightTotals.get(name) ?? 0;
-      return { name, qty, totalKg, unitKg: def?.unitKg ?? 0, def };
-    }).filter(x => x.def && x.unitKg > 0 && x.qty > 0 && x.totalKg > 0);
-
-    for (let i = 0; i < items.length; i++) {
-      for (let j = i + 1; j < items.length; j++) {
-        const a = items[i];
-        const b = items[j];
-
-        // Check if they're variants of the same base item (e.g., "corrente" vs "corrente 10k")
-        const baseA = a.name.replace(/\s+(10|14|18|22)k$/, "");
-        const baseB = b.name.replace(/\s+(10|14|18|22)k$/, "");
-        if (baseA !== baseB) continue;
-
-        // Current deviation
-        const devA = Math.abs(a.totalKg - a.qty * a.unitKg) / (a.qty * a.unitKg);
-        const devB = Math.abs(b.totalKg - b.qty * b.unitKg) / (b.qty * b.unitKg);
-
-        // Deviation if swapped
-        const devASwapped = Math.abs(a.totalKg - b.qty * a.unitKg) / (b.qty * a.unitKg);
-        const devBSwapped = Math.abs(b.totalKg - a.qty * b.unitKg) / (a.qty * b.unitKg);
-
-        // Both currently bad (>15%), both would be good (<5%) if swapped
-        if (devA > 0.15 && devB > 0.15 && devASwapped < 0.05 && devBSwapped < 0.05) {
-          // Swap quantities
-          merged.set(a.name, b.qty);
-          merged.set(b.name, a.qty);
-          weightTotals.set(a.name, a.totalKg); // totalKg stays with the OCR cell
-          weightTotals.set(b.name, b.totalKg);
-          if (process.env.OCR_DEBUG) {
-            console.error(`[SWAP-FIX] Swapped qty: ${a.name} ${a.qty}â†”${b.qty} ${b.name} (${a.totalKg}kg/${b.totalKg}kg)`);
-          }
-        }
-      }
-    }
-  }
-
-  tryFixSwappedQuantities();
-
   for (const name of [...merged.keys()]) {
     if (name.startsWith(CUT_ITEM)) continue;
     if (!catalogByNorm.has(normKey(name))) merged.delete(name);
@@ -2194,7 +2100,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         unitKg: unitKg != null && unitKg > 0 ? unitKg : null,
         confidence: 50,
         confidenceLevel: "medium",
-        matchReason: "Nome cortado no OCR â€” peso contabilizado",
+        matchReason: "Nome cortado no OCR — peso contabilizado",
       });
       continue;
     }
@@ -2213,13 +2119,13 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       const fmtNum = (n: number) => n.toLocaleString("pt-PT");
       if (deviationPercent < 5) {
         confidence = 95;
-        matchReason = `Peso perfeito: ${fmtNum(ocrTotalKg)} kg = ${fmtNum(qty)} Ã— ${fmtNum(refUnit)} kg`;
+        matchReason = `Peso perfeito: ${fmtNum(ocrTotalKg)} kg = ${fmtNum(qty)} × ${fmtNum(refUnit)} kg`;
       } else if (deviationPercent < 20) {
         confidence = 80;
-        matchReason = `Peso prÃ³ximo: ${fmtNum(ocrTotalKg)} kg â‰ˆ ${fmtNum(qty)} Ã— ${fmtNum(refUnit)} kg`;
+        matchReason = `Peso próximo: ${fmtNum(ocrTotalKg)} kg ≈ ${fmtNum(qty)} × ${fmtNum(refUnit)} kg`;
       } else {
         confidence = 40;
-        matchReason = `Peso divergente: ${fmtNum(ocrTotalKg)} kg vs ${fmtNum(qty)} Ã— ${fmtNum(refUnit)} kg`;
+        matchReason = `Peso divergente: ${fmtNum(ocrTotalKg)} kg vs ${fmtNum(qty)} × ${fmtNum(refUnit)} kg`;
       }
     }
 
@@ -2238,7 +2144,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     weights.length > 0 ? Math.round(weights.reduce((sum, w) => sum + w.confidence, 0) / weights.length) : 0;
 
   const resultText = Array.from(merged.entries())
-    // Itens cortados sem nome ficam de fora do texto de coimas (nÃ£o tÃªm
+    // Itens cortados sem nome ficam de fora do texto de coimas (não têm
     // multa), mas continuam na tabela de pesos para o total bater.
     .filter(([name]) => !name.startsWith(CUT_ITEM))
     .map(([name, qty]) => `${qty} ${name}`)
