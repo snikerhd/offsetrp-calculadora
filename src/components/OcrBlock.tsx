@@ -40,12 +40,23 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   // sem chave para o dono do site). Só faz sentido para URLs públicas; ficheiros
   // locais são convertidos para data URL antes de chamar.
   const runServerOcr = useCallback(async (payload: { imageUrl?: string; imageBase64?: string; mimeType?: string; rawText?: string }) => {
-    const resp = await fetch("/api/ocr", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    return resp.json() as Promise<{
+    let resp: Response;
+    try {
+      resp = await fetch("/api/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new Error("Não foi possível contactar o servidor de OCR. Verifica a ligação à internet.");
+    }
+
+    // O servidor pode devolver uma página HTML de erro (timeout da plataforma
+    // free, ex.: Vercel/Netlify) em vez de JSON. Lê-se como texto primeiro para
+    // nunca rebentar com "JSON.parse: unexpected character..." e mostrar uma
+    // mensagem legível com dica de retry.
+    const text = await resp.text();
+    let data: {
       result?: string;
       preview?: string;
       error?: string;
@@ -53,7 +64,17 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       detectedWeights?: DetectedWeight[];
       overallConfidence?: number;
       weaponCapture?: { weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null;
-    }>;
+    };
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(
+        `O servidor devolveu uma resposta inválida${resp.status ? ` (HTTP ${resp.status})` : ""}. ` +
+        "O OCR pode ter excedido o limite do plano gratuito — espera uns segundos e tenta novamente."
+      );
+    }
+    if (!resp.ok) throw new Error(data.error || `Erro do servidor (HTTP ${resp.status}).`);
+    return data;
   }, []);
 
   const runWithPuter = useCallback(async (source: string): Promise<string> => {
