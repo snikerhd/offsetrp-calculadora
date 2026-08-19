@@ -98,6 +98,9 @@ function fixOcrTypos(text: string): string {
     [/\bCORRENTE\s+DE\s+DURO\b/gi, "CORRENTE DE OURO"],
     // OCR: "TELENOVEL" is a misread of "TELEMOVEL"
     [/\bTELENOVEL\b/gi, "TELEMOVEL"],
+    // Variante acentuada ("TELENÓVEL"): o Ó agudo não casa na regra sem acento
+    // nem no trema Ö→O, logo precisa da sua própria regra.
+    [/\bTELEN[OÓ]VEL\b/gi, "TELEMOVEL"],
     // OCR: "TELEHOVEL" is a misread of "TELEMOVEL"
     [/\bTELEHOVEL\b/gi, "TELEMOVEL"],
     // OCR: "1BK" é misread de "10K" (o jogo só tem corrente 10K, não 18K)
@@ -281,6 +284,8 @@ const ITEM_MAP: [RegExp, string][] = [
   // Crafting / Materiais
   [/alum[ií]nio/i, "aluminio"],
   [/borracha/i, "borracha"],
+  [/pl[aá]stic[o0]/i, "plastico"],
+  [/tecido/i, "tecido"],
   [/ferro\s*-?\s*velho/i, "ferro velho"],
   [/kit\s*repara[cç][aã]?[o]?[d]?/i, "kit reparacao"],
   // Itens legais comuns
@@ -1268,6 +1273,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       let matched = 0;
 
       for (const qc of line.numCells) {
+        // Números puros sem peso (ex.: "65" numa linha mista com o nome de um
+        // item) são ruído OCR, não quantidades reais — só pares (qty, peso)
+        // alinham aqui. Sem isto, o "65" de uma linha suja era somado ao item
+        // cujo nome estava na mesma linha (ex.: telemóvel 65×0.7 no ocr20).
+        if (qc.totalKg == null) continue;
         let best: { idx: number; item: string; score: number } | null = null;
         for (let ni = 0; ni < mergedNames.length; ni++) {
           if (usedText.has(ni)) continue;
@@ -1647,7 +1657,16 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             unique.push({ name: itemDef.name, diff: Math.abs(computed - itemDef.unitKg) });
           }
           if (unique.length === 1) {
-            bestMatch = { name: unique[0].name, diff: unique[0].diff, score: Infinity };
+            // Só atribuir por peso único se o nome do item aparecer algures no
+            // OCR. Quando uma coluna/fila de células não tem NENHUM nome lido
+            // (ex.: o fundo de um bag cortado na imagem), o fallback por peso
+            // único adivinhava itens falsos — "1 (0.7)" virava um telemóvel
+            // que não está no inventário. O nome cortado ainda aparece no
+            // texto (ex.: "TELEMOVEL"), o que preserva o caso legítimo.
+            const patterns = ITEM_MAP.filter(([, n]) => n === unique[0].name).map(([p]) => p);
+            if (patterns.some((p) => p.test(deaccent(allTextForPass3)))) {
+              bestMatch = { name: unique[0].name, diff: unique[0].diff, score: Infinity };
+            }
           }
         }
         // Match fraco (score 1000 = o nome do item existe noutra parte do texto,

@@ -479,4 +479,48 @@ const totalQty21 = r21.weights.reduce((s, w) => s + w.qty, 0);
 const totalKg21 = r21.weights.reduce((s, w) => s + w.kg, 0);
 if (totalQty21 === 134 && Math.abs(totalKg21 - 35.6) < 0.05) { p++; console.log("PASS total Fleeca 134×35.6 kg"); } else { f++; console.log("FAIL total Fleeca got " + totalQty21 + "x" + totalKg21.toFixed(2) + " exp 134x35.6"); }
 
+// Bag com crafting (PLÁSTICO/TECIDO) que não estavam no catálogo. Sem eles, o
+// PASS 3.5 saltava o bloco todo (exigia todos os nomes conhecidos) e o PASS 4/3
+// somavam as células por peso: "bandagem 327×0.1" (8+188+131), "encomenda
+// 21×0.2" (18+2+1) e um "telemóvel 1×0.7" falso do "1 (0.7)" órfão do fundo
+// (que é uma coluna sem nomes — sem peso unitário único com nome presente já
+// não é atribuído). Agora: arma 1, bandagem 8, plástico 188, tecido 131,
+// encomenda 18 e dinheiro 57974.
+const ocr22 = `Peso: 45.18 / 120.00
+1 (5.0)
+8 (0.8)
+188 (18.8)
+131 (13.1)
+18 (3.6)
+MACHINE PISTOL
+BANDAGEM
+PLASTICO
+TECIDO
+ENCOMENDA
+57974 (0.6)
+DINHEIRO
+2(0.4)
+1 (0.2)
+1 (1.0)
+1 (0.7)
+1 (1.0)`;
+const r22 = parseInventoryOCR(ocr22);
+const e22: [string, number, number][] = [
+  ["arma medio calibre", 1, 5],
+  ["bandagem", 8, 0.8],
+  ["plastico", 188, 18.8],
+  ["tecido", 131, 13.1],
+  ["encomenda", 18, 3.6],
+  ["dinheiro", 57974, 0.6],
+];
+for (const [item, qty, kg] of e22) {
+  const w = r22.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01 && w.confidence >= 80) { p++; console.log("PASS " + item + " " + qty + "x" + kg + " conf=" + w.confidence); }
+  else { f++; console.log("FAIL " + item + " got " + (w ? w.qty + "x" + w.kg + " conf=" + w.confidence : "N/A") + " exp " + qty + "x" + kg); }
+}
+const telemovelFalso22 = r22.weights.find(w => w.item === "telemovel");
+if (!telemovelFalso22) { p++; console.log("PASS sem telemovel falso no bag 22"); } else { f++; console.log("FAIL telemovel falso qty=" + telemovelFalso22.qty); }
+const totalKg22 = r22.weights.reduce((s, w) => s + w.kg, 0);
+if (Math.abs(totalKg22 - 41.9) < 0.05) { p++; console.log("PASS total bag 22 41.9 kg"); } else { f++; console.log("FAIL total bag 22 got " + totalKg22.toFixed(2) + " exp 41.9"); }
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
