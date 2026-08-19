@@ -669,8 +669,10 @@ export function parseQuickInput(input: string): ParseResult {
     // fazia "saco plastico" ser interpretado como "Saco de Cannabis".
     // O catálogo de pesos é a fonte de verdade: se o item existe e é legal,
     // é reconhecido mas nunca pode entrar nas Coimas Rápidas.
+    // EXCEÇÃO: "dinheiro" tem illegal: false no catálogo mas PRECISA ser processado
+    // para a coima de dinheiro não declarado (75% acima de 10.000€).
     const itemCatalogoInicial = ITEM_BY_NAME.get(nome);
-    if (itemCatalogoInicial && !itemCatalogoInicial.illegal) {
+    if (itemCatalogoInicial && !itemCatalogoInicial.illegal && nome !== "dinheiro") {
       continue;
     }
 
