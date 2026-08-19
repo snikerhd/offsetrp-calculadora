@@ -427,4 +427,56 @@ const totalQty20 = r20.weights.reduce((s, w) => s + w.qty, 0);
 const totalKg20 = r20.weights.reduce((s, w) => s + w.kg, 0);
 if (totalQty20 === 293 && Math.abs(totalKg20 - 70.3) < 0.05) { p++; console.log("PASS total grelha 293×70.3 kg"); } else { f++; console.log("FAIL total got " + totalQty20 + "x" + totalKg20.toFixed(2) + " exp 293x70.3"); }
 
+// Bag da Fleeca com linhas de ruído "G" (guias da grelha lidas pelo OCR) entre
+// as quantidades e os nomes. Antes, o "G" quebrava o alinhamento por blocos do
+// PASS 3.5: LOCKPICK+AVANÇADA sumiam, o telemóvel roubava o "1 (0.5)" (ficava
+// 2×0.7≈1.2 a 80%) e o sumo laranja duplicava para 49. Agora: lockpick avançada
+// 1×0.5, telemóvel 1×0.7, tudo a 95% e total 134×35.6 kg preservado.
+const ocr21 = `FLEECA
+Armario-bag686377
+Peso: 35.60 / 500.00
+1 (10.0)
+10 (2.0)
+26 (2.6)
+1 (1.0)
+1 (0.7)
+17:23
+G
+ASSAULT SMG
+SUMO LARANJA
+BANDAGEM
+RADIO
+TELEMÓVEL
+39 (7.8)
+44 (8.8)
+1 (0.5)
+11 (2.2)
+G
+LOCKPICK
+BIFANA
+SUMO ANANAS
+AVANÇADA
+BIFANA`;
+const r21 = parseInventoryOCR(ocr21);
+const e21: [string, number, number][] = [
+  ["arma medio calibre", 1, 10],
+  ["sumo laranja", 10, 2],
+  ["bandagem", 26, 2.6],
+  ["radio", 1, 1],
+  ["telemovel", 1, 0.7],
+  ["bifana", 50, 10],
+  ["sumo ananas", 44, 8.8],
+  ["lockpick avancada", 1, 0.5],
+];
+for (const [item, qty, kg] of e21) {
+  const w = r21.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01 && w.confidence >= 80) { p++; console.log("PASS " + item + " " + qty + "x" + kg + " conf=" + w.confidence); }
+  else { f++; console.log("FAIL " + item + " got " + (w ? w.qty + "x" + w.kg + " conf=" + w.confidence : "N/A") + " exp " + qty + "x" + kg); }
+}
+const lp21 = r21.weights.find(w => w.item === "lockpick");
+if (!lp21) { p++; console.log("PASS sem lockpick genérico na Fleeca"); } else { f++; console.log("FAIL lockpick genérico qty=" + lp21.qty); }
+const totalQty21 = r21.weights.reduce((s, w) => s + w.qty, 0);
+const totalKg21 = r21.weights.reduce((s, w) => s + w.kg, 0);
+if (totalQty21 === 134 && Math.abs(totalKg21 - 35.6) < 0.05) { p++; console.log("PASS total Fleeca 134×35.6 kg"); } else { f++; console.log("FAIL total Fleeca got " + totalQty21 + "x" + totalKg21.toFixed(2) + " exp 134x35.6"); }
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

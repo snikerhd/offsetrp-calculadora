@@ -785,6 +785,12 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     .map(deaccent)
     .filter(Boolean)
     .filter((l) => !NOISE_LINE_RE.test(l))
+    // Linhas de 1 letra (ex.: "G" que o OCR lê de separadores/guias da grelha
+    // do bag) nunca são nomes de itens — o catálogo não tem nomes de 1 letra.
+    // Se entrarem num nameRun, quebram o alinhamento por blocos do PASS 3.5
+    // (ex.: o bag da Fleeca com "G" entre as quantidades e os nomes fazia o
+    // LOCKPICK + AVANÇADA sumirem e o telemóvel roubar o "1 (0.5)").
+    .filter((l) => !/^[a-z]{1}$/i.test(l))
     .filter((l) => {
       // Quando o OCR é o popup de identificação de uma arma ("Número de Série:",
       // "Munição:", "Acessórios:"), a arma e esses campos são apenas texto de
@@ -1336,7 +1342,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         bi = p;
         if (nameRun.length < 2) continue;
 
-        const mergedNames = mergeBlockNames(nameRun.map((n) => n.text));
+        const mergedNames = mergeBlockNames(nameRun.map((n) => n.text))
+          // Células de ruído de 1 letra (ex.: "G") no meio de uma fila de nomes
+          // não são itens — removê-las permite que o bloco seja alinhado quando
+          // o OCR as lê na mesma linha dos nomes (ex.: "G\tASSAULT SMG").
+          .filter((m) => !/^[a-z]{1}$/i.test(m));
         if (mergedNames.length < 2) continue;
         // Só alinhar se TODOS os nomes forem itens conhecidos — caso contrário
         // o bloco é ruído OCR e o PASS 4 (posição relativa) decide melhor.
