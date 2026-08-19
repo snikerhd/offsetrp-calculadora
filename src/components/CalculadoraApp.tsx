@@ -735,8 +735,10 @@ export default function CalculadoraApp() {
   const gerarRelatorio = () => {
     // O relatório inclui tanto os CC introduzidos manualmente como os CC
     // associados às imagens, evitando que uma evidência fique de fora.
+    // Também inclui CCs que tenham coimas CAD ou Extras registadas.
     const ccsManuais = relCCs.trim().split("\n").map(l => l.trim()).filter(Boolean);
-    const ccs = Array.from(new Set([...ccsManuais, ...relImagens.map(img => img.cc), ...Object.keys(relOcrPorCC)]));
+    const ccsComDados = Array.from(new Set([...Object.keys(cadPorCC), ...Object.keys(extraPorCC)]));
+    const ccs = Array.from(new Set([...ccsManuais, ...relImagens.map(img => img.cc), ...Object.keys(relOcrPorCC), ...ccsComDados]));
     const linhas: string[] = [];
 
     let resumo = "📝 Resumo:\n";
@@ -1095,6 +1097,23 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
             </h2>
             <div className="max-w-md"><label className={labelCls}>Valor em dinheiro apreendido (€):</label><input type="number" value={dinheiroValor} onChange={e => setDinheiroValor(Number(e.target.value))} className={inputCls} /></div>
             <button onClick={addDinheiro} className={`w-full mt-4 py-3 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all ${fillBtnTheme} cursor-pointer`}>Calcular e Adicionar</button>
+            <div className="mt-4 p-3 bg-black/30 rounded-lg border border-white/5 max-h-40 overflow-y-auto">
+              <p className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">Coimas Extras (CC: {getCc()})</p>
+              {(extraPorCC[getCc()] || []).length === 0 ? (
+                <p className="text-xs text-gray-500">Nenhuma coima extra para este CC.</p>
+              ) : (
+                <div className="space-y-1">
+                  {(extraPorCC[getCc()] || []).map((entry, idx) => (
+                    <div key={idx} className="text-xs text-gray-300 bg-black/20 p-2 rounded">
+                      <div className="flex justify-between">
+                        <span className="truncate pr-2">{entry.desc}</span>
+                        <span className="text-amber-400 font-bold">{fmt2(entry.valor)} €</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
