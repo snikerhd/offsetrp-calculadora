@@ -143,6 +143,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "sumo laranja", displayName: "Sumo Laranja", unitKg: 0.2, category: "outro", illegal: false },
   { name: "sumo ananas", displayName: "Sumo Ananás", unitKg: 0.2, category: "outro", illegal: false },
   { name: "bifana", displayName: "Bifana", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "caipirinha", displayName: "Caipirinha", unitKg: 0.2, category: "outro", illegal: false },
   { name: "copo de cartao", displayName: "Copo de Cartão", unitKg: 0.2, category: "outro", illegal: false },
   { name: "agua", displayName: "Água", unitKg: 0.5, category: "outro", illegal: false },
   { name: "medwchi mochi", displayName: "Medwchi Mochi", unitKg: 0.2, category: "outro", illegal: false },

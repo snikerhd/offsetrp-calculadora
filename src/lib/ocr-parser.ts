@@ -295,6 +295,7 @@ const ITEM_MAP: [RegExp, string][] = [
   [/sumo\s*laranja/i, "sumo laranja"],
   [/sumo/i, "sumo"],
   [/bifana/i, "bifana"],
+  [/caipirinha|c[aá]ipirinha|caipirina/i, "caipirinha"],
   [/copo\s*(de\s*)?cart[aã]o/i, "copo de cartao"],
   [/r[aá]dio/i, "radio"],
   [/telem[oó]vel/i, "telemovel"],

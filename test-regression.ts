@@ -668,4 +668,65 @@ const totalKg24 = r24.weights.reduce((s, w) => s + w.kg, 0);
 if (Math.abs(totalKg24 - 50) < 0.05) { p++; console.log("PASS24 total bag 24 50.0 kg (≈ Peso 49.95)"); } else { f++; console.log("FAIL24 total bag 24 got " + totalKg24.toFixed(2) + " exp 50.0"); }
 if (r24.text.includes("item nao identificado")) { f++; console.log("FAIL24 texto de coimas contém item cortado"); } else { p++; console.log("PASS24 texto de coimas sem item cortado"); }
 
+// ocr25: bag com item novo CAIPIRINHA (7×1.4 = 0.2 kg/un). Sem estar no
+// catálogo, o nome desconhecido descartava o bloco e a célula 7(1.4) da
+// caipirinha ia parar ao bifana/sumo. Com o item no catálogo, o bloco alinha
+// por linha: kit 15×30, medwchi 42×8.4, caipirinha 7×1.4, bifana 7×1.4,
+// sumo laranja 5×1.0 → total 69.4 = Peso.
+const ocr25 = `Jogador-3762
+Peso: 69.40 / 120.00
+1 (0.7)
+3 (0.3)
+1(5.0)
+1
+(1.0)
+17:23
+88
+TELEMOVEL
+BANDAGEM
+MACHINE PISTOL
+PETROL CAN
+102(15.3)
+11 (1.1)
+13(1.3)
+25 (2.5)
+CORRENTE DE OURO
+10K
+ANEL DE DIAMANTE
+RELOGIO DE OURO
+CORRENTE DE OURO
+15(30.0)
+42 (8.4)
+7(1.4)
+7(1.4)
+5(1.0)
+KIT REPARACAO
+MEOWCHI MOCHI
+CAIPIRINHA
+BIFANA
+SUMO LARANJA`;
+const r25 = parseInventoryOCR(ocr25);
+const e25: [string, number, number][] = [
+  ["petrol can", 1, 1],
+  ["corrente 10k", 102, 15.3],
+  ["anel", 11, 1.1],
+  ["relogio ouro", 13, 1.3],
+  ["corrente", 25, 2.5],
+  ["arma medio calibre", 1, 5],
+  ["kit reparacao", 15, 30],
+  ["bandagem", 3, 0.3],
+  ["sumo laranja", 5, 1],
+  ["bifana", 7, 1.4],
+  ["telemovel", 1, 0.7],
+  ["medwchi mochi", 42, 8.4],
+  ["caipirinha", 7, 1.4],
+];
+for (const [item, qty, kg] of e25) {
+  const w = r25.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01) { p++; console.log("PASS25 " + item + " " + qty + "x" + kg); }
+  else { f++; console.log("FAIL25 " + item + " got " + (w ? w.qty + "x" + w.kg : "N/A") + " exp " + qty + "x" + kg); }
+}
+const totalKg25 = r25.weights.reduce((s, w) => s + w.kg, 0);
+if (Math.abs(totalKg25 - 69.4) < 0.05) { p++; console.log("PASS25 total bag 25 69.4 kg (≈ Peso 69.40)"); } else { f++; console.log("FAIL25 total bag 25 got " + totalKg25.toFixed(2) + " exp 69.4"); }
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
