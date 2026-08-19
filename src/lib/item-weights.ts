@@ -128,8 +128,8 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "minerios", displayName: "Minérios", unitKg: 0.5, category: "crafting", illegal: true },
   { name: "aluminio", displayName: "Alumínio", unitKg: 0.1, category: "crafting", illegal: false },
   { name: "borracha", displayName: "Borracha", unitKg: 0.1, category: "crafting", illegal: false },
-  { name: "plastico", displayName: "Plástico", unitKg: 0.1, category: "crafting", illegal: true },
-  { name: "tecido", displayName: "Tecido", unitKg: 0.1, category: "crafting", illegal: true },
+  { name: "plastico", displayName: "Plástico", unitKg: 0.1, category: "crafting", illegal: false },
+  { name: "tecido", displayName: "Tecido", unitKg: 0.1, category: "crafting", illegal: false },
   { name: "ferro velho", displayName: "Ferro Velho", unitKg: 0.2, category: "crafting", illegal: false },
   { name: "kit reparacao", displayName: "Kit Reparação", unitKg: 2, category: "crafting", illegal: false },
 
