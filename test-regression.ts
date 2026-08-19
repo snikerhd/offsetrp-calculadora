@@ -520,8 +520,15 @@ for (const [item, qty, kg] of e22) {
 }
 const telemovelFalso22 = r22.weights.find(w => w.item === "telemovel");
 if (!telemovelFalso22) { p++; console.log("PASS sem telemovel falso no bag 22"); } else { f++; console.log("FAIL telemovel falso qty=" + telemovelFalso22.qty); }
+// As células do fundo (2(0.4), 1(0.2), 1(1.0), 1(0.7), 1(1.0) = 3.3 kg) são
+// itens reais com o nome cortado na imagem — não são descartadas como antes
+// (total 41.9). Agora preservam-se como "item nao identificado" e o total bate
+// com o Peso 45.18 do jogo.
+const cortados22 = r22.weights.filter(w => w.item.startsWith("item nao identificado"));
+const cortadoKg22 = cortados22.reduce((s, w) => s + w.kg, 0);
+if (cortados22.length >= 1 && Math.abs(cortadoKg22 - 3.3) < 0.05) { p++; console.log("PASS peso cortado bag 22 (" + cortadoKg22.toFixed(2) + " kg)"); } else { f++; console.log("FAIL peso cortado bag 22 got " + cortadoKg22.toFixed(2) + " exp 3.3"); }
 const totalKg22 = r22.weights.reduce((s, w) => s + w.kg, 0);
-if (Math.abs(totalKg22 - 41.9) < 0.05) { p++; console.log("PASS total bag 22 41.9 kg"); } else { f++; console.log("FAIL total bag 22 got " + totalKg22.toFixed(2) + " exp 41.9"); }
+if (Math.abs(totalKg22 - 45.2) < 0.05) { p++; console.log("PASS total bag 22 45.2 kg (≈ Peso 45.18)"); } else { f++; console.log("FAIL total bag 22 got " + totalKg22.toFixed(2) + " exp 45.2"); }
 
 // Bag com síntese do jogo onde os últimos itens vêm cortados ("5× [item cortado]
 // — 10,0 kg", "8× — 1,6 kg", "6× — 1,2 kg"). Antes eram descartados (nome não
@@ -598,5 +605,67 @@ if (!dinheiroFalso23) { p++; console.log("PASS sem dinheiro falso (cortado 0 kg)
 const totalKg23 = r23.weights.reduce((s, w) => s + w.kg, 0);
 if (Math.abs(totalKg23 - 50) < 0.05) { p++; console.log("PASS total bag 23 50.0 kg (≈ Peso 49.95)"); } else { f++; console.log("FAIL total bag 23 got " + totalKg23.toFixed(2) + " exp 50.0"); }
 if (r23.text.includes("item nao identificado")) { f++; console.log("FAIL texto de coimas contém item cortado"); } else { p++; console.log("PASS texto de coimas sem item cortado"); }
+
+// ocr24: o MESMO bag, mas SEM as linhas da síntese (o OCR nem sempre as lê).
+// Sem síntese o parser usa a grelha — antes do fix dos blocos, o "RELOGIO DE
+// OURO" partia-se (splitCells) e "10K"+"CORRENTE DE OURO" fundiam-se na ordem
+// errada → o bloco era descartado e o PASS 4 misturava células: anel 26,
+// relógio 19 (11+8), 10K 107 (101+6), corrente 12, total 40 kg. Agora: anel
+// 11, relógio 12, 10K 101, corrente 26, + cortados → total 50.0 kg.
+const ocr24 = `Jogador-4113
+iiii
+Peso: 49.95 / 120.00
+1(1.0)
+1 (15.0)
+H
+88
+ASSAULT RIFLE MK
+PETROL CAN
+II
+1 (0.2)
+2(0.2)
+CARREGADOR DE
+RIFLE
+BANDAGEM
+1 (0.7)
+11 (1.1)
+12(1.2)
+101 (15.2)
+26 (2.6)
+17:23
+CORRENTE DE OURO
+TELEMOVEL
+ANEL DE DIAMANTE
+RELOGIO DE OURO
+10K
+CORRENTE DE OURO
+5(10.0)
+1 (0.0)
+1 (0.0)
+8(1.6)
+6(1.2)`;
+const r24 = parseInventoryOCR(ocr24);
+const e24: [string, number, number][] = [
+  ["petrol can", 1, 1],
+  ["arma alto calibre", 1, 15],
+  ["carregador alto calibre", 1, 0.2],
+  ["bandagem", 2, 0.2],
+  ["telemovel", 1, 0.7],
+  ["anel", 11, 1.1],
+  ["relogio ouro", 12, 1.2],
+  ["corrente 10k", 101, 15.2],
+  ["corrente", 26, 2.6],
+];
+for (const [item, qty, kg] of e24) {
+  const w = r24.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01) { p++; console.log("PASS24 " + item + " " + qty + "x" + kg); }
+  else { f++; console.log("FAIL24 " + item + " got " + (w ? w.qty + "x" + w.kg : "N/A") + " exp " + qty + "x" + kg); }
+}
+const cortados24 = r24.weights.filter(w => w.item.startsWith("item nao identificado"));
+const cortadoKg24 = cortados24.reduce((s, w) => s + w.kg, 0);
+if (cortados24.length >= 1 && Math.abs(cortadoKg24 - 12.8) < 0.05) { p++; console.log("PASS24 peso cortado contabilizado (" + cortadoKg24.toFixed(2) + " kg)"); } else { f++; console.log("FAIL24 peso cortado got " + cortadoKg24.toFixed(2) + " exp 12.8"); }
+const totalKg24 = r24.weights.reduce((s, w) => s + w.kg, 0);
+if (Math.abs(totalKg24 - 50) < 0.05) { p++; console.log("PASS24 total bag 24 50.0 kg (≈ Peso 49.95)"); } else { f++; console.log("FAIL24 total bag 24 got " + totalKg24.toFixed(2) + " exp 50.0"); }
+if (r24.text.includes("item nao identificado")) { f++; console.log("FAIL24 texto de coimas contém item cortado"); } else { p++; console.log("PASS24 texto de coimas sem item cortado"); }
 
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

@@ -506,7 +506,7 @@ function splitCells(line: string): string[] {
     let i = 0;
     while (i < words.length) {
       const compoundRules = [
-        /^(ANEL|CORRENTE|COLETE|MESA|SACO|LOCKPICK|SUMO|CARREGADOR|DIAMANTE|KIT|MICRO|ASSAULT|MACHINE|BULLPUP|DOUBLE|COMPACT|ADVANCED|TACTICAL|MILITARY|SNS|VINTAGE|AP|COMBAT|FOLHA|CABE[CÇ]O|SEMENTE|[OÓ]LEO|PACOTE|BLUEPRINT|TACO|CHAVE|GARRAFA|PEDACO|CART[AÃ]O|ARMA|TV|BA[UÚ]|DI[AÁ]RIO|CRYPTO|[AÁ]GUIA|TUBAR[AÃ]O|REVOLVER|RIFLE|PETROL|TUNA|LICEN[CÇ]A|CANA|PACK|COPO)$/i,
+        /^(ANEL|CORRENTE|COLETE|MESA|SACO|LOCKPICK|SUMO|CARREGADOR|DIAMANTE|KIT|MICRO|ASSAULT|MACHINE|BULLPUP|DOUBLE|COMPACT|ADVANCED|TACTICAL|MILITARY|SNS|VINTAGE|AP|COMBAT|FOLHA|CABE[CÇ]O|SEMENTE|[OÓ]LEO|PACOTE|BLUEPRINT|TACO|CHAVE|GARRAFA|PEDACO|CART[AÃ]O|ARMA|TV|BA[UÚ]|DI[AÁ]RIO|CRYPTO|[AÁ]GUIA|TUBAR[AÃ]O|REVOLVER|RIFLE|PETROL|TUNA|LICEN[CÇ]A|CANA|PACK|COPO|RELOGIO)$/i,
       ];
       let merged = false;
       for (const rule of compoundRules) {
@@ -597,20 +597,29 @@ function mergeCompoundNamesInList(cells: string[]): string[] {
   while (i < cells.length) {
     if (i + 1 < cells.length) {
       const mergedStr = cells[i] + " " + cells[i + 1];
+      // Um "10K"/"14K" isolado é um sufixo de quilates (ex.: "CORRENTE DE OURO
+      // 10K") e nunca o início de um composto. Sem este guard, o padrão
+      // /10k\s*corrente/ do ITEM_MAP fundia "10K"+"CORRENTE DE OURO" em
+      // "10K CORRENTE DE OURO" (ordem errada) e o matchItemName devolvia
+      // "corrente" em vez de "corrente 10k" — o bloco de grelha trocava os
+      // itens de 0.1 kg (anel/relógio/corrente) e a 10K perdia o "101 (15.2)".
+      const isRatingSuffix = /^\d{1,2}k$/i.test(cells[i]);
       // Only merge if the pattern match actually spans BOTH cells.
       // A substring match of just one cell (e.g. /micro\s*smg/ matching
       // "MICRO SMG" inside "TELEMOVEL MICRO SMG") should NOT trigger merging.
       // The match must cover characters from BOTH the first AND second cell.
-      const isCompound = ITEM_MAP.some(([p]) => {
-        const m = mergedStr.match(p);
-        if (!m) return false;
-        // The match must start within the first cell and extend into the second
-        const matchStart = m.index ?? 0;
-        const matchEnd = matchStart + m[0].length;
-        const firstCellEnd = cells[i].length;
-        // Match must span the boundary between the two cells
-        return matchStart < firstCellEnd && matchEnd > firstCellEnd;
-      }) || /^CARREGADOR\s+DE$/i.test(mergedStr);
+      const isCompound = !isRatingSuffix && (
+        ITEM_MAP.some(([p]) => {
+          const m = mergedStr.match(p);
+          if (!m) return false;
+          // The match must start within the first cell and extend into the second
+          const matchStart = m.index ?? 0;
+          const matchEnd = matchStart + m[0].length;
+          const firstCellEnd = cells[i].length;
+          // Match must span the boundary between the two cells
+          return matchStart < firstCellEnd && matchEnd > firstCellEnd;
+        }) || /^CARREGADOR\s+DE$/i.test(mergedStr)
+      );
       if (isCompound) {
         step1.push(mergedStr);
         i += 2;
@@ -845,6 +854,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       .filter((x) => isTextCell(x.text));
     return { lineIdx, cells, numCells, textCells };
   });
+  if (process.env.OCR_DEBUG) {
+    console.error("LINES:", JSON.stringify(lines));
+    console.error("PARSED:", parsedLines.map((pl, i) => `[${i}] num=${pl.numCells.map((c) => `${c.qty}(${c.totalKg})`).join(",")} txt=${pl.textCells.map((c) => c.text).join("|")}`).join("\n"));
+  }
 
   const usedLines = new Set<number>();
 
@@ -1373,7 +1386,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
         if (mergedNames.length < 2) continue;
         // Só alinhar se TODOS os nomes forem itens conhecidos — caso contrário
         // o bloco é ruído OCR e o PASS 4 (posição relativa) decide melhor.
-        if (!mergedNames.every((m) => knownItem(matchItemName(m)))) continue;
+        if (!mergedNames.every((m) => knownItem(matchItemName(m)))) {
+          if (process.env.OCR_DEBUG) console.error("[3.5] block skipped (unknown name):", mergedNames.join(" | "));
+          continue;
+        }
 
         const usedName = new Set<number>();
         const blockMatched: { item: string; qty: number; totalKg: number; lineIdx: number; cellIdx: number }[] = [];
@@ -1384,12 +1400,25 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             if (usedName.has(ni)) continue;
             const item = matchItemName(mergedNames[ni]);
             let score = 0;
+            let strong = false;
             if (nc.totalKg != null && nc.totalKg > 0) {
-              if (weightMatches(item, nc.qty, nc.totalKg)) score += 1000;
-              else if (weightMatchesLoose(item, nc.qty, nc.totalKg)) score += 900;
+              if (weightMatches(item, nc.qty, nc.totalKg)) {
+                score += 1000;
+                strong = true;
+              } else if (weightMatchesLoose(item, nc.qty, nc.totalKg)) score += 900;
             }
-            score -= Math.abs(ni - qi) * 50;
-            if (!best || score > best.score) best = { ni, item, score };
+            // O peso perfeito é o sinal mais forte: o nome e a célula podem
+            // estar desfasados (ex.: "CORRENTE DE OURO 10K" no topo do bloco
+            // mas "101 (15.2)" na 4ª célula) — penalidade pequena. Sem match de
+            // peso, a posição decide (penalidade maior).
+            score -= Math.abs(ni - qi) * (strong ? 20 : 50);
+            // Em empate, o nome mais abaixo ganha: quando o OCR lê mais nomes
+            // do que células, o nome "extra" fica no topo da coluna (ex.: o
+            // "CORRENTE DE OURO" partido de "CORRENTE DE OURO 10K") e o mapa
+            // verdadeiro é nome[i] ↔ célula[i+1].
+            if (!best || score > best.score || (score === best.score && ni > best.ni)) {
+              best = { ni, item, score };
+            }
           }
           if (best && best.score >= 900) {
             usedName.add(best.ni);
@@ -1401,6 +1430,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
           merged.set(m.item, (merged.get(m.item) || 0) + m.qty);
           weightTotals.set(m.item, (weightTotals.get(m.item) || 0) + m.totalKg);
           consumedCells.add(m.lineIdx + ":" + m.cellIdx);
+        }
+        if (process.env.OCR_DEBUG) {
+          console.error("[3.5] block num=", numRun.map((n) => `${n.qty}(${n.totalKg})`).join(" "), "names=", mergedNames.join(" | "), "→", blockMatched.map((m) => `${m.item} ${m.qty}x${m.totalKg}`).join(", "));
         }
         for (const n of nameRun) usedLines.add(n.lineIdx);
         for (const n of numRun) usedLines.add(n.lineIdx);
@@ -1679,6 +1711,25 @@ export function parseInventoryOCR(rawText: string): ParseResult {
             const patterns = ITEM_MAP.filter(([, n]) => n === unique[0].name).map(([p]) => p);
             if (patterns.some((p) => p.test(deaccent(allTextForPass3)))) {
               bestMatch = { name: unique[0].name, diff: unique[0].diff, score: Infinity };
+            }
+          }
+          // Célula órfã sem nome lido (itens do fundo de um bag cortado na
+          // imagem — ex.: "5(10.0)"). Preserva-se como "item nao identificado
+          // (X kg/un)" para o total nunca ficar abaixo do Peso do jogo. Só
+          // quando o peso unitário é plausível (casa com ≥1 item do catálogo):
+          // "88" sem peso, "1 (0.0)" ou timestamps ficam de fora.
+          if (!bestMatch && qc.totalKg > 0) {
+            const plausible = ITEM_CATALOG.some(
+              (itemDef) =>
+                itemDef.unitKg > 0 &&
+                Math.abs(computed - itemDef.unitKg) <= Math.max(0.05, itemDef.unitKg * 0.3)
+            );
+            if (plausible) {
+              bestMatch = {
+                name: `item nao identificado (${Math.round(computed * 100) / 100} kg/un)`,
+                diff: 0,
+                score: 900,
+              };
             }
           }
         }
