@@ -658,7 +658,7 @@ export function parseQuickInput(input: string): ParseResult {
     const pesoParenteses = originalNome.match(/^\(\s*[\d.,]+\s*kg?\s*\)$/i);
     if (pesoParenteses && qtd > 10000) {
       const multa = qtd * 0.75;
-      result.dinheiro.resultados.push(`  ${fmt(qtd)} € x 75% = ${fmt(multa)} €`);
+      result.dinheiro.resultados.push(`  Dinheiro não Declarado : ${fmt(qtd)} € x 75% = ${fmt(multa)} €`);
       result.dinheiro.total += multa;
       continue;
     }
@@ -709,7 +709,7 @@ export function parseQuickInput(input: string): ParseResult {
     if (nome.includes("dinheiro") || nome.includes("cash") || nome.includes("money")) {
       if (qtd > 10000) {
         const multa = qtd * 0.75;
-        result.dinheiro.resultados.push(`  ${fmt(qtd)} € x 75% = ${fmt(multa)} €`);
+        result.dinheiro.resultados.push(`  Dinheiro não Declarado : ${fmt(qtd)} € x 75% = ${fmt(multa)} €`);
         result.dinheiro.total += multa;
       }
       continue;
@@ -876,7 +876,7 @@ export function parseQuickInput(input: string): ParseResult {
     if (nome.includes("dinheiro") || nome.includes("cash") || nome.includes("money")) {
       if (qtd > 10000) {
         const multa = qtd * 0.75;
-        result.dinheiro.resultados.push(`  ${fmt(qtd)} € x 75% = ${fmt(multa)} €`);
+        result.dinheiro.resultados.push(`  Dinheiro não Declarado : ${fmt(qtd)} € x 75% = ${fmt(multa)} €`);
         result.dinheiro.total += multa;
       }
       continue;
