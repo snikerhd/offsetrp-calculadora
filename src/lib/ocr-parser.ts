@@ -987,7 +987,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     const item = matchItemName(m[2]);
     if (ITEM_BY_NAME.get(item)) {
       summaryItems.push({ name: item, qty, totalKg, lineIdx: i });
-    } else {
+    } else if (Number.isFinite(totalKg) && totalKg > 0) {
       // Nome cortado/ilegível na síntese (ex.: "2× [item cortado na imagem] —
       // 1,4 kg"). O item fica irrecuperável por nome, mas o peso unitário pode
       // ser distintivo: se casa com EXATAMENTE UM item do catálogo, é seguro
@@ -999,6 +999,19 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       });
       if (uniques.length === 1) {
         summaryItems.push({ name: uniques[0].name, qty, totalKg, lineIdx: i });
+      } else {
+        // Peso unitário partilhado (ex.: 2.0 kg = águia de bronze/kit reparação;
+        // 0.2 kg = muitos itens) com nome cortado: não há item certo, mas o peso
+        // é real. Mantém-se como "item não identificado" para o total não perder
+        // o peso — senão o total da app ficava sempre abaixo do Peso do jogo.
+        // Itens de 0 kg (ex.: "1× [cortado] — 0,0 kg") são descartados: sem peso
+        // não afetam o total e eram atribuídos a "dinheiro" por engano.
+        summaryItems.push({
+          name: `item nao identificado (${Math.round(unit * 100) / 100} kg/un)`,
+          qty,
+          totalKg,
+          lineIdx: i,
+        });
       }
     }
   }
@@ -1702,13 +1715,31 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
   // Remove ruído/truncamentos de OCR que não correspondem a itens reais
   // (ex.: "jogador-", "peso:", "/", "(1 (15.0)"), para que nem o texto nem
-  // os pesos os incluam. Todos os itens legítimos estão no catálogo.
+  // os pesos os incluam. Todos os itens legítimos estão no catálogo — exceto
+  // os "item nao identificado (X kg/un)" da síntese, que são peso real sem
+  // nome (cortado no OCR) e têm de sobreviver para o total bater com o Peso.
+  const CUT_ITEM = "item nao identificado";
   for (const name of [...merged.keys()]) {
+    if (name.startsWith(CUT_ITEM)) continue;
     if (!catalogByNorm.has(normKey(name))) merged.delete(name);
   }
 
   const weights: ItemMatch[] = [];
   for (const [name, qty] of merged.entries()) {
+    if (name.startsWith(CUT_ITEM)) {
+      const ocrTotalKg = weightTotals.get(name) ?? 0;
+      const unitKg = qty > 0 ? Math.round((ocrTotalKg / qty) * 100) / 100 : null;
+      weights.push({
+        item: name,
+        qty,
+        kg: ocrTotalKg,
+        unitKg: unitKg != null && unitKg > 0 ? unitKg : null,
+        confidence: 50,
+        confidenceLevel: "medium",
+        matchReason: "Nome cortado no OCR — peso contabilizado",
+      });
+      continue;
+    }
     const itemDef = catalogByNorm.get(normKey(name));
     if (!itemDef) continue;
     const unitKg = itemDef.unitKg;
@@ -1749,6 +1780,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     weights.length > 0 ? Math.round(weights.reduce((sum, w) => sum + w.confidence, 0) / weights.length) : 0;
 
   const resultText = Array.from(merged.entries())
+    // Itens cortados sem nome ficam de fora do texto de coimas (não têm
+    // multa), mas continuam na tabela de pesos para o total bater.
+    .filter(([name]) => !name.startsWith(CUT_ITEM))
     .map(([name, qty]) => `${qty} ${name}`)
     .join(", ");
 
