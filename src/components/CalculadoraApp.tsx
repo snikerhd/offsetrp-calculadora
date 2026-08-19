@@ -464,6 +464,16 @@ export default function CalculadoraApp() {
       const nome = m[2].trim().toLowerCase();
       const nomeNormalizado = normalizeText(nome);
 
+      // Dinheiro não declarado (75% acima de 10.000€)
+      if (nomeNormalizado.includes("dinheiro") || nomeNormalizado.includes("cash") || nomeNormalizado.includes("money")) {
+        if (qtd > 10000) {
+          const multa = qtd * 0.75;
+          totalUnitario += multa;
+          items.push(`${fmt(qtd)} € dinheiro não declarado (75%) = ${fmt(multa)}€`);
+        }
+        continue;
+      }
+
       // Itens legais podem ser reconhecidos no OCR/pesos, mas nunca
       // entram nas Coimas Rápidas. São simplesmente ignorados aqui.
       const itemLegalDireto = ITEM_BY_NAME.get(nomeNormalizado);

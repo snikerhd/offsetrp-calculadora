@@ -693,6 +693,16 @@ export function parseQuickInput(input: string): ParseResult {
       continue;
     }
 
+    // Verificar dinheiro ANTES do catálogo (dinheiro tem illegal: false no catálogo)
+    if (nome.includes("dinheiro") || nome.includes("cash") || nome.includes("money")) {
+      if (qtd > 10000) {
+        const multa = qtd * 0.75;
+        result.dinheiro.resultados.push(`  ${fmt(qtd)} € x 75% = ${fmt(multa)} €`);
+        result.dinheiro.total += multa;
+      }
+      continue;
+    }
+
     // Verificar armas (classes genéricas produzidas pelo parser do OCR, ex.:
     // "arma alto calibre"). Isto tem de correr ANTES da pesquisa de itens
     // (obterItemPorSinonimo), porque essa pesquisa faz correspondência
