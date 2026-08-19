@@ -2162,13 +2162,17 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
         // Both currently bad (>15%), both would be good (<5%) if swapped
         if (devA > 0.15 && devB > 0.15 && devASwapped < 0.05 && devBSwapped < 0.05) {
-          // Swap quantities
+          // Swap quantities AND weight totals together.
+          // The OCR cell pairs (qty, totalKg) belong to specific items; when
+          // the names are misassigned, the entire pair must move — keeping
+          // totalKg with the original cell (as the old comment said) leaves
+          // mismatched qty/kg that breaks the per-unit weight display.
           merged.set(a.name, b.qty);
           merged.set(b.name, a.qty);
-          weightTotals.set(a.name, a.totalKg); // totalKg stays with the OCR cell
-          weightTotals.set(b.name, b.totalKg);
+          weightTotals.set(a.name, b.totalKg);
+          weightTotals.set(b.name, a.totalKg);
           if (process.env.OCR_DEBUG) {
-            console.error(`[SWAP-FIX] Swapped qty: ${a.name} ${a.qty}â†”${b.qty} ${b.name} (${a.totalKg}kg/${b.totalKg}kg)`);
+            console.error(`[SWAP-FIX] Swapped qty+kg: ${a.name} ${a.qty}(${a.totalKg}kg)â†”${b.qty}(${b.totalKg}kg) ${b.name}`);
           }
         }
       }
