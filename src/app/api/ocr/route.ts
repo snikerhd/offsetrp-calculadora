@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
-import sharp from "sharp";
-import { createWorker } from "tesseract.js";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { openaiOcr } from "@/lib/openai-ocr";
 import { puterOcr } from "@/lib/puter-ocr";
@@ -34,7 +32,42 @@ try {
   mkdirSync(TESS_CACHE_PATH, { recursive: true });
 } catch { /* empty */ }
 
-let workerPromise: Promise<Awaited<ReturnType<typeof createWorker>>> | null = null;
+// sharp e tesseract.js são importados em runtime (lazy) porque no serverless
+// (Vercel/Turbopack) o import estático pode rebentar o carregamento do módulo
+// da rota — o que devolvia 500 com HTML em vez de JSON. Com load lazy e
+// try/catch, se um motor falhar ao carregar os restantes continuam a correr.
+type SharpModule = typeof import("sharp");
+type Sharp = { default?: SharpModule } & SharpModule;
+
+let sharpModule: Sharp | null = null;
+async function getSharp(): Promise<Sharp | null> {
+  if (sharpModule) return sharpModule;
+  try {
+    sharpModule = (await import("sharp")) as unknown as Sharp;
+    return sharpModule;
+  } catch (e) {
+    console.error("sharp import failed:", e);
+    return null;
+  }
+}
+
+type TesseractWorker = {
+  recognize: (input: Buffer) => Promise<{ data: { text?: string } }>;
+};
+
+let tesseractModule: typeof import("tesseract.js") | null = null;
+async function getTesseractModule(): Promise<typeof import("tesseract.js") | null> {
+  if (tesseractModule) return tesseractModule;
+  try {
+    tesseractModule = await import("tesseract.js");
+    return tesseractModule;
+  } catch (e) {
+    console.error("tesseract.js import failed:", e);
+    return null;
+  }
+}
+
+let workerPromise: Promise<TesseractWorker | null> | null = null;
 
 // Em Next.js (Turbopack) o `__dirname` interno do tesseract.js é reescrito para
 // um caminho inválido ("C:\ROOT\node_modules\..."), o que rebenta o spawn do
@@ -60,12 +93,16 @@ function resolveTesseractWorkerPath(): string {
 
 function getWorker() {
   if (!workerPromise) {
-    workerPromise = createWorker("por", 1, {
-      workerPath: resolveTesseractWorkerPath(),
-      langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/por/4.0.0_best_int",
-      cachePath: TESS_CACHE_PATH,
-      errorHandler: (e: unknown) => console.error("tesseract worker error:", e),
-    }).catch((e) => {
+    workerPromise = (async () => {
+      const tesseract = await getTesseractModule();
+      if (!tesseract) return null;
+      return tesseract.createWorker("por", 1, {
+        workerPath: resolveTesseractWorkerPath(),
+        langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/por/4.0.0_best_int",
+        cachePath: TESS_CACHE_PATH,
+        errorHandler: (e: unknown) => console.error("tesseract worker error:", e),
+      });
+    })().catch((e) => {
       console.error("tesseract worker init failed:", e);
       workerPromise = null;
       throw e;
@@ -82,15 +119,23 @@ function getWorker() {
 // mais lentos sem ganho de precisão.
 async function preprocessImage(base64Data: string): Promise<Buffer> {
   const buf = Buffer.from(base64Data, "base64");
-  const meta = await sharp(buf).metadata();
-  const w = meta.width || 0;
-  const h = meta.height || 0;
-  const scale = Math.min(2, 2400 / Math.max(w || 1, h || 1));
-  return sharp(buf)
-    .resize(Math.round(Math.max(1, w * scale)), Math.round(Math.max(1, h * scale)))
-    .flatten({ background: "#ffffff" })
-    .jpeg({ quality: 90 })
-    .toBuffer();
+  const sharpFn = await getSharp();
+  if (!sharpFn) return buf;
+  try {
+    const s = sharpFn.default ?? sharpFn;
+    const meta = await s(buf).metadata();
+    const w = meta.width || 0;
+    const h = meta.height || 0;
+    const scale = Math.min(2, 2400 / Math.max(w || 1, h || 1));
+    return s(buf)
+      .resize(Math.round(Math.max(1, w * scale)), Math.round(Math.max(1, h * scale)))
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+  } catch (e) {
+    console.error("preprocess failed, using raw image:", e);
+    return buf;
+  }
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
@@ -137,6 +182,7 @@ async function ocrSpace(processed: Buffer): Promise<string> {
 async function tesseractOcr(processed: Buffer): Promise<string> {
   try {
     const worker = await getWorker();
+    if (!worker) return "";
     const { data } = await worker.recognize(processed);
     return (data.text || "").trim();
   } catch (err) {
