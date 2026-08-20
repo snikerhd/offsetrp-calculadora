@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
-import { parseInventoryOCR } from "@/lib/ocr-parser";
+import { parseOcrText } from "@/lib/ocr-parser";
 import { openaiOcr } from "@/lib/openai-ocr";
 import { puterOcr } from "@/lib/puter-ocr";
 
