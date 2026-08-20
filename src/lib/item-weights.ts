@@ -39,6 +39,8 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "arma baixo calibre", displayName: "Arma Baixo Calibre", unitKg: 5, category: "arma", illegal: true },
   { name: "arma medio calibre", displayName: "Arma Médio Calibre", unitKg: 5, category: "arma", illegal: true },
   { name: "arma alto calibre", displayName: "Arma Alto Calibre", unitKg: 15, category: "arma", illegal: true },
+  { name: "vintage pistol", displayName: "Vintage Pistol", unitKg: 5, category: "arma", illegal: true },
+  { name: "adaga templaria", displayName: "Adaga Templária", unitKg: 0.3, category: "arma", illegal: true },
 
   // ── Munição ──
   { name: "carregador baixo calibre", displayName: "Carregador Baixo Calibre", unitKg: 0.2, category: "municao", illegal: true },
@@ -143,6 +145,8 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "sumo laranja", displayName: "Sumo Laranja", unitKg: 0.2, category: "outro", illegal: false },
   { name: "sumo ananas", displayName: "Sumo Ananás", unitKg: 0.2, category: "outro", illegal: false },
   { name: "bifana", displayName: "Bifana", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "strawberry shortcake", displayName: "Strawberry Shortcake", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "hamburg steak", displayName: "Hamburg Steak", unitKg: 0.2, category: "outro", illegal: false },
   { name: "caipirinha", displayName: "Caipirinha", unitKg: 0.2, category: "outro", illegal: false },
   { name: "copo de cartao", displayName: "Copo de Cartão", unitKg: 0.2, category: "outro", illegal: false },
   { name: "agua", displayName: "Água", unitKg: 0.5, category: "outro", illegal: false },
@@ -162,7 +166,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "pedaco de metal", displayName: "Pedaço de Metal", unitKg: 0.1, category: "outro", illegal: false },
   { name: "eletronicos", displayName: "Eletrónicos", unitKg: 0.5, category: "outro", illegal: false },
   { name: "minhoca", displayName: "Minhoca", unitKg: 0.1, category: "outro", illegal: false },
-  { name: "knife", displayName: "Faca (Knife)", unitKg: 0.2, category: "arma", illegal: false },
+  { name: "knife", displayName: "Faca (Knife)", unitKg: 1, category: "arma", illegal: false },
   { name: "fotografia", displayName: "Fotografia", unitKg: 0, category: "outro", illegal: false },
   { name: "cartao de cidadao", displayName: "Cartão de Cidadão", unitKg: 0, category: "outro", illegal: false },
   { name: "carta de conducao", displayName: "Carta de Condução", unitKg: 0, category: "outro", illegal: false },
