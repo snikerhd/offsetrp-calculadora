@@ -536,10 +536,21 @@ function parseSintese(text: string): ItemMatch[] | null {
 // ─────────────────────────────────────────────────────────────────────────────
 // Popup de arma
 // ─────────────────────────────────────────────────────────────────────────────
+function countAccessories(fixed: string): number {
+  const explicit = Number(fixed.match(/ACESS[OÓ]RIOS?\s*:\s*(\d+)/i)?.[1]);
+  if (explicit > 0) return explicit;
+  const list = fixed.match(/ACESS[OÓ]RIOS?\s*:\s*([^\n]+)/i)?.[1]?.trim();
+  if (list) {
+    const parts = list.split(/,| e | and |&/i).map(s => s.trim()).filter(s => s && !/^\d+$/.test(s) && s.length > 1);
+    if (parts.length > 0) return parts.length;
+  }
+  return /ACESS[OÓ]RIO/i.test(fixed) ? 1 : 0;
+}
+
 function parseWeaponPopup(fixed: string): { capture: WeaponCapture; weights: ItemMatch[] } | null {
   const ammo = Number(fixed.match(/MUNI[CÇ][AÃ]O\s*:\s*(\d+)/i)?.[1] || 0);
   const weapon = fixed.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || fixed.split("\n")[0]?.trim() || "";
-  const accessoryCount = Number(fixed.match(/ACESS[OÓ]RIOS?\s*:\s*(\d+)/i)?.[1] || (/ACESS[OÓ]RIO/i.test(fixed) ? 1 : 0));
+  const accessoryCount = countAccessories(fixed);
   if (!weapon && !ammo && !accessoryCount) return null;
 
   let weaponItem: WeaponCapture["weaponItem"] = "arma baixo calibre";
@@ -566,7 +577,7 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
   if (/ALTO|COMBAT PDW|RIFLE|CARABIN|SNIPER|MACHINE PISTOL/i.test(weapon)) weaponItem = "arma alto calibre";
   else if (/MEDIO|M[EÉ]DIO|SMG|PISTOL/i.test(weapon)) weaponItem = "arma medio calibre";
   const ammoItem = weaponItem === "arma alto calibre" ? "balas alto" : weaponItem === "arma medio calibre" ? "balas medio" : "balas baixo";
-  const accessoryCount = Number(text.match(/ACESS[OÓ]RIOS?\s*:\s*(\d+)/i)?.[1] || (/ACESS[OÓ]RIO/i.test(text) ? 1 : 0));
+  const accessoryCount = countAccessories(text);
   return { weapon, weaponItem, ammo, ammoItem, accessoryCount };
 }
 
