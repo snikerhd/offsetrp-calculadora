@@ -133,6 +133,9 @@ const ALIASES: Array<[string, string, number?]> = [
   ["cartao de cidadao", "cartao de cidadao"],
   ["carta de conducao", "carta de conducao"],
   ["pack vinho", "pack vinhos"],
+  ["minerio", "minerios"],
+  ["pepita", "pepitas"],
+  ["safira", "safiras"],
 ];
 
 // Fragmentos: sufixo de um nome partido pelo OCR (ex.: FORTALECIDO de

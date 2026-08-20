@@ -127,6 +127,8 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "estanho", displayName: "Estanho", unitKg: 0.1, category: "crafting", illegal: true },
   { name: "niquel", displayName: "Níquel", unitKg: 0.5, category: "crafting", illegal: true },
   { name: "minerios", displayName: "Minérios", unitKg: 0.5, category: "crafting", illegal: true },
+  { name: "polimero", displayName: "Polímero", unitKg: 0.2, category: "crafting", illegal: true },
+  { name: "bronze", displayName: "Bronze", unitKg: 0.2, category: "crafting", illegal: true },
   { name: "aluminio", displayName: "Alumínio", unitKg: 0.1, category: "crafting", illegal: false },
   { name: "borracha", displayName: "Borracha", unitKg: 0.1, category: "crafting", illegal: false },
   { name: "plastico", displayName: "Plástico", unitKg: 0.1, category: "crafting", illegal: false },

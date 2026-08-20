@@ -727,4 +727,74 @@ for (const [item, qty, kg] of e25) {
 const totalKg25 = r25.weights.reduce((s, w) => s + w.kg, 0);
 if (Math.abs(totalKg25 - 69.4) < 0.05) { p++; console.log("PASS25 total bag 25 69.4 kg (≈ Peso 69.40)"); } else { f++; console.log("FAIL25 total bag 25 got " + totalKg25.toFixed(2) + " exp 69.4"); }
 
+// Coimas Rápidas Portugal: cabeçalhos de 8 itens + grelha com nomes no singular
+// (MINÉRIO/PEPITA/SAFIRA) e itens novos (POLÍMERO/BRONZE). Os cabeçalhos
+// ("Peso perfeito/reconhecido" + 95%/85%) são ignorados; os nomes singulares
+// e os novos itens têm de mapear pelas suas pistas.
+const ocr26 = `EstanhoilegalPeso perfeito: 440 kg = 4400 × 0.1 kg
+\t4400\t0.1 kg\t440 kg\t
+95%
+Diamante BrutoilegalPeso perfeito: 4.1 kg = 41 × 0.1 kg
+\t41\t0.1 kg\t4,1 kg\t
+95%
+NíquelilegalPeso perfeito: 0.5 kg = 1 × 0.5 kg
+\t1\t0.5 kg\t0,5 kg\t
+95%
+PólvorailegalPeso perfeito: 4.7 kg = 31 × 0.15 kg
+\t31\t0.15 kg\t4,7 kg\t
+95%
+EnxofreilegalPeso perfeito: 1.6 kg = 4 × 0.4 kg
+\t4\t0.4 kg\t1,6 kg\t
+95%
+LockpickilegalPeso reconhecido: 114 kg = 228 × 0.5 kg
+\t228\t0.5 kg\t114 kg\t
+85%
+CristalilegalPeso reconhecido: 30.2 kg = 302 × 0.1 kg
+\t304\t0.1 kg\t30,4 kg\t
+85%
+EstimulanteilegalPeso reconhecido: 0.8 kg = 4 × 0.2 kg
+\t8\t0.2 kg\t1,6 kg\t
+85% 4400 (440.0)
+228 (114.0)
+41 (4.1)
+302 (30.2)
+2(0.2)
+ESTANHO
+MINÉRIO
+DIAMANTE BRUTO
+PEPITA
+SAFIRA
+1 (0.5)
+31 (4.7)
+4(1.6)
+4 (0.8)
+4(0.8)
+NIQUEL
+PÓLVORA
+ENXOFRE
+POLIMERO
+BRONZE`;
+const r26 = parseInventoryOCR(ocr26);
+const e26: [string, number, number][] = [
+  ["estanho", 4400, 440],
+  ["minerios", 228, 114],
+  ["diamante bruto", 41, 4.1],
+  ["pepitas", 302, 30.2],
+  ["safiras", 2, 0.2],
+  ["niquel", 1, 0.5],
+  ["polvora", 31, 4.7],
+  ["enxofre", 4, 1.6],
+  ["polimero", 4, 0.8],
+  ["bronze", 4, 0.8],
+];
+for (const [item, qty, kg] of e26) {
+  const w = r26.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01) { p++; console.log("PASS26 " + item + " " + qty + "x" + kg); }
+  else { f++; console.log("FAIL26 " + item + " got " + (w ? w.qty + "x" + w.kg : "N/A") + " exp " + qty + "x" + kg); }
+}
+const estimulante26 = r26.weights.find(w => w.item === "estimulante");
+if (!estimulante26) { p++; console.log("PASS26 sem estimulante falso"); } else { f++; console.log("FAIL26 estimulante falso qty=" + estimulante26.qty); }
+const totalKg26 = r26.weights.reduce((s, w) => s + w.kg, 0);
+if (Math.abs(totalKg26 - 596.9) < 0.05) { p++; console.log("PASS26 total " + totalKg26.toFixed(2) + " kg"); } else { f++; console.log("FAIL26 total got " + totalKg26.toFixed(2) + " exp 596.9"); }
+
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");

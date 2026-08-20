@@ -307,6 +307,10 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "enxofre": "Enxofre",
   "sulfur": "Enxofre",
   "sulphur": "Enxofre",
+  "polimero": "Polímero",
+  "polímero": "Polímero",
+  "polymer": "Polímero",
+  "bronze": "Bronze",
   // Chifres
   "chifres": "Chifres",
   "chifre": "Chifres",
