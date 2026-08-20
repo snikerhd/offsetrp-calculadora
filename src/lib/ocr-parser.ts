@@ -23,7 +23,7 @@ export interface ParseResult {
   overallConfidence: number;
 }
 
-type Hint = { item: string; pos: number; line: number; unitKg: number; frag: boolean; span: number };
+type Hint = { item: string; pos: number; line: number; unitKg: number; frag: boolean; span: number; timer?: boolean };
 type Pair = { qty: number; kg: number; pos: number; line: number };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\bTELEHOVEL\b/gi, "TELEMOVEL"],
   [/\bTELEH[OÓ]VEL\b/gi, "TELEMOVEL"],
   [/\bHEDACHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
-  [/\bHEOWCHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
+  [/\bHEOWCHI\s+MOCHI\b/gi, "MONOSHU"],
   [/\bMEOWCHI\s+MOCHI\b/gi, "MEDWCHI MOCHI"],
   [/\bMOMOSHU\b/gi, "MONOSHU"],
   [/\bHOHOSHU\b/gi, "MONOSHU"],
@@ -62,6 +62,7 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\bDIAHANTE\b/gi, "DIAMANTE"],
   [/\b1BK\b/gi, "10K"],
   [/\b1OK\b/gi, "10K"],
+  [/\b0\.B\b/gi, "0.8"],
 ];
 
 function fixOcrTypos(text: string): string {
@@ -80,6 +81,11 @@ function normalizeLine(text: string): string {
     .trim();
 }
 
+// Junta um par partido em duas linhas: "1\n(1.0)" → "1 (1.0)".
+function mergeSplitPairs(text: string): string {
+  return text.replace(/(\d{1,7})\s*\n\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g, "$1 ($2)");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pistas de nomes: geradas a partir do catálogo + aliases + fragmentos
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,9 +93,8 @@ const ALIASES: Array<[string, string, number?]> = [
   ["strawberry shortcake", "strawberry shortcake"],
   ["strawberry", "strawberry shortcake"],
   ["shortcake", "strawberry shortcake"],
-  ["vintage pistol", "vintage pistol"],
-  ["vintage", "vintage pistol"],
-  ["hamburg steak", "hamburg steak"],
+  ["vintage pistol", "arma baixo calibre", 5],
+  ["vintage", "arma baixo calibre", 5],
   ["knife", "knife"],
   ["faca", "knife"],
   ["carregador de smg", "carregador medio calibre"],
@@ -121,6 +126,13 @@ const ALIASES: Array<[string, string, number?]> = [
   ["c4", "c4"],
   ["c 4", "c4"],
   ["sumo de ananas", "sumo ananas"],
+  ["medickit", "medickits"],
+  ["medickits", "medickits"],
+  ["barra de ouro", "barras ouro"],
+  ["barra ouro", "barras ouro"],
+  ["cartao de cidadao", "cartao de cidadao"],
+  ["carta de conducao", "carta de conducao"],
+  ["pack vinho", "pack vinhos"],
 ];
 
 // Fragmentos: sufixo de um nome partido pelo OCR (ex.: FORTALECIDO de
@@ -135,7 +147,7 @@ const FRAGMENTS: Array<[string, string, string | null]> = [
   ["ananas", "sumo ananas", "sumo"],
   ["maracuja", "sumo maracuja", "sumo"],
   ["estatal", "ouro estatal", null],
-  ["10k", "corrente 10k", "corrente"],
+  ["10k", "corrente 10k", null],
   ["mochi", "medwchi mochi", null],
   ["smg", "carregador medio calibre", null],
   ["rifle", "carregador alto calibre", null],
@@ -202,7 +214,12 @@ function collectHints(fixed: string): Hint[] {
   const lines = fixed.split("\n");
   const out: Hint[] = [];
   for (let li = 0; li < lines.length; li++) {
-    const norm = normalizeLine(lines[li]);
+    const raw = lines[li];
+    // "SNS PISTOL HK2" / "REVOLVER MK2": o sufixo é um modificador do nome da
+    // arma (seguido de espaço), não uma arma própria. "HK2" isolado (separado
+    // por tab) é uma arma real e mantém-se. O placeholder preserva o tamanho.
+    const rawSafe = raw.replace(/(\w) +(hk2|mk2)\b/gi, "$1 xxx");
+    const norm = normalizeLine(rawSafe);
     if (!norm) continue;
     for (const p of PHRASES) {
       const re = new RegExp(p.re.source, p.re.flags.replace(/g/g, "") + "g");
@@ -211,8 +228,41 @@ function collectHints(fixed: string): Hint[] {
         out.push({ item: p.item, pos: m.index, line: li, unitKg: p.unitKg, frag: p.frag, span: m[0].length });
       }
     }
+    // Temporizador de C4 armado ("1:23" com hora de 1 dígito). Não apanha
+    // horas de 2 dígitos como "17:23". Só é usado no passe global (célula órfã).
+    const timerRe = /\b([1-9]):(\d{2})\b/g;
+    let tm: RegExpExecArray | null;
+    while ((tm = timerRe.exec(rawSafe))) {
+      out.push({ item: "c4", pos: tm.index, line: li, unitKg: 1, frag: false, span: 3, timer: true });
+    }
   }
   return out;
+}
+
+// Remove pistas curtas totalmente cobertas por outra frase mais longa na mesma
+// linha (ex.: "diamante"/"anel" dentro de "ANEL DE DIAMANTE", "plastico"
+// dentro de "SACO PLASTICO"). A pista longa mantém-se.
+function removeCoveredHints(hints: Hint[]): Hint[] {
+  const byLine = new Map<number, Hint[]>();
+  for (const h of hints) {
+    if (h.frag) continue;
+    const arr = byLine.get(h.line) ?? [];
+    arr.push(h);
+    byLine.set(h.line, arr);
+  }
+  const removed = new Set<Hint>();
+  for (const arr of byLine.values()) {
+    for (const h of arr) {
+      for (const g of arr) {
+        if (g === h) continue;
+        if (g.pos <= h.pos && g.pos + g.span >= h.pos + h.span && g.span > h.span) {
+          removed.add(h);
+          break;
+        }
+      }
+    }
+  }
+  return hints.filter((h) => !removed.has(h));
 }
 
 function fragmentPrefix(item: string): string | null {
@@ -221,6 +271,7 @@ function fragmentPrefix(item: string): string | null {
 
 // Funde fragmentos com o prefixo já lido e descarta pistas falsas.
 function mergeFragments(hints: Hint[]): Hint[] {
+  const removed = new Set<Hint>();
   for (const f of hints) {
     if (!f.frag) continue;
     const prefix = fragmentPrefix(f.item);
@@ -238,7 +289,7 @@ function mergeFragments(hints: Hint[]): Hint[] {
       if (best >= 0) {
         f.line = hints[best].line;
         f.pos = hints[best].pos;
-        hints[best].frag = true; // prefixo isolado deixa de contar sozinho
+        removed.add(hints[best]);
       }
     }
   }
@@ -246,8 +297,9 @@ function mergeFragments(hints: Hint[]): Hint[] {
   // Remove fragmentos que não fundiram e que "vivem dentro" de uma pista completa
   // (ex.: "smg" dentro de "assault smg").
   const clean: Hint[] = [];
-  const full = hints.filter((h) => !h.frag);
+  const full = hints.filter((h) => !h.frag && !removed.has(h));
   for (const h of hints) {
+    if (removed.has(h)) continue;
     if (h.frag) {
       const covered = full.some((g) => g.line === h.line && h.pos >= g.pos && h.pos < g.pos + g.span);
       if (covered) continue;
@@ -260,7 +312,7 @@ function mergeFragments(hints: Hint[]): Hint[] {
   const dedup: Hint[] = [];
   for (const h of clean) {
     const prev = dedup[dedup.length - 1];
-    if (prev && prev.item === h.item && Math.abs(h.line - prev.line) <= 1 && Math.abs(h.pos - prev.pos) < 14) continue;
+    if (prev && prev.item === h.item && h.line === prev.line && Math.abs(h.pos - prev.pos) < 4) continue;
     dedup.push(h);
   }
   return dedup;
@@ -270,17 +322,19 @@ function mergeFragments(hints: Hint[]): Hint[] {
 // Confiança e correspondência
 // ─────────────────────────────────────────────────────────────────────────────
 function weightClose(a: number, b: number): boolean {
-  return b > 0 && (Math.abs(a - b) / b <= 0.12 || Math.abs(a - b) <= 0.02);
+  if (a === 0) return b === 0;
+  if (b === 0) return false;
+  return Math.abs(a - b) / b <= 0.12 || Math.abs(a - b) <= 0.02;
 }
 function confidence(a: number, b: number | null, named: boolean): number {
-  if (b == null || b <= 0) return named ? 0.75 : 0.5;
+  if (b == null || b <= 0) return named ? 75 : 50;
   const d = Math.abs(a - b) / b;
-  if (d <= 0.05) return named ? 0.95 : 0.85;
-  if (d <= 0.12) return named ? 0.7 : 0.55;
-  return named ? 0.4 : 0.2;
+  if (d <= 0.05) return named ? 95 : 85;
+  if (d <= 0.12) return named ? 70 : 55;
+  return named ? 40 : 20;
 }
 function level(c: number): "high" | "medium" | "low" {
-  return c >= 0.8 ? "high" : c >= 0.55 ? "medium" : "low";
+  return c >= 80 ? "high" : c >= 55 ? "medium" : "low";
 }
 function displayName(i: string): string {
   const d = ITEM_BY_NAME.get(i);
@@ -322,7 +376,7 @@ function fallbackForPair(p: Pair, unidentified: boolean): ItemMatch {
     qty: p.qty,
     kg: p.kg,
     unitKg: u,
-    confidence: 0.2,
+    confidence: 20,
     confidenceLevel: "low",
     matchReason: "Item sem nome identificado",
   };
@@ -421,7 +475,7 @@ function parseSintese(text: string): ItemMatch[] | null {
           ? true
           : matchNameToItem(name, u) === null;
       const item = unidentified ? `item nao identificado (${Math.round(u * 100) / 100} kg/un)` : matchNameToItem(name, u)!;
-      const c = unidentified ? 0.2 : confidence(u, ITEM_BY_NAME.get(item)?.unitKg ?? u, true);
+      const c = unidentified ? 20 : confidence(u, ITEM_BY_NAME.get(item)?.unitKg ?? u, true);
       items.push({
         item,
         qty,
@@ -454,10 +508,10 @@ function parseWeaponPopup(fixed: string): { capture: WeaponCapture; weights: Ite
 
   const weights: ItemMatch[] = [];
   if (ammo > 0) {
-    weights.push({ item: ammoItem, qty: ammo, kg: 0, unitKg: 0, confidence: 0.95, confidenceLevel: "high", matchReason: `Munição: ${ammo}` });
+    weights.push({ item: ammoItem, qty: ammo, kg: 0, unitKg: 0, confidence: 95, confidenceLevel: "high", matchReason: `Munição: ${ammo}` });
   }
   if (accessoryCount > 0) {
-    weights.push({ item: "acessorios para armas", qty: accessoryCount, kg: 0, unitKg: 0.1, confidence: 0.95, confidenceLevel: "high", matchReason: `Acessórios: ${accessoryCount}` });
+    weights.push({ item: "acessorios para armas", qty: accessoryCount, kg: 0, unitKg: 0.1, confidence: 95, confidenceLevel: "high", matchReason: `Acessórios: ${accessoryCount}` });
   }
   return { capture, weights };
 }
@@ -478,7 +532,7 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 // Parser principal
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseInventoryOCR(rawText: string): ParseResult {
-  const fixed = fixOcrTypos(rawText);
+  const fixed = fixOcrTypos(mergeSplitPairs(rawText));
 
   if (/numero de serie|num[ée]ro de s[ée]rie/i.test(fixed)) {
     const popup = parseWeaponPopup(fixed);
@@ -501,7 +555,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     return { text: "", weights: [], weaponCapture: detectWeaponCapture(fixed), overallConfidence: 0 };
   }
 
-  const hints = mergeFragments(collectHints(fixed));
+  const hints = mergeFragments(removeCoveredHints(collectHints(fixed)));
   const used = new Set<number>();
   const out: ItemMatch[] = [];
 
@@ -531,7 +585,9 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     groups[0].nameLines.unshift(...leadingNames);
   }
 
-  // Casamento por grupo: usa a linha de nomes que melhor encaixa por peso.
+  // Casamento por grupo: usa a linha de nomes na ordem vertical. Linhas cujos
+  // nomes são um subconjunto estrito de outra linha do mesmo grupo são ruído
+  // (ex.: "CORRENTE DE OURO" solta dentro do grupo que já tem a linha completa).
   const leftoverGroups: Array<{ pairs: Pair[]; hadNames: boolean }> = [];
   for (const g of groups) {
     if (g.pairs.length === 0) continue;
@@ -539,12 +595,14 @@ export function parseInventoryOCR(rawText: string): ParseResult {
       leftoverGroups.push({ pairs: g.pairs, hadNames: false });
       continue;
     }
-    const score = (li: number): number => {
-      const uSet = new Set(g.pairs.map((p) => Math.round((p.kg / p.qty) * 1000) / 1000));
-      return lineHints[li].filter((h) => uSet.has(Math.round(h.unitKg * 1000) / 1000) || g.pairs.some((p) => weightClose(p.kg / p.qty, h.unitKg))).length;
+    const hintItems = (li: number): Set<string> => new Set(lineHints[li].map((h) => h.item));
+    const isSubset = (a: number, b: number): boolean => {
+      const A = hintItems(a);
+      const B = hintItems(b);
+      return A.size < B.size && Array.from(A).every((x) => B.has(x));
     };
-    const ordered = [...g.nameLines].sort((a, b) => score(b) - score(a));
-    const candidates = ordered.flatMap((li) => lineHints[li]);
+    const names = g.nameLines.filter((li) => !g.nameLines.some((lj) => lj !== li && isSubset(li, lj)));
+    const candidates = names.flatMap((li) => lineHints[li].filter((h) => !h.timer));
     const leftover = inOrderMatch(g.pairs, candidates, used, out, hints);
     if (leftover.length > 0) leftoverGroups.push({ pairs: leftover, hadNames: true });
   }

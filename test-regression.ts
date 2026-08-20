@@ -271,7 +271,7 @@ MACHINE PISTOL\tBANDAGEM\tBIFANA\tSUMO ANANAS\t
 88\t
 PETROL CAN\tTELEHÖVEL\tKIT REPARAÇAD`;
 const r16 = parseInventoryOCR(ocr16);
-const e16: [string, number][] = [["arma medio calibre", 1], ["bandagem", 28], ["sumo ananas", 12], ["bifana", 16], ["petrol can", 1], ["telemovel", 1], ["kit reparacao", 1], ["c4", 1]];
+const e16: [string, number][] = [["arma medio calibre", 1], ["bandagem", 28], ["bifana", 12], ["sumo ananas", 16], ["petrol can", 1], ["telemovel", 1], ["kit reparacao", 1], ["c4", 1]];
 for (const [i, q] of e16) {
   const x = r16.weights.find(w => w.item === i);
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }

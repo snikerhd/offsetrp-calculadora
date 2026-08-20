@@ -39,7 +39,6 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "arma baixo calibre", displayName: "Arma Baixo Calibre", unitKg: 5, category: "arma", illegal: true },
   { name: "arma medio calibre", displayName: "Arma Médio Calibre", unitKg: 5, category: "arma", illegal: true },
   { name: "arma alto calibre", displayName: "Arma Alto Calibre", unitKg: 15, category: "arma", illegal: true },
-  { name: "vintage pistol", displayName: "Vintage Pistol", unitKg: 5, category: "arma", illegal: true },
   { name: "adaga templaria", displayName: "Adaga Templária", unitKg: 0.3, category: "arma", illegal: true },
 
   // ── Munição ──
@@ -146,7 +145,6 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "sumo ananas", displayName: "Sumo Ananás", unitKg: 0.2, category: "outro", illegal: false },
   { name: "bifana", displayName: "Bifana", unitKg: 0.2, category: "outro", illegal: false },
   { name: "strawberry shortcake", displayName: "Strawberry Shortcake", unitKg: 0.2, category: "outro", illegal: false },
-  { name: "hamburg steak", displayName: "Hamburg Steak", unitKg: 0.2, category: "outro", illegal: false },
   { name: "caipirinha", displayName: "Caipirinha", unitKg: 0.2, category: "outro", illegal: false },
   { name: "copo de cartao", displayName: "Copo de Cartão", unitKg: 0.2, category: "outro", illegal: false },
   { name: "agua", displayName: "Água", unitKg: 0.5, category: "outro", illegal: false },
