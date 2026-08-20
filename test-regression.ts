@@ -60,9 +60,7 @@ for (const [i, q] of e3) {
 }
 
 // Corrente 10k / anel / corrente / relógio de ouro lado a lado.
-// O relógio de ouro pesa 0.2 kg/un no jogo, por isso a célula "5 (0.5)"
-// (0.1 kg/un) da coluna do relógio já não pode ser relógio e funde-se na
-// corrente (28 em vez de 23).
+// O relógio de ouro pesa 0.1 kg/un no jogo, não 0.2.
 const ocr4 = `1 (1.0)\t1 (5.0)\t1 (1.0)\t
 96\t
 RADID\tHACHINE PISTOL\tPETROL CAN\t
@@ -70,7 +68,7 @@ RADID\tHACHINE PISTOL\tPETROL CAN\t
 CORRENTE DE DURO\t
 TELEHOVEL\t1BK\tANEL DE DIAHANTE\tCORRENTE DE DURO\tRELOGIO DE DURO\t`;
 const r4 = parseInventoryOCR(ocr4);
-const e4: [string, number][] = [["corrente 10k", 103], ["anel", 20], ["corrente", 28], ["telemovel", 1]];
+const e4: [string, number][] = [["corrente 10k", 103], ["anel", 20], ["corrente", 23], ["relogio ouro", 5], ["telemovel", 1]];
 for (const [i, q] of e4) {
   const x = r4.weights.find(w => w.item === i);
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
@@ -207,7 +205,7 @@ FLASHLIGHT
 1 (1.0)	1 (0.7)	
 17:23	`;
 const r13 = parseInventoryOCR(ocr13);
-const e13: [string, number][] = [["bandagem", 8], ["corrente 10k", 71], ["anel", 31], ["corrente", 41], ["radio", 1]];
+const e13: [string, number][] = [["bandagem", 8], ["corrente 10k", 71], ["anel", 31], ["relogio ouro", 12], ["corrente", 29], ["radio", 1]];
 for (const [i, q] of e13) {
   const x = r13.weights.find(w => w.item === i);
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
@@ -598,7 +596,7 @@ for (const [item, qty, kg] of e23) {
 }
 const cortados23 = r23.weights.filter(w => w.item.startsWith("item nao identificado"));
 const cortadoKg23 = cortados23.reduce((s, w) => s + w.kg, 0);
-if (cortados23.length >= 1 && Math.abs(cortadoKg23 - 14.0) < 0.05) { p++; console.log("PASS peso cortado contabilizado (" + cortadoKg23.toFixed(2) + " kg)"); } else { f++; console.log("FAIL peso cortado got " + cortadoKg23.toFixed(2) + " exp 14.0"); }
+if (cortados23.length >= 1 && Math.abs(cortadoKg23 - 12.8) < 0.05) { p++; console.log("PASS peso cortado contabilizado (" + cortadoKg23.toFixed(2) + " kg)"); } else { f++; console.log("FAIL peso cortado got " + cortadoKg23.toFixed(2) + " exp 12.8"); }
 const dinheiroFalso23 = r23.weights.find(w => w.item === "dinheiro");
 if (!dinheiroFalso23) { p++; console.log("PASS sem dinheiro falso (cortado 0 kg)"); } else { f++; console.log("FAIL dinheiro falso qty=" + dinheiroFalso23.qty); }
 const totalKg23 = r23.weights.reduce((s, w) => s + w.kg, 0);
@@ -651,9 +649,9 @@ const e24: [string, number, number][] = [
   ["bandagem", 2, 0.2],
   ["telemovel", 1, 0.7],
   ["anel", 11, 1.1],
-  ["relogio ouro", 8, 1.6],
+  ["relogio ouro", 12, 1.2],
   ["corrente 10k", 101, 15.2],
-  ["corrente", 38, 3.8],
+  ["corrente", 26, 2.6],
 ];
 for (const [item, qty, kg] of e24) {
   const w = r24.weights.find(x => x.item === item);
@@ -662,7 +660,7 @@ for (const [item, qty, kg] of e24) {
 }
 const cortados24 = r24.weights.filter(w => w.item.startsWith("item nao identificado"));
 const cortadoKg24 = cortados24.reduce((s, w) => s + w.kg, 0);
-if (cortados24.length >= 1 && Math.abs(cortadoKg24 - 11.2) < 0.05) { p++; console.log("PASS24 peso cortado contabilizado (" + cortadoKg24.toFixed(2) + " kg)"); } else { f++; console.log("FAIL24 peso cortado got " + cortadoKg24.toFixed(2) + " exp 11.2"); }
+if (cortados24.length >= 1 && Math.abs(cortadoKg24 - 12.8) < 0.05) { p++; console.log("PASS24 peso cortado contabilizado (" + cortadoKg24.toFixed(2) + " kg)"); } else { f++; console.log("FAIL24 peso cortado got " + cortadoKg24.toFixed(2) + " exp 12.8"); }
 const totalKg24 = r24.weights.reduce((s, w) => s + w.kg, 0);
 if (Math.abs(totalKg24 - 50) < 0.05) { p++; console.log("PASS24 total bag 24 50.0 kg (≈ Peso 49.95)"); } else { f++; console.log("FAIL24 total bag 24 got " + totalKg24.toFixed(2) + " exp 50.0"); }
 if (r24.text.includes("item nao identificado")) { f++; console.log("FAIL24 texto de coimas contém item cortado"); } else { p++; console.log("PASS24 texto de coimas sem item cortado"); }
@@ -709,7 +707,8 @@ const e25: [string, number, number][] = [
   ["petrol can", 1, 1],
   ["corrente 10k", 102, 15.3],
   ["anel", 11, 1.1],
-  ["corrente", 38, 3.8],
+  ["relogio ouro", 13, 1.3],
+  ["corrente", 25, 2.5],
   ["arma medio calibre", 1, 5],
   ["kit reparacao", 15, 30],
   ["bandagem", 3, 0.3],
@@ -796,5 +795,108 @@ const estimulante26 = r26.weights.find(w => w.item === "estimulante");
 if (!estimulante26) { p++; console.log("PASS26 sem estimulante falso"); } else { f++; console.log("FAIL26 estimulante falso qty=" + estimulante26.qty); }
 const totalKg26 = r26.weights.reduce((s, w) => s + w.kg, 0);
 if (Math.abs(totalKg26 - 596.9) < 0.05) { p++; console.log("PASS26 total " + totalKg26.toFixed(2) + " kg"); } else { f++; console.log("FAIL26 total got " + totalKg26.toFixed(2) + " exp 596.9"); }
+
+// Coimas Rápidas P: cabeçalhos (Bifana/Faca/Arma/Sumos/Kit/Petrol/Telemóvel/
+// Correntes/Anel) + grelha + síntese no fim. O relógio de ouro pesa 0.1 kg/un
+// (igual à corrente) e são itens SEPARADOS: a célula "13 (1.3)" da coluna do
+// relógio não pode fundir-se na corrente.
+const ocr27 = `BifanaPeso perfeito: 1.6 kg = 8 × 0.2 kg
+\t8\t0.2 kg\t1,6 kg\t
+95%
+Faca (Knife)Peso perfeito: 1 kg = 1 × 1 kg
+\t1\t1 kg\t1 kg\t
+95%
+Arma Médio CalibreilegalPeso perfeito: 10 kg = 1 × 10 kg
+\t1\t10 kg\t10 kg\t
+95%
+Sumo LaranjaPeso perfeito: 0.6 kg = 3 × 0.2 kg
+\t3\t0.2 kg\t0,6 kg\t
+95%
+Sumo MaracujáPeso perfeito: 1 kg = 5 × 0.2 kg
+\t5\t0.2 kg\t1 kg\t
+95%
+Kit ReparaçãoPeso perfeito: 2 kg = 1 × 2 kg
+\t1\t2 kg\t2 kg\t
+95%
+Petrol CanPeso perfeito: 1 kg = 1 × 1 kg
+\t1\t1 kg\t1 kg\t
+95%
+TelemóvelPeso perfeito: 0.7 kg = 1 × 0.7 kg
+\t1\t0.7 kg\t0,7 kg\t
+95%
+Corrente de Ouro 10KilegalPeso perfeito: 27.6 kg = 184 × 0.15 kg
+\t184\t0.15 kg\t27,6 kg\t
+95%
+Anel de DiamanteilegalPeso perfeito: 2.6 kg = 26 × 0.1 kg
+\t26\t0.1 kg\t2,6 kg\t
+95%
+Corrente de OuroilegalPeso perfeito: 6.5 kg = 65 × 0.1 kg
+\t78\t0.1 kg\t7,8 kg\t
+95% Jogador-1335
+Peso: 55.90 / 120.00
+8 (1.6)
+1 (1.0)
+1 (10.0)
+3(0.6)
+5(1.0)
+BIFANA
+KNIFE
+MICRO SMG
+SUMO LARANJA
+SUMO MARACUJA
+1 (2.0)
+1(1.0)
+1 (0.7)
+17:23
+64
+KIT REPARAÇÃO
+PETROL CAN
+TELEMÓVEL
+184 (27.6)
+26 (2.6)
+65 (6.5)
+13 (1.3)
+CORRENTE DE OURO
+10K
+ANEL DE DIAMANTE
+CORRENTE DE OURO
+RELOGIO DE OURO
+
+Coimas Rápidas P BIFANA — Quantidade: 8 — Peso de cada: 0,2 kg — Peso total: 1,6 kg
+KNIFE — Quantidade: 1 — Peso de cada: 1,0 kg — Peso total: 1,0 kg
+MICRO SMG — Quantidade: 1 — Peso de cada: 10,0 kg — Peso total: 10,0 kg
+SUMO LARANJA — Quantidade: 3 — Peso de cada: 0,2 kg — Peso total: 0,6 kg
+SUMO MARACUJÁ — Quantidade: 5 — Peso de cada: 0,2 kg — Peso total: 1,0 kg
+KIT REPARAÇÃO — Quantidade: 1 — Peso de cada: 2,0 kg — Peso total: 2,0 kg
+PETROL CAN — Quantidade: 1 — Peso de cada: 1,0 kg — Peso total: 1,0 kg
+TELEMÓVEL — Quantidade: 1 — Peso de cada: 0,7 kg — Peso total: 0,7 kg
+CORRENTE DE OURO 10K — Quantidade: 184 — Peso de cada: 0,15 kg — Peso total: 27,6 kg
+ANEL DE DIAMANTE — Quantidade: 26 — Peso de cada: 0,1 kg — Peso total: 2,6 kg
+CORRENTE DE OURO — Quantidade: 65 — Peso de cada: 0,1 kg — Peso total: 6,5 kg
+RELOGIO DE OURO — Quantidade: 13 — Peso de cada: 0,1 kg — Peso total: 1,3 kg`;
+const r27 = parseInventoryOCR(ocr27);
+const e27: [string, number, number][] = [
+  ["bifana", 8, 1.6],
+  ["knife", 1, 1],
+  ["arma medio calibre", 1, 10],
+  ["sumo laranja", 3, 0.6],
+  ["sumo maracuja", 5, 1],
+  ["kit reparacao", 1, 2],
+  ["petrol can", 1, 1],
+  ["telemovel", 1, 0.7],
+  ["corrente 10k", 184, 27.6],
+  ["anel", 26, 2.6],
+  ["corrente", 65, 6.5],
+  ["relogio ouro", 13, 1.3],
+];
+for (const [item, qty, kg] of e27) {
+  const w = r27.weights.find(x => x.item === item);
+  if (w && w.qty === qty && Math.abs(w.kg - kg) < 0.01) { p++; console.log("PASS27 " + item + " " + qty + "x" + kg); }
+  else { f++; console.log("FAIL27 " + item + " got " + (w ? w.qty + "x" + w.kg : "N/A") + " exp " + qty + "x" + kg); }
+}
+const corrente27 = r27.weights.find(w => w.item === "corrente");
+if (corrente27 && corrente27.qty === 65) { p++; console.log("PASS27 corrente e relógio separados (65 e 13)"); } else { f++; console.log("FAIL27 corrente qty=" + (corrente27 ? corrente27.qty : "N/A") + " exp 65"); }
+const totalKg27 = r27.weights.reduce((s, w) => s + w.kg, 0);
+if (Math.abs(totalKg27 - 55.9) < 0.05) { p++; console.log("PASS27 total " + totalKg27.toFixed(2) + " kg (≈ Peso 55.90)"); } else { f++; console.log("FAIL27 total got " + totalKg27.toFixed(2) + " exp 55.9"); }
 
 console.log("\n=== TOTAL: " + p + " PASS, " + f + " FAIL ===");
