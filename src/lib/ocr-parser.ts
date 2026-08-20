@@ -139,19 +139,54 @@ function level(c: number): "high" | "medium" | "low" {
 function matchPairsToHints(pairs: Pair[], hints: Hint[]): ItemMatch[] {
   const results: ItemMatch[] = [];
   const used = new Set<number>();
+
+  // In inventory screenshots the quantity/weight grid and the item-name grid
+  // are frequently OCR'd as separate blocks. Therefore `pos` cannot be used
+  // directly to pair them. However, their order is preserved. The old matcher
+  // chose only by unit weight, which is ambiguous for several 0.1/0.2 kg items
+  // and could consume the wrong hint. Prefer the closest still-unused hint in
+  // sequence, provided its unit weight agrees; fall back to the old global
+  // weight match for OCR where the grids are not aligned.
+  let lastHint = -1;
   for (const pair of pairs) {
     const observedUnit = pair.kg / pair.qty;
     let best = -1;
-    let bestDiff = Infinity;
-    for (let i = 0; i < hints.length; i++) {
+    let bestScore = Infinity;
+
+    for (let i = Math.max(0, lastHint + 1); i < hints.length; i++) {
       if (used.has(i)) continue;
       const h = hints[i];
       if (!weightClose(observedUnit, h.unitKg)) continue;
-      const diff = Math.abs(observedUnit - h.unitKg) / Math.max(h.unitKg, 0.00001);
-      if (diff < bestDiff) { bestDiff = diff; best = i; }
+      const orderDistance = i - (lastHint + 1);
+      const weightDiff = Math.abs(observedUnit - h.unitKg) / Math.max(h.unitKg, 0.00001);
+      const score = orderDistance * 0.25 + weightDiff;
+      if (score < bestScore) {
+        bestScore = score;
+        best = i;
+      }
+      // An exact next-in-sequence match is stronger than any later candidate.
+      if (i === lastHint + 1 && weightDiff <= 0.02) break;
     }
+
+    // If sequence matching could not find a compatible hint, retain the
+    // previous global weight-based behaviour as a safe fallback.
+    if (best < 0) {
+      let globalDiff = Infinity;
+      for (let i = 0; i < hints.length; i++) {
+        if (used.has(i)) continue;
+        const h = hints[i];
+        if (!weightClose(observedUnit, h.unitKg)) continue;
+        const diff = Math.abs(observedUnit - h.unitKg) / Math.max(h.unitKg, 0.00001);
+        if (diff < globalDiff) {
+          globalDiff = diff;
+          best = i;
+        }
+      }
+    }
+
     if (best >= 0) {
       used.add(best);
+      lastHint = Math.max(lastHint, best);
       const h = hints[best];
       const c = confidence(observedUnit, h.unitKg, true);
       results.push({ item: h.item, qty: pair.qty, kg: pair.kg, unitKg: h.unitKg, confidence: c,
