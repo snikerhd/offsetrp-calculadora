@@ -110,7 +110,7 @@ const ALIASES: Array<[string, string, number?]> = [
   ["tec 9", "arma medio calibre", 5],
   ["mini uzi", "arma medio calibre", 5],
   ["hk2", "arma medio calibre", 5],
-  ["ap pistol", "arma medio calibre", 5],
+  ["ap pistol", "arma baixo calibre", 5],
   ["sns pistol", "arma baixo calibre", 5],
   ["revolver", "arma baixo calibre", 5],
   ["pistol", "arma baixo calibre", 5],
@@ -555,7 +555,7 @@ function parseWeaponPopup(fixed: string): { capture: WeaponCapture; weights: Ite
 
   let weaponItem: WeaponCapture["weaponItem"] = "arma baixo calibre";
   if (/ALTO|RIFLE|CARABIN|SNIPER|GUSENBERG|BULLPUP|FAMAS|SHOTGUN|SPAS|DRACO/i.test(weapon)) weaponItem = "arma alto calibre";
-  else if (/MEDIO|M[EÉ]DIO|SMG|MACHINE|PISTOL|UZI|PDW|P90|TEC/i.test(weapon)) weaponItem = "arma medio calibre";
+  else if (/MEDIO|M[EÉ]DIO|SMG|MACHINE|UZI|PDW|P90|TEC/i.test(weapon)) weaponItem = "arma medio calibre";
   const ammoItem = weaponItem === "arma alto calibre" ? "balas alto" : weaponItem === "arma medio calibre" ? "balas medio" : "balas baixo";
   const capture: WeaponCapture = { weapon, weaponItem, ammo, ammoItem, accessoryCount };
 
@@ -575,7 +575,7 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
   if (!weapon && !ammo) return null;
   let weaponItem: WeaponCapture["weaponItem"] = "arma baixo calibre";
   if (/ALTO|COMBAT PDW|RIFLE|CARABIN|SNIPER|MACHINE PISTOL/i.test(weapon)) weaponItem = "arma alto calibre";
-  else if (/MEDIO|M[EÉ]DIO|SMG|PISTOL/i.test(weapon)) weaponItem = "arma medio calibre";
+  else if (/MEDIO|M[EÉ]DIO|SMG/i.test(weapon)) weaponItem = "arma medio calibre";
   const ammoItem = weaponItem === "arma alto calibre" ? "balas alto" : weaponItem === "arma medio calibre" ? "balas medio" : "balas baixo";
   const accessoryCount = countAccessories(text);
   return { weapon, weaponItem, ammo, ammoItem, accessoryCount };

@@ -45,7 +45,7 @@ for (const [i, q] of e1) {
 
 console.log("\n=== TEST 2: WEAPONS ===");
 const r2 = parseInventoryOCR(ocr2);
-const e2: [string, number][] = [["arma baixo calibre", 7], ["arma medio calibre", 6], ["arma alto calibre", 2]];
+const e2: [string, number][] = [["arma baixo calibre", 8], ["arma medio calibre", 5], ["arma alto calibre", 2]];
 for (const [i, q] of e2) {
   const x = r2.weights.find(w => w.item === i);
   if (x && x.qty === q) { p++; console.log("PASS " + i); } else { f++; console.log("FAIL " + i + " got " + (x?.qty ?? "N/A") + " exp " + q); }
