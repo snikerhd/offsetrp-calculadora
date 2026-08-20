@@ -76,7 +76,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "ouro estatal", displayName: "Ouro Estatal", unitKg: 1.5, category: "roubo", illegal: true },
   { name: "quadro", displayName: "Quadro", unitKg: 0.2, category: "roubo", illegal: true },
   { name: "pulseira ouro", displayName: "Pulseira de Ouro", unitKg: 0.2, category: "roubo", illegal: true },
-  { name: "relogio ouro", displayName: "Relógio de Ouro", unitKg: 0.1, category: "roubo", illegal: true },
+  { name: "relogio ouro", displayName: "Relógio de Ouro", unitKg: 0.2, category: "roubo", illegal: true },
   { name: "corrente", displayName: "Corrente de Ouro", unitKg: 0.1, category: "roubo", illegal: true },
   { name: "corrente 10k", displayName: "Corrente de Ouro 10K", unitKg: 0.15, category: "roubo", illegal: true },
   { name: "anel", displayName: "Anel de Diamante", unitKg: 0.1, category: "roubo", illegal: true },
