@@ -318,6 +318,30 @@ function mergeFragments(hints: Hint[]): Hint[] {
   return dedup;
 }
 
+// Deteta o cabeçalho das Coimas Rápidas (item confiscado + breakdown de peso).
+// Ex.: "Estimulante / ilegal / Peso reconhecido: 52.4 kg = 262 × 0.2 kg /
+// 262 0.2 kg 52,4 kg / 85%". Os nomes aí não pertencem à grelha do inventário.
+function detectHeaderLines(lines: string[]): Set<number> {
+  const set = new Set<number>();
+  let firstPair = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (extractPairs(lines[i]).length > 0) { firstPair = i; break; }
+  }
+  if (firstPair <= 0) return set;
+  let hasMarker = false;
+  for (let i = 0; i < firstPair; i++) {
+    const l = lines[i];
+    if (
+      /peso reconhecid|reconhecid/i.test(l) ||
+      /^\s*\d{1,3}\s*%\s*$/i.test(l) ||
+      /^\s*\d[\d\s]*\s+\d+(?:\.\d+)?\s*kg\s+[\d.,]+\s*kg\s*$/i.test(l)
+    ) { hasMarker = true; break; }
+  }
+  if (!hasMarker) return set;
+  for (let i = 0; i < firstPair; i++) set.add(i);
+  return set;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Confiança e correspondência
 // ─────────────────────────────────────────────────────────────────────────────
@@ -354,9 +378,24 @@ function matchForPair(p: Pair, h: Hint): ItemMatch {
     matchReason: `Peso perfeito: ${p.kg} kg = ${p.qty} × ${h.unitKg} kg`,
   };
 }
-function fallbackForPair(p: Pair, unidentified: boolean): ItemMatch {
+function fallbackForPair(p: Pair, unidentified: boolean, groupItems?: Set<string>): ItemMatch {
   const u = p.kg / p.qty;
   if (!unidentified) {
+    if (groupItems && groupItems.size > 0) {
+      const named = ITEM_CATALOG.find((x) => groupItems.has(x.name) && weightClose(u, x.unitKg));
+      if (named) {
+        const c = confidence(u, named.unitKg, true);
+        return {
+          item: named.name,
+          qty: p.qty,
+          kg: p.kg,
+          unitKg: named.unitKg,
+          confidence: c,
+          confidenceLevel: level(c),
+          matchReason: `Peso reconhecido: ${p.kg} kg = ${p.qty} × ${named.unitKg} kg`,
+        };
+      }
+    }
     const def = ITEM_CATALOG.find((x) => weightClose(u, x.unitKg));
     if (def) {
       const c = confidence(u, def.unitKg, false);
@@ -533,6 +572,7 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseInventoryOCR(rawText: string): ParseResult {
   const fixed = fixOcrTypos(mergeSplitPairs(rawText));
+  const headerLines = detectHeaderLines(fixed.split("\n"));
 
   if (/numero de serie|num[ée]ro de s[ée]rie/i.test(fixed)) {
     const popup = parseWeaponPopup(fixed);
@@ -555,7 +595,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     return { text: "", weights: [], weaponCapture: detectWeaponCapture(fixed), overallConfidence: 0 };
   }
 
-  const hints = mergeFragments(removeCoveredHints(collectHints(fixed)));
+  const hints = mergeFragments(removeCoveredHints(collectHints(fixed).filter((h) => !headerLines.has(h.line))));
   const used = new Set<number>();
   const out: ItemMatch[] = [];
 
@@ -588,11 +628,11 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   // Casamento por grupo: usa a linha de nomes na ordem vertical. Linhas cujos
   // nomes são um subconjunto estrito de outra linha do mesmo grupo são ruído
   // (ex.: "CORRENTE DE OURO" solta dentro do grupo que já tem a linha completa).
-  const leftoverGroups: Array<{ pairs: Pair[]; hadNames: boolean }> = [];
+  const leftoverGroups: Array<{ pairs: Pair[]; hadNames: boolean; items: Set<string>; nameHintIdx: number[] }> = [];
   for (const g of groups) {
     if (g.pairs.length === 0) continue;
     if (g.nameLines.length === 0) {
-      leftoverGroups.push({ pairs: g.pairs, hadNames: false });
+      leftoverGroups.push({ pairs: g.pairs, hadNames: false, items: new Set(), nameHintIdx: [] });
       continue;
     }
     const hintItems = (li: number): Set<string> => new Set(lineHints[li].map((h) => h.item));
@@ -603,8 +643,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     };
     const names = g.nameLines.filter((li) => !g.nameLines.some((lj) => lj !== li && isSubset(li, lj)));
     const candidates = names.flatMap((li) => lineHints[li].filter((h) => !h.timer));
+    const groupItems = new Set(g.nameLines.flatMap((li) => lineHints[li].map((h) => h.item)));
+    const nameHintIdx = g.nameLines.flatMap((li) => lineHints[li].map((h) => hints.indexOf(h)));
     const leftover = inOrderMatch(g.pairs, candidates, used, out, hints);
-    if (leftover.length > 0) leftoverGroups.push({ pairs: leftover, hadNames: true });
+    if (leftover.length > 0) leftoverGroups.push({ pairs: leftover, hadNames: true, items: groupItems, nameHintIdx });
   }
 
   // Passo global: pares que sobraram casam com qualquer pista ainda livre.
@@ -614,7 +656,8 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
   for (const p of leftoverFinal) {
     const grp = leftoverGroups.find((g) => g.pairs.includes(p));
-    out.push(fallbackForPair(p, !(grp?.hadNames ?? false)));
+    const hasUnusedName = (grp?.nameHintIdx.some((i) => !used.has(i)) ?? false);
+    out.push(fallbackForPair(p, !(grp?.hadNames ?? false), hasUnusedName ? grp?.items : undefined));
   }
 
   const merged = mergeResults(out);
