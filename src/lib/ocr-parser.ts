@@ -130,6 +130,8 @@ const ALIASES: Array<[string, string, number?]> = [
   ["resto eletronico", "eletronicos"],
   ["candy cane", "candy cane"],
   ["candy", "candy cane"],
+  // "ÁGUA" cortada pelo OCR aparece como "ÁGI"
+  ["agi", "agua"],
   ["medickit", "medickits"],
   ["medickits", "medickits"],
   ["barra de ouro", "barras ouro"],

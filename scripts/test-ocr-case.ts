@@ -87,6 +87,22 @@ CARREGADOR DE
 1 (0.2)
 ÁGI`;
 
+// O mesmo, mas com o par da água capturado e o nome cortado ("ÁGI")
+const caseAguaCortada = `VINTAGE PISTOL
+TELEMÓVEL
+17:23
+1 (5.0)
+1 (0.7)
+3 (1.5)
+KIT REPARAÇÃO
+2 (4.0)
+NOBEL TUDO
+4 (0.8)
+SMG
+CARREGADOR DE
+1 (0.2)
+ÁGI`;
+
 function run(label: string, raw: string, expect: Record<string, [number, number]>, totQty: number, totKg: number) {
   const r = parseInventoryOCR(raw);
   const q = r.weights.reduce((s, w) => s + w.qty, 0);
@@ -175,6 +191,20 @@ fails += run(
   },
   9,
   10.7,
+);
+fails += run(
+  "caso 4: água cortada (ÁGI) com par capturado",
+  caseAguaCortada,
+  {
+    "arma baixo calibre": [1, 5],
+    telemovel: [1, 0.7],
+    agua: [3, 1.5],
+    "kit reparacao": [2, 4],
+    "nobel tudo": [4, 0.8],
+    "carregador medio calibre": [1, 0.2],
+  },
+  12,
+  12.2,
 );
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
