@@ -73,6 +73,20 @@ CARREGADOR DE SMG — Quantidade: 1 — Peso de cada: 0,2 kg — Peso total: 0,2
 ÁGUA — Quantidade: 3 — Peso de cada: 0,5 kg — Peso total: 1,5 kg
 VINTAGE PISTOL — Quantidade: 1 — Peso de cada: 5,0 kg — Peso total: 5,0 kg`;
 
+const caseSemSintese = `VINTAGE PISTOL
+TELEMÓVEL
+17:23
+1 (5.0)
+1 (0.7)
+KIT REPARAÇÃO
+2 (4.0)
+NOBEL TUDO
+4 (0.8)
+SMG
+CARREGADOR DE
+1 (0.2)
+ÁGI`;
+
 function run(label: string, raw: string, expect: Record<string, [number, number]>, totQty: number, totKg: number) {
   const r = parseInventoryOCR(raw);
   const q = r.weights.reduce((s, w) => s + w.qty, 0);
@@ -148,6 +162,19 @@ fails += run(
   },
   12,
   12.2,
+);
+fails += run(
+  "caso 3: grelha sem síntese (nomes antes dos pares)",
+  caseSemSintese,
+  {
+    "arma baixo calibre": [1, 5],
+    telemovel: [1, 0.7],
+    "kit reparacao": [2, 4],
+    "nobel tudo": [4, 0.8],
+    "carregador medio calibre": [1, 0.2],
+  },
+  9,
+  10.7,
 );
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);

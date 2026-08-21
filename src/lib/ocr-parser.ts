@@ -428,35 +428,114 @@ function fallbackForPair(p: Pair, unidentified: boolean, groupItems?: Set<string
   };
 }
 
-// Casamento sequencial (in-order) com ponteiro. Devolve os pares não casados.
-function inOrderMatch(pairs: Pair[], hints: Hint[], used: Set<number>, out: ItemMatch[], hintGlobal: Hint[]): Pair[] {
-  const leftover: Pair[] = [];
-  let last = -1;
-  for (const p of pairs) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Atribuição global par↔nome
+// ─────────────────────────────────────────────────────────────────────────────
+// O OCR não lê a grelha do inventário sempre pela mesma ordem: às vezes os
+// nomes vêm depois dos números, às vezes antes (ex.: "SMG / CARREGADOR DE" no
+// topo do par "1 (0.2)"). Em vez de casamento sequencial por grupos, cada par
+// "qty (kg)" é atribuído a uma pista de nome compatível pelo peso, minimizando
+// custo global:
+//   - distância em linhas entre par e pista;
+//   - desvio do peso unitário;
+//   - cruzamentos (pares em ordem devem preferir pistas em ordem);
+//   - duplicar o mesmo item em duas pistas custa extra;
+//   - ficar sem pista custa ainda mais.
+// Empates resolvem-se pela ordem do texto (sequência de pistas lexicograficamente
+// menor, indexada por ordem original dos pares).
+function assignPairsToHints(
+  pairs: Pair[],
+  hints: Hint[]
+): { matchOf: Map<Pair, Hint>; leftover: Pair[] } {
+  const cand: number[][] = pairs.map((p) => {
     const u = p.kg / p.qty;
-    let best = -1;
-    for (let i = last + 1; i < hints.length; i++) {
-      if (used.has(hintGlobal.indexOf(hints[i])) || !weightClose(u, hints[i].unitKg)) continue;
-      best = i;
-      break;
+    const arr: number[] = [];
+    for (let i = 0; i < hints.length; i++) {
+      const h = hints[i];
+      if (Math.abs(h.line - p.line) <= 40 && weightClose(u, h.unitKg)) arr.push(i);
     }
-    if (best < 0) {
-      for (let i = 0; i < hints.length; i++) {
-        if (used.has(hintGlobal.indexOf(hints[i])) || !weightClose(u, hints[i].unitKg)) continue;
-        best = i;
-        break;
+    return arr;
+  });
+  // Pares com menos candidatos primeiro: podam a árvore mais cedo.
+  const order = pairs
+    .map((_, i) => i)
+    .sort((a, b) => cand[a].length - cand[b].length || a - b);
+
+  const UNASSIGNED_PENALTY = 500;
+  const DUP_PENALTY = 8;
+  const CROSS_PENALTY = 12;
+
+  const usedHint = new Array<boolean>(hints.length).fill(false);
+  const itemCount = new Map<string, number>();
+  const cur = new Array<number>(pairs.length).fill(-1);
+  let bestSeq: number[] | null = null;
+  let bestScore = Infinity;
+
+  // Penaliza atribuições que "cruzam" com pares já atribuídos: se o par A está
+  // acima do par B, A deve preferir pistas acima das de B.
+  const crossCost = (pi: number, hi: number): number => {
+    let c = 0;
+    for (let pj = 0; pj < pairs.length; pj++) {
+      if (pj === pi || cur[pj] < 0) continue;
+      const before = pairs[pj].line < pairs[pi].line ||
+        (pairs[pj].line === pairs[pi].line && pj < pi);
+      if ((before && cur[pj] > hi) || (!before && cur[pj] < hi)) c += CROSS_PENALTY;
+    }
+    return c;
+  };
+
+  const dfs = (k: number, assigned: number, cost: number) => {
+    if (cost > bestScore) return;
+    if (k === order.length) {
+      const score = (pairs.length - assigned) * UNASSIGNED_PENALTY + cost;
+      if (score < bestScore) {
+        bestScore = score;
+        bestSeq = [...cur];
+        return;
       }
+      if (score === bestScore && bestSeq) {
+        for (let pi = 0; pi < pairs.length; pi++) {
+          const a = cur[pi];
+          const b = bestSeq[pi];
+          if (a === b) continue;
+          if (a >= 0 && (b < 0 || a < b)) bestSeq = [...cur];
+          break;
+        }
+      }
+      return;
     }
-    if (best >= 0) {
-      const h = hints[best];
-      used.add(hintGlobal.indexOf(h));
-      last = Math.max(last, best);
-      out.push(matchForPair(p, h));
-    } else {
-      leftover.push(p);
+    const pi = order[k];
+    const p = pairs[pi];
+    const u = p.kg / p.qty;
+    for (const hi of cand[pi]) {
+      if (usedHint[hi]) continue;
+      const h = hints[hi];
+      const dev = Math.abs(u - h.unitKg) / (h.unitKg || 1);
+      const dist = Math.abs(h.line - p.line);
+      const dup = itemCount.get(h.item) ?? 0;
+      const step =
+        dist * 2 + dev * 10 + dup * DUP_PENALTY + crossCost(pi, hi);
+      usedHint[hi] = true;
+      itemCount.set(h.item, dup + 1);
+      cur[pi] = hi;
+      dfs(k + 1, assigned + 1, cost + step);
+      usedHint[hi] = false;
+      itemCount.set(h.item, dup);
+      cur[pi] = -1;
     }
+    dfs(k + 1, assigned, cost + UNASSIGNED_PENALTY);
+  };
+
+  dfs(0, 0, 0);
+
+  const matchOf = new Map<Pair, Hint>();
+  const leftover: Pair[] = [];
+  for (let pi = 0; pi < pairs.length; pi++) {
+    const hi = bestSeq ? bestSeq[pi] : -1;
+    if (hi >= 0) matchOf.set(pairs[pi], hints[hi]);
+    else leftover.push(pairs[pi]);
   }
-  return leftover;
+  return { matchOf, leftover };
 }
 
 function mergeResults(items: ItemMatch[]): ItemMatch[] {
@@ -632,68 +711,18 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   }
 
   const hints = mergeFragments(removeCoveredHints(collectHints(fixed).filter((h) => !headerLines.has(h.line))));
-  const used = new Set<number>();
   const out: ItemMatch[] = [];
 
-  // Agrupa por linhas: pares (números) seguidos de linhas com nomes.
-  const lines = fixed.split("\n");
-  const linePairs = lines.map((l) => extractPairs(l));
-  const lineHints = lines.map((_, i) => hints.filter((h) => h.line === i));
-
-  const groups: Array<{ pairs: Pair[]; nameLines: number[] }> = [];
-  const leadingNames: number[] = [];
-  let cur: { pairs: Pair[]; nameLines: number[] } | null = null;
-  for (let i = 0; i < lines.length; i++) {
-    if (linePairs[i].length > 0) {
-      if (cur && cur.nameLines.length === 0) {
-        cur.pairs.push(...linePairs[i]);
-      } else {
-        if (cur) groups.push(cur);
-        cur = { pairs: [...linePairs[i]], nameLines: [] };
-      }
-    } else if (lineHints[i].length > 0) {
-      if (cur) cur.nameLines.push(i);
-      else leadingNames.push(i);
-    }
+  // Atribuição global: cada par casa com a melhor pista de nome (peso + posição).
+  const allPairs = extractPairs(fixed);
+  const usableHints = hints.filter((h) => !h.timer);
+  const { matchOf, leftover } = assignPairsToHints(allPairs, usableHints);
+  for (const p of allPairs) {
+    const h = matchOf.get(p);
+    if (h) out.push(matchForPair(p, h));
   }
-  if (cur) groups.push(cur);
-  if (groups.length > 0 && leadingNames.length > 0) {
-    groups[0].nameLines.unshift(...leadingNames);
-  }
-
-  // Casamento por grupo: usa a linha de nomes na ordem vertical. Linhas cujos
-  // nomes são um subconjunto estrito de outra linha do mesmo grupo são ruído
-  // (ex.: "CORRENTE DE OURO" solta dentro do grupo que já tem a linha completa).
-  const leftoverGroups: Array<{ pairs: Pair[]; hadNames: boolean; items: Set<string>; nameHintIdx: number[] }> = [];
-  for (const g of groups) {
-    if (g.pairs.length === 0) continue;
-    if (g.nameLines.length === 0) {
-      leftoverGroups.push({ pairs: g.pairs, hadNames: false, items: new Set(), nameHintIdx: [] });
-      continue;
-    }
-    const hintItems = (li: number): Set<string> => new Set(lineHints[li].map((h) => h.item));
-    const isSubset = (a: number, b: number): boolean => {
-      const A = hintItems(a);
-      const B = hintItems(b);
-      return A.size < B.size && Array.from(A).every((x) => B.has(x));
-    };
-    const names = g.nameLines.filter((li) => !g.nameLines.some((lj) => lj !== li && isSubset(li, lj)));
-    const candidates = names.flatMap((li) => lineHints[li].filter((h) => !h.timer));
-    const groupItems = new Set(g.nameLines.flatMap((li) => lineHints[li].map((h) => h.item)));
-    const nameHintIdx = g.nameLines.flatMap((li) => lineHints[li].map((h) => hints.indexOf(h)));
-    const leftover = inOrderMatch(g.pairs, candidates, used, out, hints);
-    if (leftover.length > 0) leftoverGroups.push({ pairs: leftover, hadNames: true, items: groupItems, nameHintIdx });
-  }
-
-  // Passo global: pares que sobraram casam com qualquer pista ainda livre.
-  const allLeftover = leftoverGroups.flatMap((g) => g.pairs);
-  const remainingHints = hints.filter((_, i) => !used.has(i));
-  const leftoverFinal = inOrderMatch(allLeftover, remainingHints, used, out, hints);
-
-  for (const p of leftoverFinal) {
-    const grp = leftoverGroups.find((g) => g.pairs.includes(p));
-    const hasUnusedName = (grp?.nameHintIdx.some((i) => !used.has(i)) ?? false);
-    out.push(fallbackForPair(p, !(grp?.hadNames ?? false), hasUnusedName ? grp?.items : undefined));
+  for (const p of leftover) {
+    out.push(fallbackForPair(p, false, undefined));
   }
 
   const merged = mergeResults(out);
