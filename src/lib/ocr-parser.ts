@@ -505,32 +505,49 @@ function matchNameToItem(name: string, u: number): string | null {
   return bestScore > 0 ? best : null;
 }
 
+function sinteseMatch(rawName: string | null, qty: number, kg: number, u: number): ItemMatch {
+  const name = rawName && !rawName.includes("item cortado") && rawName.length >= 3 ? rawName : null;
+  const matched = name ? matchNameToItem(name, u) : null;
+  const item = matched ?? `item nao identificado (${Math.round(u * 100) / 100} kg/un)`;
+  const c = matched ? confidence(u, ITEM_BY_NAME.get(item)?.unitKg ?? u, true) : 20;
+  return {
+    item,
+    qty,
+    kg,
+    unitKg: u,
+    confidence: c,
+    confidenceLevel: level(c),
+    matchReason: matched
+      ? `Peso perfeito: ${kg} kg = ${qty} × ${ITEM_BY_NAME.get(item)?.unitKg ?? u} kg`
+      : "Item cortado na síntese",
+  };
+}
+
 function parseSintese(text: string): ItemMatch[] | null {
   const items: ItemMatch[] = [];
+  // Formato verboso do jogo (autoritativo):
+  // "NOME — Quantidade: N — Peso de cada: W kg — Peso total: T kg"
+  const verboseRe =
+    /([^\n—]{3,80}?)\s*—\s*Quantidade:\s*(\d[\d\s]*)\s*—\s*Peso de cada:\s*(\d+(?:[.,]\d+)?)\s*kg\s*—\s*Peso total:\s*(\d+(?:[.,]\d+)?)\s*kg/gi;
   for (const line of text.split("\n")) {
-    const re = /(\d[\d\s]*)\s*[×x]\s*([^—\n]*?)\s*—\s*([\d.,]+)\s*kg/g;
+    verboseRe.lastIndex = 0;
+    let hitVerbose = false;
     let m: RegExpExecArray | null;
+    while ((m = verboseRe.exec(line))) {
+      hitVerbose = true;
+      const qty = Number(m[2].replace(/\s+/g, ""));
+      const unit = Number(m[3].replace(",", "."));
+      const kg = Number(m[4].replace(",", "."));
+      if (!Number.isFinite(qty) || !Number.isFinite(kg) || qty <= 0) continue;
+      items.push(sinteseMatch(normalizeLine(m[1]), qty, kg, unit > 0 ? unit : kg / qty));
+    }
+    if (hitVerbose) continue;
+    const re = /(\d[\d\s]*)\s*[×x]\s*([^—\n]*?)\s*—\s*([\d.,]+)\s*kg/g;
     while ((m = re.exec(line))) {
       const qty = Number(m[1].replace(/\s+/g, ""));
       const kg = Number(m[3].replace(",", "."));
       if (!Number.isFinite(qty) || !Number.isFinite(kg) || qty <= 0) continue;
-      const name = normalizeLine(m[2]);
-      const u = kg / qty;
-      const unidentified =
-        !name || name.includes("item cortado") || name.length < 3
-          ? true
-          : matchNameToItem(name, u) === null;
-      const item = unidentified ? `item nao identificado (${Math.round(u * 100) / 100} kg/un)` : matchNameToItem(name, u)!;
-      const c = unidentified ? 20 : confidence(u, ITEM_BY_NAME.get(item)?.unitKg ?? u, true);
-      items.push({
-        item,
-        qty,
-        kg,
-        unitKg: u,
-        confidence: c,
-        confidenceLevel: level(c),
-        matchReason: unidentified ? "Item cortado na síntese" : `Peso perfeito: ${kg} kg = ${qty} × ${ITEM_BY_NAME.get(item)?.unitKg} kg`,
-      });
+      items.push(sinteseMatch(normalizeLine(m[2]), qty, kg, kg / qty));
     }
   }
   const identified = items.filter((i) => !i.item.startsWith("item nao identificado"));
@@ -603,9 +620,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
 
   const sintese = parseSintese(fixed);
   if (sintese) {
-    const text = sintese.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
-    const overall = sintese.length ? sintese.reduce((s, w) => s + w.confidence, 0) / sintese.length : 0;
-    return { text, weights: sintese, weaponCapture: null, overallConfidence: overall };
+    const merged = mergeResults(sintese);
+    const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+    const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
+    return { text, weights: merged, weaponCapture: null, overallConfidence: overall };
   }
 
   const anyPairs = extractPairs(fixed).length > 0;
