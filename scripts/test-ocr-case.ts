@@ -87,6 +87,54 @@ CARREGADOR DE
 1 (0.2)
 ÁGI`;
 
+const casePolice = `Armario-policeevidence5_1
+Peso: 482.70 / 5000.00
+317 (63.4)
+76 (15.2)
+22 (22.0)
+110 (55.0)
+198 (39.6)
+PERFUME
+PHONE 7
+TV LED 75
+COMPUTADOR
+PACK VINHOS
+98 (147.0)
+39 (39.0)
+12 (6.0)
+99 (19.8)
+78 (7.8)
+OURO ESTATAL
+ARMA DE COLEÇÃO
+TIGRE
+QUADRO
+DOCUMENTOS
+39 (7.8)
+38 (7.6)
+1 (2.0)
+5 (0.5)
+48 (48.0)
+RELÓGIO OURO
+PULSEIRA OURO
+AGUIA DE BRONZE
+CRYPTO PEN
+BARRA DE OURO
+2 (2.0) PERFUME — Quantidade: 317 — Peso de cada: 0,2 kg — Peso total: 63,4 kg
+PHONE 7 — Quantidade: 76 — Peso de cada: 0,2 kg — Peso total: 15,2 kg
+TV LED 75 — Quantidade: 22 — Peso de cada: 1,0 kg — Peso total: 22,0 kg
+COMPUTADOR — Quantidade: 110 — Peso de cada: 0,5 kg — Peso total: 55,0 kg
+PACK VINHOS — Quantidade: 198 — Peso de cada: 0,2 kg — Peso total: 39,6 kg
+OURO ESTATAL — Quantidade: 98 — Peso de cada: 1,5 kg — Peso total: 147,0 kg
+ARMA DE COLEÇÃO — Quantidade: 39 — Peso de cada: 1,0 kg — Peso total: 39,0 kg
+TIGRE — Quantidade: 12 — Peso de cada: 0,5 kg — Peso total: 6,0 kg
+QUADRO — Quantidade: 99 — Peso de cada: 0,2 kg — Peso total: 19,8 kg
+DOCUMENTOS — Quantidade: 78 — Peso de cada: 0,1 kg — Peso total: 7,8 kg
+RELÓGIO OURO — Quantidade: 39 — Peso de cada: 0,2 kg — Peso total: 7,8 kg
+PULSEIRA OURO — Quantidade: 38 — Peso de cada: 0,2 kg — Peso total: 7,6 kg
+ÁGUIA DE BRONZE — Quantidade: 1 — Peso de cada: 2,0 kg — Peso total: 2,0 kg
+CRYPTO PEN — Quantidade: 5 — Peso de cada: 0,1 kg — Peso total: 0,5 kg
+BARRA DE OURO — Quantidade: 48 — Peso de cada: 1,0 kg — Peso total: 48,0 kg`;
+
 // O mesmo, mas com o par da água capturado e o nome cortado ("ÁGI")
 const caseAguaCortada = `VINTAGE PISTOL
 TELEMÓVEL
@@ -206,5 +254,29 @@ fails += run(
   12,
   12.2,
 );
+fails += run(
+  "caso 5: armário police evidence (síntese autoritativa)",
+  casePolice,
+  {
+    perfume: [317, 63.4],
+    "phone 7": [76, 15.2],
+    "tv led 75": [22, 22],
+    computador: [110, 55],
+    "pack vinhos": [198, 39.6],
+    "ouro estatal": [98, 147],
+    "arma de colecao": [39, 39],
+    tigre: [12, 6],
+    quadro: [99, 19.8],
+    documentos: [78, 7.8],
+    "relogio ouro": [39, 7.8],
+    "pulseira ouro": [38, 7.6],
+    "aguia de bronze": [1, 2],
+    "crypto pen": [5, 0.5],
+    "barras ouro": [48, 48],
+  },
+  1180,
+  480.7,
+);
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
+

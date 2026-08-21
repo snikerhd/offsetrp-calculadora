@@ -562,6 +562,11 @@ function mergeResults(items: ItemMatch[]): ItemMatch[] {
 // ─────────────────────────────────────────────────────────────────────────────
 function matchNameToItem(name: string, u: number): string | null {
   if (!name || name.length < 3) return null;
+  // Nome exato do catálogo: aceita mesmo se o peso divergir (o jogo pode ter
+  // pesos diferentes dos registados; o nome na síntese é explícito).
+  for (const def of ITEM_CATALOG) {
+    if (name === normalizeLine(def.name) || name === normalizeLine(def.displayName)) return def.name;
+  }
   let best: string | null = null;
   let bestScore = 0;
   const check = (phrase: string, item: string) => {
