@@ -449,17 +449,120 @@ function assignPairsToHints(
   pairs: Pair[],
   hints: Hint[]
 ): { matchOf: Map<Pair, Hint>; leftover: Pair[] } {
-  const cand: number[][] = pairs.map((p) => {
+  const matchOf = new Map<Pair, Hint>();
+  const usedHint = new Array<boolean>(hints.length).fill(false);
+
+  // ── Fase 1: casamento por blocos ──
+  // A grelha do jogo desenha cada linha visual como "N quantidades" seguidas
+  // de "N nomes" (ou o inverso, conforme o OCR). Linhas consecutivas formam um
+  // bloco e o i-º par do bloco casa com a i-ª pista compatível — muito mais
+  // fiável do que a distância bruta quando os nomes ficam entre duas linhas
+  // de quantidades.
+  interface Block {
+    items: number[];
+    start: number;
+    end: number;
+  }
+  const pairBlocksByIdx: Block[] = [];
+  {
+    let cur: Block | null = null;
+    for (let i = 0; i < pairs.length; i++) {
+      const ln = pairs[i].line;
+      if (cur && ln === cur.end + 1) {
+        cur.items.push(i);
+        cur.end = ln;
+      } else {
+        cur = { items: [i], start: ln, end: ln };
+        pairBlocksByIdx.push(cur);
+      }
+    }
+  }
+  const hintBlocksByIdx: Block[] = [];
+  {
+    let cur: Block | null = null;
+    for (let i = 0; i < hints.length; i++) {
+      const ln = hints[i].line;
+      if (cur && ln === cur.end + 1) {
+        cur.items.push(i);
+        cur.end = ln;
+      } else {
+        cur = { items: [i], start: ln, end: ln };
+        hintBlocksByIdx.push(cur);
+      }
+    }
+  }
+
+  // Casamento ordenado dentro de um bloco: maximiza atribuições, depois
+  // minimiza custo (distância de linhas + desvio de peso). NÃO-CRUZADO: o par
+  // seguinte só pode usar pistas depois da pista do par anterior (a grelha lê-
+  // se da esquerda para a direita) — evita que dois pares roubem pistas
+  // duplicadas do mesmo nome deixando outro nome órfão.
+  const blockMatch = (
+    pIdx: number[],
+    hIdx: number[]
+  ): { score: number; map: Array<[number, number]> } => {
+    const n = pIdx.length;
+    let bestScore = Infinity;
+    let bestMap: Array<[number, number]> = [];
+    const curMap = new Map<number, number>();
+    const dfs = (k: number, lastHi: number, assigned: number, cost: number) => {
+      if (cost > bestScore) return;
+      if (k === n) {
+        const score = (n - assigned) * 1000 + cost;
+        if (score < bestScore) {
+          bestScore = score;
+          bestMap = Array.from(curMap.entries());
+        }
+        return;
+      }
+      const pi = pIdx[k];
+      const u = pairs[pi].kg / pairs[pi].qty;
+      for (const hi of hIdx) {
+        if (hi <= lastHi || usedHint[hi] || !weightClose(u, hints[hi].unitKg)) continue;
+        const d = Math.abs(hints[hi].line - pairs[pi].line);
+        const dev = Math.abs(u - hints[hi].unitKg) / (hints[hi].unitKg || 1);
+        curMap.set(pi, hi);
+        dfs(k + 1, hi, assigned + 1, cost + d * 2 + dev * 10);
+        curMap.delete(pi);
+      }
+      dfs(k + 1, lastHi, assigned, cost);
+    };
+    dfs(0, -1, 0, 0);
+    return { score: bestScore, map: bestMap };
+  };
+
+  for (const pb of pairBlocksByIdx) {
+    let best: { score: number; map: Array<[number, number]> } | null = null;
+    for (const hb of hintBlocksByIdx) {
+      const after = hb.start >= pb.end;
+      const gap = after ? hb.start - pb.end : pb.start - hb.end;
+      if (gap > 40) continue;
+      const res = blockMatch(pb.items, hb.items);
+      if (!best || res.score < best.score) best = res;
+    }
+    if (best) {
+      for (const [pi, hi] of best.map) {
+        matchOf.set(pairs[pi], hints[hi]);
+        usedHint[hi] = true;
+      }
+    }
+  }
+
+  // ── Fase 2: otimizador global para os que sobraram ──
+  const restPairs = pairs.filter((p) => !matchOf.has(p));
+  if (restPairs.length === 0) return { matchOf, leftover: [] };
+  const restHints = hints.filter((_, i) => !usedHint[i]);
+  const cand: number[][] = restPairs.map((p) => {
     const u = p.kg / p.qty;
     const arr: number[] = [];
-    for (let i = 0; i < hints.length; i++) {
-      const h = hints[i];
+    for (let i = 0; i < restHints.length; i++) {
+      const h = restHints[i];
       if (Math.abs(h.line - p.line) <= 40 && weightClose(u, h.unitKg)) arr.push(i);
     }
     return arr;
   });
   // Pares com menos candidatos primeiro: podam a árvore mais cedo.
-  const order = pairs
+  const order = restPairs
     .map((_, i) => i)
     .sort((a, b) => cand[a].length - cand[b].length || a - b);
 
@@ -467,9 +570,9 @@ function assignPairsToHints(
   const DUP_PENALTY = 8;
   const CROSS_PENALTY = 12;
 
-  const usedHint = new Array<boolean>(hints.length).fill(false);
   const itemCount = new Map<string, number>();
-  const cur = new Array<number>(pairs.length).fill(-1);
+  for (const [, h] of matchOf) itemCount.set(h.item, (itemCount.get(h.item) ?? 0) + 1);
+  const cur = new Array<number>(restPairs.length).fill(-1);
   let bestSeq: number[] | null = null;
   let bestScore = Infinity;
 
@@ -477,10 +580,11 @@ function assignPairsToHints(
   // acima do par B, A deve preferir pistas acima das de B.
   const crossCost = (pi: number, hi: number): number => {
     let c = 0;
-    for (let pj = 0; pj < pairs.length; pj++) {
+    for (let pj = 0; pj < restPairs.length; pj++) {
       if (pj === pi || cur[pj] < 0) continue;
-      const before = pairs[pj].line < pairs[pi].line ||
-        (pairs[pj].line === pairs[pi].line && pj < pi);
+      const before =
+        restPairs[pj].line < restPairs[pi].line ||
+        (restPairs[pj].line === restPairs[pi].line && pj < pi);
       if ((before && cur[pj] > hi) || (!before && cur[pj] < hi)) c += CROSS_PENALTY;
     }
     return c;
@@ -489,14 +593,14 @@ function assignPairsToHints(
   const dfs = (k: number, assigned: number, cost: number) => {
     if (cost > bestScore) return;
     if (k === order.length) {
-      const score = (pairs.length - assigned) * UNASSIGNED_PENALTY + cost;
+      const score = (restPairs.length - assigned) * UNASSIGNED_PENALTY + cost;
       if (score < bestScore) {
         bestScore = score;
         bestSeq = [...cur];
         return;
       }
       if (score === bestScore && bestSeq) {
-        for (let pi = 0; pi < pairs.length; pi++) {
+        for (let pi = 0; pi < restPairs.length; pi++) {
           const a = cur[pi];
           const b = bestSeq[pi];
           if (a === b) continue;
@@ -507,21 +611,19 @@ function assignPairsToHints(
       return;
     }
     const pi = order[k];
-    const p = pairs[pi];
+    const p = restPairs[pi];
     const u = p.kg / p.qty;
+    // nota: restHints já exclui as pistas usadas na fase 1, por isso não há
+    // verificação de usedHint aqui (os índices são de restHints).
     for (const hi of cand[pi]) {
-      if (usedHint[hi]) continue;
-      const h = hints[hi];
+      const h = restHints[hi];
       const dev = Math.abs(u - h.unitKg) / (h.unitKg || 1);
       const dist = Math.abs(h.line - p.line);
       const dup = itemCount.get(h.item) ?? 0;
-      const step =
-        dist * 2 + dev * 10 + dup * DUP_PENALTY + crossCost(pi, hi);
-      usedHint[hi] = true;
+      const step = dist * 2 + dev * 10 + dup * DUP_PENALTY + crossCost(pi, hi);
       itemCount.set(h.item, dup + 1);
       cur[pi] = hi;
       dfs(k + 1, assigned + 1, cost + step);
-      usedHint[hi] = false;
       itemCount.set(h.item, dup);
       cur[pi] = -1;
     }
@@ -530,12 +632,11 @@ function assignPairsToHints(
 
   dfs(0, 0, 0);
 
-  const matchOf = new Map<Pair, Hint>();
   const leftover: Pair[] = [];
-  for (let pi = 0; pi < pairs.length; pi++) {
+  for (let pi = 0; pi < restPairs.length; pi++) {
     const hi = bestSeq ? bestSeq[pi] : -1;
-    if (hi >= 0) matchOf.set(pairs[pi], hints[hi]);
-    else leftover.push(pairs[pi]);
+    if (hi >= 0) matchOf.set(restPairs[pi], restHints[hi]);
+    else leftover.push(restPairs[pi]);
   }
   return { matchOf, leftover };
 }
