@@ -126,6 +126,9 @@ const ALIASES: Array<[string, string, number?]> = [
   ["c4", "c4"],
   ["c 4", "c4"],
   ["sumo de ananas", "sumo ananas"],
+  ["maço tabaco", "maço"],
+  ["maço de tabaco", "maço"],
+  ["suporte secagem", "suporte de secagem"],
   ["restos eletronicos", "eletronicos"],
   ["resto eletronico", "eletronicos"],
   ["candy cane", "candy cane"],
@@ -155,6 +158,7 @@ const FRAGMENTS: Array<[string, string, string | null]> = [
   ["laranja", "sumo laranja", "sumo"],
   ["ananas", "sumo ananas", "sumo"],
   ["maracuja", "sumo maracuja", "sumo"],
+  ["secagem", "suporte de secagem", null],
   ["estatal", "ouro estatal", null],
   ["10k", "corrente 10k", null],
   ["mochi", "medwchi mochi", null],
@@ -714,8 +718,10 @@ function parseSintese(text: string): ItemMatch[] | null {
   const items: ItemMatch[] = [];
   // Formato verboso do jogo (autoritativo):
   // "NOME — Quantidade: N — Peso de cada: W kg — Peso total: T kg"
+  // O OCR pode trocar o travessão por hífen/en-dash, por isso aceita qualquer
+  // variante de traço como separador.
   const verboseRe =
-    /([^\n—]{3,80}?)\s*—\s*Quantidade:\s*(\d[\d\s]*)\s*—\s*Peso de cada:\s*(\d+(?:[.,]\d+)?)\s*kg\s*—\s*Peso total:\s*(\d+(?:[.,]\d+)?)\s*kg/gi;
+    /([^\n—–―-]{3,80}?)\s*[—–―-]\s*Quantidade\s*:\s*(\d[\d\s]*)\s*[—–―-]\s*Peso\s+de\s+cada\s*:\s*(\d+(?:[.,]\d+)?)\s*kg\s*[—–―-]\s*Peso\s+total\s*:\s*(\d+(?:[.,]\d+)?)\s*kg/gi;
   for (const line of text.split("\n")) {
     verboseRe.lastIndex = 0;
     let hitVerbose = false;
@@ -729,7 +735,7 @@ function parseSintese(text: string): ItemMatch[] | null {
       items.push(sinteseMatch(normalizeLine(m[1]), qty, kg, unit > 0 ? unit : kg / qty));
     }
     if (hitVerbose) continue;
-    const re = /(\d[\d\s]*)\s*[×x]\s*([^—\n]*?)\s*—\s*([\d.,]+)\s*kg/g;
+    const re = /(\d[\d\s]*)\s*[×x]\s*([^—–―\n-]*?)\s*[—–―-]\s*([\d.,]+)\s*kg/g;
     while ((m = re.exec(line))) {
       const qty = Number(m[1].replace(/\s+/g, ""));
       const kg = Number(m[3].replace(",", "."));
