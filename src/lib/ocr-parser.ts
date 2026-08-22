@@ -535,7 +535,7 @@ function recoverRotatedPairs(fixed: string, unused: Hint[]): ItemMatch[] {
     if (!best) continue;
     used.add(best.t);
     for (const d of dupOf.get(best.t) ?? []) used.add(d);
-    const conf = best.t.kind === "A" ? 65 : 45;
+    const conf = best.t.kind === "A" ? 82 : 58;
     out.push({
       item: h.item,
       qty: best.qty,
