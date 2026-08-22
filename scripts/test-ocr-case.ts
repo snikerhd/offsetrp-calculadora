@@ -218,6 +218,27 @@ SUMO ANANÁS — Quantidade: 7 — Peso de cada: 0,2 kg — Peso total: 1,4 kg`;
 const caseSinteseHifens = `ESTANHO - Quantidade: 126 - Peso de cada: 0,1 kg - Peso total: 12,6 kg
 MAÇO TABACO - Quantidade: 374 - Peso de cada: 0,3 kg - Peso total: 112,2 kg`;
 
+// O mesmo armazém SEM o bloco de síntese: metade da grelha chega rodada 180°
+const caseTabacoGrelha = `(0'L) L
+(0'L) L
+SVNVNV OWNS
+BIFANA
+BANDAGEM
+(9'0) €
+(6'0) 6
+FOLHA TABACO
+CARTÃO
+SECAGEM
+ESTANHO
+MAÇO TABACO
+SUPORTE DE
+L
+)1020-0 510
+(L'S) IS
+7
+126 (12.6)
+374 (112.2)`;
+
 function run(label: string, raw: string, expect: Record<string, [number, number]>, totQty: number, totKg: number) {
   const r = parseInventoryOCR(raw);
   const q = r.weights.reduce((s, w) => s + w.qty, 0);
@@ -393,6 +414,21 @@ fails += run(
   },
   500,
   124.8,
+);
+fails += run(
+  "caso 9: armazém de tabaco sem síntese (grelha rodada 180°)",
+  caseTabacoGrelha,
+  {
+    estanho: [126, 12.6],
+    "maço": [374, 112.2],
+    bifana: [3, 0.6],
+    bandagem: [9, 0.9],
+    cartao: [51, 5.1],
+    "folha tabaco": [510, 102],
+    "sumo ananas": [7, 1.4],
+  },
+  1080,
+  234.8,
 );
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
