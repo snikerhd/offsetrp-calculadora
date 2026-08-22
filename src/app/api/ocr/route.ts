@@ -81,7 +81,10 @@ async function ocrSpace(processed: Buffer): Promise<string> {
   } catch { return ""; }
 }
 async function tesseractOcr(processed: Buffer): Promise<string> {
-  try { const worker = await getWorker(); if (!worker) return ""; const { data } = await worker.recognize(processed); return (data.text || "").trim(); }
+  try { const worker = await getWorker(); if (!worker) return ""; const { data } = await Promise.race([
+    worker.recognize(processed),
+    new Promise<never>((_, rej) => setTimeout(() => rej(new Error("tesseract timeout")), ENGINES_CAP_MS)),
+  ]); return (data.text || "").trim(); }
   catch { return ""; }
 }
 async function openaiOcrWithTimeout(processed: Buffer): Promise<string> {
@@ -92,14 +95,27 @@ async function puterOcrWithTimeout(processed: Buffer): Promise<string> {
   const b64 = processed.toString("base64");
   return new Promise(resolve => { const timer = setTimeout(() => resolve(""), PUTER_TIMEOUT_MS); puterOcr(b64).then(t => { clearTimeout(timer); resolve(t); }).catch(() => { clearTimeout(timer); resolve(""); }); });
 }
-function firstUsefulText(primary: Promise<string>, a: Promise<string>, b: Promise<string>): Promise<string> {
-  return new Promise(resolve => {
-    let done = false, fallback = "";
-    const finish = (v: string, primaryResult: boolean) => { const t = (v || "").trim(); if (done || t.length < 3) return; if (primaryResult) { done = true; resolve(t); } else fallback ||= t; };
-    primary.then(v => finish(v, true)); a.then(v => finish(v, false)); b.then(v => finish(v, false));
-    setTimeout(() => { if (!done) { done = true; resolve(fallback); } }, ENGINES_CAP_MS);
-    Promise.all([primary, a, b]).then(([x, y, z]) => { if (!done) { done = true; resolve([x, y, z].map(v => (v || "").trim()).find(v => v.length >= 3) || ""); } });
-  });
+// Junta as leituras dos vários motores sem duplicar linhas: cada motor apanha
+// zonas diferentes da screenshot (um lê a grelha, outro o bloco de resumo),
+// e o parser usa o que estiver mais completo.
+function mergeEngineTexts(parts: string[]): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of parts) {
+    for (const raw of (part || "").split("\n")) {
+      const line = raw.trim();
+      if (line.length < 2) continue;
+      const key = line.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(line);
+    }
+  }
+  return out.join("\n");
+}
+async function collectEngineTexts(primary: Promise<string>, a: Promise<string>, b: Promise<string>): Promise<string> {
+  const parts = await Promise.all([primary, a, b]);
+  return mergeEngineTexts(parts);
 }
 
 export async function POST(req: NextRequest) {
@@ -132,7 +148,7 @@ export async function POST(req: NextRequest) {
     } else return NextResponse.json({ error: "imageUrl ou imageBase64 necessário" }, { status: 400 });
     const preview = `data:${mimeType};base64,${base64Data}`;
     const processed = await preprocessImage(base64Data);
-    const ocrText = await firstUsefulText(puterOcrWithTimeout(processed), ocrSpace(processed), tesseractOcr(processed));
+    const ocrText = await collectEngineTexts(puterOcrWithTimeout(processed), ocrSpace(processed), tesseractOcr(processed));
     if (ocrText.length < 3) return NextResponse.json({ result: "", ocrRaw: "", preview, error: "Não foi possível extrair texto da imagem. Tenta uma screenshot mais nítida." });
     const parsed = parseInventoryOCR(ocrText);
     return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: ocrText, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
