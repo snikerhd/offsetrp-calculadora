@@ -1011,7 +1011,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const sintese = parseSintese(fixed);
   if (sintese) {
     const merged = mergeResults(sintese);
-    const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+    const text = merged.filter((w) => !w.item.startsWith("item nao identificado") && w.qty > 0).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
     const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
     return { text, weights: merged, weaponCapture: null, overallConfidence: overall };
   }
@@ -1037,12 +1037,33 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const matchedHints = new Set(matchOf.values());
   out.push(...recoverRotatedPairs(fixed, usableHints.filter((h) => !matchedHints.has(h))));
 
+  // Itens cujo nome foi lido na grelha mas cujo par de pesos se perdeu por
+  // completo (célula cortada/rodada sem glifos): entram com quantidade 0 para
+  // não passarem despercebidos na hora de avaliar as coimas.
+  const seenItems = new Set<string>();
+  for (const w of out) seenItems.add(w.item);
+  for (const h of usableHints) {
+    if (matchedHints.has(h)) continue;
+    const def = ITEM_BY_NAME.get(h.item);
+    if (!def || def.unitKg <= 0 || seenItems.has(def.name)) continue;
+    seenItems.add(def.name);
+    out.push({
+      item: def.name,
+      qty: 0,
+      kg: 0,
+      unitKg: def.unitKg,
+      confidence: 30,
+      confidenceLevel: "low",
+      matchReason: "Nome lido mas peso ilegível no OCR (célula cortada/rodada) — completa a quantidade manualmente",
+    });
+  }
+
   for (const p of leftover) {
     out.push(fallbackForPair(p, false, undefined));
   }
 
   const merged = mergeResults(out);
-  const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+  const text = merged.filter((w) => !w.item.startsWith("item nao identificado") && w.qty > 0).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
   const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
   return { text, weights: merged, weaponCapture: detectWeaponCapture(fixed), overallConfidence: overall };
 }

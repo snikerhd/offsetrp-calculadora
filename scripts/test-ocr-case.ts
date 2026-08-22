@@ -426,6 +426,7 @@ fails += run(
     cartao: [51, 5.1],
     "folha tabaco": [510, 102],
     "sumo ananas": [7, 1.4],
+    "suporte de secagem": [0, 0],
   },
   1080,
   234.8,
