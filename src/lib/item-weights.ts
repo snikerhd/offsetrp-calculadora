@@ -66,6 +66,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "bomba", displayName: "Bomba", unitKg: 0.3, category: "equipamento", illegal: true },
   { name: "c4", displayName: "C4", unitKg: 1, category: "equipamento", illegal: true },
   { name: "mesa quimica", displayName: "Mesa Química", unitKg: 5, category: "equipamento", illegal: true },
+  { name: "suporte de secagem", displayName: "Suporte de Secagem", unitKg: 5, category: "equipamento", illegal: true },
 
   // ── Roubo / Assalto ──
   { name: "diamante bruto", displayName: "Diamante Bruto", unitKg: 0.1, category: "roubo", illegal: true },
