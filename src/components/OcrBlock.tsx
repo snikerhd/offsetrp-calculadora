@@ -186,7 +186,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         try {
           const puterText = await runWithPuter(dataUrl);
           if (puterText.length >= 3) {
-            const pdata = await runServerOcr({ rawText: puterText, imageBase64: match[2], mimeType: match[1] });
+            const pdata = await runServerOcr({ rawText: puterText });
             if (!pdata.result && !pdata.weaponCapture && pdata.error) throw new Error(pdata.error);
             handleResult(pdata);
             return;

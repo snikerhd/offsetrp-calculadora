@@ -41,8 +41,6 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\bMOMOSHU\b/gi, "MONOSHU"],
   [/\bHOHOSHU\b/gi, "MONOSHU"],
   [/\bSTRAWBELLY\b/gi, "STRAWBERRY"],
-  [/\bSVNVNV\s+OWNS\b/gi, "SUMO ANANAS"],
-  [/\bOWNS\b/gi, "SUMO"],
   [/\bBTFANA\b/gi, "BIFANA"],
   [/\bCORRENTE\s+DE\s+DURO\b/gi, "CORRENTE DE OURO"],
   [/\bRELOGIO\s+DE\s+DURO\b/gi, "RELOGIO DE OURO"],
@@ -128,9 +126,6 @@ const ALIASES: Array<[string, string, number?]> = [
   ["c4", "c4"],
   ["c 4", "c4"],
   ["sumo de ananas", "sumo ananas"],
-  ["maço tabaco", "maço"],
-  ["maço de tabaco", "maço"],
-  ["suporte secagem", "suporte de secagem"],
   ["restos eletronicos", "eletronicos"],
   ["resto eletronico", "eletronicos"],
   ["candy cane", "candy cane"],
@@ -160,7 +155,6 @@ const FRAGMENTS: Array<[string, string, string | null]> = [
   ["laranja", "sumo laranja", "sumo"],
   ["ananas", "sumo ananas", "sumo"],
   ["maracuja", "sumo maracuja", "sumo"],
-  ["secagem", "suporte de secagem", null],
   ["estatal", "ouro estatal", null],
   ["10k", "corrente 10k", null],
   ["mochi", "medwchi mochi", null],
@@ -355,201 +349,6 @@ function detectHeaderLines(lines: string[]): Set<number> {
   if (!hasMarker) return set;
   for (let i = 0; i < firstPair; i++) set.add(i);
   return set;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Linhas rodadas 180°: o jogo desenha parte das células invertidas e o OCR lê-
-// as ao contrário — "3 (0.6)" chega como "(9'0) €", "51 (5.1)" como "(L'S) IS",
-// "SUMO ANANÁS" como "SVNVNV OWNS". Recupera os pares cruzando cada token
-// rodado com o peso conhecido do item mais próximo que ficou sem par.
-// ─────────────────────────────────────────────────────────────────────────────
-const FLIP_MAP: Record<string, string[]> = {
-  "(": [")"], ")": ["("],
-  "0": ["0", "4"], "O": ["0"], "o": ["0"],
-  "1": ["1"], "I": ["1"], "i": ["1"],
-  "l": ["1", "7"], "L": ["7", "1"],
-  "7": ["7"],
-  "5": ["5"], "S": ["5"], "s": ["5"],
-  "2": ["2"], "Z": ["2"], "z": ["2"],
-  "3": ["3"], "E": ["3"], "€": ["3"],
-  "4": ["4"], "h": ["4"], "H": ["4"],
-  "8": ["8"], "B": ["8"],
-  "9": ["6", "9"], "6": ["9", "6"], "G": ["6"], "g": ["9"], "q": ["9"],
-  "'": ["."], "\u2019": ["."], "\u2018": ["."], ".": ["."], ",": ["."],
-};
-
-const ROTATED_GLYPH_RE = /^[0-9OoIlLiISsZzE€BbHhGg69q'\u2019\u2018.\-()]+$/;
-// Glifos que provam rotação (um par normal nunca os tem dentro dos parênteses)
-const ROT_EVIDENCE_RE = /[lLiISsZzE€BbHhGgq'\u2019\u2018]/;
-
-interface RotInterp { qty: number; kg: number; unit: number; hits: number }
-interface RotToken {
-  kind: "A" | "B";
-  line: number;
-  chunk: string;
-  tail: string;
-  interps: RotInterp[];
-}
-
-function flipExpand(s: string, maxCombos: number): string[] {
-  let outs = [""];
-  for (const ch of s) {
-    const opts = FLIP_MAP[ch];
-    if (!opts) return [];
-    const next: string[] = [];
-    for (const o of outs) {
-      for (const x of opts) {
-        if (next.length >= maxCombos) break;
-        next.push(o + x);
-      }
-    }
-    outs = next;
-    if (!outs.length) return [];
-  }
-  return Array.from(new Set(outs));
-}
-
-function rotInterps(chunk: string, tail: string): RotInterp[] {
-  const qts = flipExpand(tail, 64)
-    .map((s) => Array.from(s).reverse().join(""))
-    .filter((s) => /^\d{1,7}$/.test(s))
-    .map(Number)
-    .filter((q) => q >= 1 && q <= 99999);
-  if (!qts.length) return [];
-  const kgs = flipExpand(chunk, 128)
-    .map((s) => Array.from(s).reverse().join(""))
-    .filter((s) => /^\d+(?:\.\d{0,2})?$/.test(s))
-    .map(Number)
-    .filter((k) => Number.isFinite(k) && k > 0 && k <= 100000);
-  const seen = new Set<string>();
-  const out: RotInterp[] = [];
-  for (const qty of qts) {
-    for (const kg of kgs) {
-      const unit = kg / qty;
-      let hits = 0;
-      for (const d of ITEM_CATALOG) {
-        if (d.unitKg > 0 && weightClose(unit, d.unitKg)) hits++;
-      }
-      if (!hits) continue;
-      const key = `${qty}|${kg}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ qty, kg, unit, hits });
-    }
-  }
-  out.sort((a, b) => b.hits - a.hits);
-  return out.slice(0, 6);
-}
-
-// O par rodado foi mal lido mas a quantidade está intacta: aceita só se os
-// dígitos do peso esperado (qty × peso unitário) aparecem no fragmento.
-function digitsConsistent(chunk: string, kg: number): boolean {
-  const cs = chunk.replace(/\D/g, "");
-  const ks = String(Math.round(kg * 10));
-  if (!cs || !ks) return false;
-  if (Math.abs(cs.length - ks.length) > 2) return false;
-  return cs.startsWith(ks) || ks.startsWith(cs) || cs.includes(ks);
-}
-
-function collectRotatedTokens(lines: string[]): RotToken[] {
-  const tokens: RotToken[] = [];
-  for (let li = 0; li < lines.length; li++) {
-    const raw = lines[li];
-    if (!raw || raw.length > 48) continue;
-    // Não mexer em linhas que já têm pares normais
-    if (extractPairs(raw).length > 0) continue;
-    if (/quantidade|peso\s+(de\s+cada|total)/i.test(raw)) continue;
-
-    const kindA = /\(([^()[\n]{1,8}?)\)[ \t]*([^\s()[\n]{1,7})/g;
-    let m: RegExpExecArray | null;
-    while ((m = kindA.exec(raw))) {
-      const chunk = m[1];
-      const tail = m[2];
-      if (!ROTATED_GLYPH_RE.test(chunk + tail)) continue;
-      // Exige apóstrofo (ponto decimal rodado) ou letra-glifo no chunk
-      if (!( /['\u2019\u2018]/.test(chunk) || ROT_EVIDENCE_RE.test(chunk.replace(/['\u2019\u2018]/g, "")) )) continue;
-      tokens.push({ kind: "A", line: li, chunk, tail, interps: rotInterps(chunk, tail) });
-    }
-
-    // Forma B: dígitos direitos com parêntese trocado e traço no lugar do
-    // ponto — ")1020-0 510" = "510 (102.0)"
-    const kindB = /([()])(\d[\d\u2019'.,-]{1,7})[ \t]+(\d{1,7})\b/g;
-    while ((m = kindB.exec(raw))) {
-      const chunk = m[2];
-      const tail = m[3];
-      if (!/[\u2019'.-]/.test(chunk)) continue; // separador partido obrigatório
-      if (/^\d+\.\d$/.test(chunk)) continue; // par normal, deixa estar
-      tokens.push({ kind: "B", line: li, chunk, tail, interps: [] });
-    }
-  }
-  return tokens;
-}
-
-function recoverRotatedPairs(fixed: string, unused: Hint[]): ItemMatch[] {
-  if (!unused.length) return [];
-  const all = collectRotatedTokens(fixed.split("\n"));
-  if (!all.length) return [];
-
-  // Duplicados: o OCR às vezes emite a mesma célula rodada duas vezes
-  // ("(0'L) L" ×2). Consome as cópias junto com a primeira (nos dois sentidos).
-  const dupOf = new Map<RotToken, RotToken[]>();
-  const linkDup = (a: RotToken, b: RotToken) => {
-    const arr = dupOf.get(a) ?? [];
-    arr.push(b);
-    dupOf.set(a, arr);
-  };
-  for (let i = 0; i < all.length; i++) {
-    for (let j = i + 1; j < all.length; j++) {
-      const a = all[i], b = all[j];
-      if (a.kind !== b.kind || a.chunk !== b.chunk || a.tail !== b.tail) continue;
-      if (Math.abs(a.line - b.line) > 1) continue;
-      linkDup(a, b);
-      linkDup(b, a);
-    }
-  }
-
-  const used = new Set<RotToken>();
-  const out: ItemMatch[] = [];
-  for (const h of [...unused].sort((a, b) => a.line - b.line || a.pos - b.pos)) {
-    const def = ITEM_BY_NAME.get(h.item);
-    if (!def || def.unitKg <= 0) continue;
-    let best: { t: RotToken; qty: number; kg: number; score: number } | null = null;
-    for (const t of all) {
-      if (used.has(t)) continue;
-      const dist = Math.abs(t.line - h.line);
-      if (dist > 8) continue;
-      if (t.kind === "A") {
-        for (const ip of t.interps) {
-          if (!weightClose(ip.unit, def.unitKg)) continue;
-          const score = dist * 10 + Math.abs(ip.unit - def.unitKg) / def.unitKg;
-          if (!best || score < best.score) best = { t, qty: ip.qty, kg: ip.kg, score };
-        }
-      } else {
-        if (!/^\d{1,7}$/.test(t.tail)) continue;
-        const qty = Number(t.tail);
-        const kg = Math.round(qty * def.unitKg * 100) / 100;
-        if (!digitsConsistent(t.chunk, kg)) continue;
-        if (!best || dist * 10 < best.score) best = { t, qty, kg, score: dist * 10 };
-      }
-    }
-    if (!best) continue;
-    used.add(best.t);
-    for (const d of dupOf.get(best.t) ?? []) used.add(d);
-    const conf = best.t.kind === "A" ? 82 : 58;
-    out.push({
-      item: h.item,
-      qty: best.qty,
-      kg: best.kg,
-      unitKg: def.unitKg,
-      confidence: conf,
-      confidenceLevel: level(conf),
-      matchReason:
-        best.t.kind === "A"
-          ? `Peso recuperado (texto rodado): ${best.kg} kg = ${best.qty} × ${def.unitKg} kg`
-          : `Peso inferido (par ilegível): ${best.kg} kg = ${best.qty} × ${def.unitKg} kg`,
-    });
-  }
-  return out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -915,10 +714,8 @@ function parseSintese(text: string): ItemMatch[] | null {
   const items: ItemMatch[] = [];
   // Formato verboso do jogo (autoritativo):
   // "NOME — Quantidade: N — Peso de cada: W kg — Peso total: T kg"
-  // O OCR pode trocar o travessão por hífen/en-dash, por isso aceita qualquer
-  // variante de traço como separador.
   const verboseRe =
-    /([^\n—–―-]{3,80}?)\s*[—–―-]\s*Quantidade\s*:\s*(\d[\d\s]*)\s*[—–―-]\s*Peso\s+de\s+cada\s*:\s*(\d+(?:[.,]\d+)?)\s*kg\s*[—–―-]\s*Peso\s+total\s*:\s*(\d+(?:[.,]\d+)?)\s*kg/gi;
+    /([^\n—]{3,80}?)\s*—\s*Quantidade:\s*(\d[\d\s]*)\s*—\s*Peso de cada:\s*(\d+(?:[.,]\d+)?)\s*kg\s*—\s*Peso total:\s*(\d+(?:[.,]\d+)?)\s*kg/gi;
   for (const line of text.split("\n")) {
     verboseRe.lastIndex = 0;
     let hitVerbose = false;
@@ -932,7 +729,7 @@ function parseSintese(text: string): ItemMatch[] | null {
       items.push(sinteseMatch(normalizeLine(m[1]), qty, kg, unit > 0 ? unit : kg / qty));
     }
     if (hitVerbose) continue;
-    const re = /(\d[\d\s]*)\s*[×x]\s*([^—–―\n-]*?)\s*[—–―-]\s*([\d.,]+)\s*kg/g;
+    const re = /(\d[\d\s]*)\s*[×x]\s*([^—\n]*?)\s*—\s*([\d.,]+)\s*kg/g;
     while ((m = re.exec(line))) {
       const qty = Number(m[1].replace(/\s+/g, ""));
       const kg = Number(m[3].replace(",", "."));
@@ -1011,7 +808,7 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   const sintese = parseSintese(fixed);
   if (sintese) {
     const merged = mergeResults(sintese);
-    const text = merged.filter((w) => !w.item.startsWith("item nao identificado") && w.qty > 0).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+    const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
     const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
     return { text, weights: merged, weaponCapture: null, overallConfidence: overall };
   }
@@ -1032,38 +829,12 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     const h = matchOf.get(p);
     if (h) out.push(matchForPair(p, h));
   }
-
-  // Pares rodados 180°: atribui aos itens que ficaram sem par
-  const matchedHints = new Set(matchOf.values());
-  out.push(...recoverRotatedPairs(fixed, usableHints.filter((h) => !matchedHints.has(h))));
-
-  // Itens cujo nome foi lido na grelha mas cujo par de pesos se perdeu por
-  // completo (célula cortada/rodada sem glifos): entram com quantidade 0 para
-  // não passarem despercebidos na hora de avaliar as coimas.
-  const seenItems = new Set<string>();
-  for (const w of out) seenItems.add(w.item);
-  for (const h of usableHints) {
-    if (matchedHints.has(h)) continue;
-    const def = ITEM_BY_NAME.get(h.item);
-    if (!def || def.unitKg <= 0 || seenItems.has(def.name)) continue;
-    seenItems.add(def.name);
-    out.push({
-      item: def.name,
-      qty: 0,
-      kg: 0,
-      unitKg: def.unitKg,
-      confidence: 30,
-      confidenceLevel: "low",
-      matchReason: "Nome lido mas peso ilegível no OCR (célula cortada/rodada) — completa a quantidade manualmente",
-    });
-  }
-
   for (const p of leftover) {
     out.push(fallbackForPair(p, false, undefined));
   }
 
   const merged = mergeResults(out);
-  const text = merged.filter((w) => !w.item.startsWith("item nao identificado") && w.qty > 0).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+  const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
   const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
   return { text, weights: merged, weaponCapture: detectWeaponCapture(fixed), overallConfidence: overall };
 }

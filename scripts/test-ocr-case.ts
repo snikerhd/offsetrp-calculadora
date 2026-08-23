@@ -186,59 +186,6 @@ CARREGADOR DE
 1 (0.2)
 ÁGI`;
 
-// Armazém de tabaco (caso real): grelha parcialmente rotacionada + síntese do jogo
-const caseTabaco = `(0'L) L
-(0'L) L
-SVNVNV OWNS
-BIFANA
-BANDAGEM
-(9'0) €
-(6'0) 6
-FOLHA TABACO
-CARTÃO
-SECAGEM
-ESTANHO
-MAÇO TABACO
-SUPORTE DE
-L
-)1020-0 510
-(L'S) IS
-7
-126 (12.6)
-374 (112.2) MAÇO TABACO — Quantidade: 374 — Peso de cada: 0,3 kg — Peso total: 112,2 kg
-ESTANHO — Quantidade: 126 — Peso de cada: 0,1 kg — Peso total: 12,6 kg
-SUPORTE DE SECAGEM — Quantidade: 4 — Peso de cada: 5,0 kg — Peso total: 20,0 kg
-CARTÃO — Quantidade: 51 — Peso de cada: 0,1 kg — Peso total: 5,1 kg
-FOLHA TABACO — Quantidade: 510 — Peso de cada: 0,2 kg — Peso total: 102,0 kg
-BANDAGEM — Quantidade: 9 — Peso de cada: 0,1 kg — Peso total: 0,9 kg
-BIFANA — Quantidade: 3 — Peso de cada: 0,2 kg — Peso total: 0,6 kg
-SUMO ANANÁS — Quantidade: 7 — Peso de cada: 0,2 kg — Peso total: 1,4 kg`;
-
-// Síntese com hífens em vez de travessões (OCR troca o traço)
-const caseSinteseHifens = `ESTANHO - Quantidade: 126 - Peso de cada: 0,1 kg - Peso total: 12,6 kg
-MAÇO TABACO - Quantidade: 374 - Peso de cada: 0,3 kg - Peso total: 112,2 kg`;
-
-// O mesmo armazém SEM o bloco de síntese: metade da grelha chega rodada 180°
-const caseTabacoGrelha = `(0'L) L
-(0'L) L
-SVNVNV OWNS
-BIFANA
-BANDAGEM
-(9'0) €
-(6'0) 6
-FOLHA TABACO
-CARTÃO
-SECAGEM
-ESTANHO
-MAÇO TABACO
-SUPORTE DE
-L
-)1020-0 510
-(L'S) IS
-7
-126 (12.6)
-374 (112.2)`;
-
 function run(label: string, raw: string, expect: Record<string, [number, number]>, totQty: number, totKg: number) {
   const r = parseInventoryOCR(raw);
   const q = r.weights.reduce((s, w) => s + w.qty, 0);
@@ -388,48 +335,6 @@ fails += run(
   },
   1182,
   482.7,
-);
-fails += run(
-  "caso 7: armazém de tabaco (grelha rodada + síntese)",
-  caseTabaco,
-  {
-    estanho: [126, 12.6],
-    "maço": [374, 112.2],
-    cartao: [51, 5.1],
-    "folha tabaco": [510, 102],
-    bandagem: [9, 0.9],
-    bifana: [3, 0.6],
-    "sumo ananas": [7, 1.4],
-    "suporte de secagem": [4, 20],
-  },
-  1084,
-  254.8,
-);
-fails += run(
-  "caso 8: síntese com hífens em vez de travessões",
-  caseSinteseHifens,
-  {
-    estanho: [126, 12.6],
-    "maço": [374, 112.2],
-  },
-  500,
-  124.8,
-);
-fails += run(
-  "caso 9: armazém de tabaco sem síntese (grelha rodada 180°)",
-  caseTabacoGrelha,
-  {
-    estanho: [126, 12.6],
-    "maço": [374, 112.2],
-    bifana: [3, 0.6],
-    bandagem: [9, 0.9],
-    cartao: [51, 5.1],
-    "folha tabaco": [510, 102],
-    "sumo ananas": [7, 1.4],
-    "suporte de secagem": [0, 0],
-  },
-  1080,
-  234.8,
 );
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
