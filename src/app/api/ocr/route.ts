@@ -13,11 +13,13 @@ const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "helloworld";
 // Limites agressivos: as funções gratuitas do Netlify matam a request aos ~10s,
 // por isso os três motores têm de terminar bem dentro desse orçamento.
 const OCR_SPACE_TIMEOUT_MS = 6_500;
-const IMAGE_FETCH_TIMEOUT_MS = 7_000;
+const IMAGE_FETCH_TIMEOUT_MS = 5_000;
 const ENGINES_CAP_MS = 8_000;
 const OPENAI_TIMEOUT_MS = 8_000;
 const PUTER_TIMEOUT_MS = 8_500;
 const ENGINES_TOTAL_BUDGET_MS = 8_800;
+// Caminho com texto do navegador já fornecido: sobra menos tempo
+const ENGINES_MERGE_BUDGET_MS = 6_000;
 const TESS_CACHE_PATH = join(process.cwd(), ".cache", "tessdata");
 try { mkdirSync(TESS_CACHE_PATH, { recursive: true }); } catch {}
 
@@ -137,18 +139,35 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { imageUrl, imageBase64, mimeType: inputMime, rawText } = body;
     if (rawText && typeof rawText === "string" && rawText.trim().length >= 3) {
-      const parsed = parseInventoryOCR(rawText.trim());
-      let rawPreview: string | undefined;
-      if (imageUrl) {
-        try {
+      const provided = rawText.trim();
+      // O texto do navegador (Puter) por vezes perde zonas da screenshot (ex.:
+      // o bloco de resumo). Se tivermos a imagem, corre também os motores do
+      // servidor e funde as leituras antes de parsear.
+      let mergedRaw = provided;
+      let preview: string | undefined;
+      try {
+        let processed: Buffer | null = null;
+        if (imageBase64) {
+          processed = await preprocessImage(imageBase64);
+          preview = `data:${inputMime || "image/png"};base64,${imageBase64}`;
+        } else if (imageUrl) {
           let directUrl = imageUrl as string;
           if (directUrl.includes("gyazo.com") && !directUrl.includes("i.gyazo.com")) { const id = directUrl.split("/").pop()?.split("?")[0]; if (id) directUrl = `https://i.gyazo.com/${id}.png`; }
           if (directUrl.includes("imgur.com") && !directUrl.includes("i.imgur.com")) { const id = directUrl.split("/").pop()?.split("?")[0]; if (id) directUrl = `https://i.imgur.com/${id}.png`; }
           const r = await fetchWithTimeout(directUrl, { headers: { "User-Agent": "Mozilla/5.0" }, redirect: "follow" }, IMAGE_FETCH_TIMEOUT_MS);
-          if (r.ok) rawPreview = `data:${r.headers.get("content-type") || "image/png"};base64,${Buffer.from(await r.arrayBuffer()).toString("base64")}`;
-        } catch {}
-      }
-      return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: rawText.trim(), preview: rawPreview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
+          if (r.ok) {
+            const buf = Buffer.from(await r.arrayBuffer());
+            processed = await preprocessImage(buf.toString("base64"));
+            preview = `data:${r.headers.get("content-type") || "image/png"};base64,${buf.toString("base64")}`;
+          }
+        }
+        if (processed) {
+          const engineText = await collectEngineTexts(puterOcrWithTimeout(processed), ocrSpace(processed), tesseractOcr(processed), Date.now() + ENGINES_MERGE_BUDGET_MS);
+          mergedRaw = mergeEngineTexts([provided, engineText]);
+        }
+      } catch {}
+      const parsed = parseInventoryOCR(mergedRaw);
+      return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: mergedRaw, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
     }
     let base64Data: string, mimeType: string;
     if (imageBase64) { base64Data = imageBase64; mimeType = inputMime || "image/png"; }

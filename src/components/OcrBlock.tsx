@@ -36,28 +36,6 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   const ocrTotalQty = ocrWeights.reduce((sum, w) => sum + w.qty, 0);
   const ocrTotalKg = ocrWeights.reduce((sum, w) => sum + (w.kg > 0 ? w.kg : 0), 0);
 
-  // Linhas cujo par de pesos o OCR não leu (nome identificado, quantidade
-  // desconhecida): ficam com um campo editável para preencher à mão.
-  const isManualRow = (w: DetectedWeight) =>
-    w.qty === 0 && w.matchReason.startsWith("Nome lido mas peso ilegível");
-
-  const updateManualQty = useCallback(
-    (index: number, qty: number) => {
-      const next = ocrWeights.map((w, i) => {
-        if (i !== index) return w;
-        const kg = Math.round(qty * (w.unitKg ?? 0) * 100) / 100;
-        return { ...w, qty, kg };
-      });
-      setOcrWeights(next);
-      const txt = next
-        .filter((w) => !w.item.startsWith("item nao identificado") && w.qty > 0)
-        .map((w) => `${w.qty} ${ITEM_BY_NAME.get(w.item)?.displayName || w.item}`)
-        .join(", ");
-      if (txt) onResult(txt);
-    },
-    [ocrWeights, onResult],
-  );
-
   // OCR no navegador via Puter.js (user-pays: usa o saldo grátis do visitante,
   // sem chave para o dono do site). Só faz sentido para URLs públicas; ficheiros
   // locais são convertidos para data URL antes de chamar.
@@ -208,7 +186,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         try {
           const puterText = await runWithPuter(dataUrl);
           if (puterText.length >= 3) {
-            const pdata = await runServerOcr({ rawText: puterText });
+            const pdata = await runServerOcr({ rawText: puterText, imageBase64: match[2], mimeType: match[1] });
             if (!pdata.result && !pdata.weaponCapture && pdata.error) throw new Error(pdata.error);
             handleResult(pdata);
             return;
@@ -393,20 +371,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
                               )}
                             </div>
                           </td>
-                          <td className="py-1.5 pr-2 text-right font-mono text-gray-200">
-                            {isManualRow(w) ? (
-                              <input
-                                type="number"
-                                min={0}
-                                value={w.qty > 0 ? String(w.qty) : ""}
-                                placeholder="?"
-                                onChange={(e) => updateManualQty(i, Math.max(0, Number(e.target.value) || 0))}
-                                className="w-16 rounded border border-amber-500/40 bg-black/40 px-1 py-0.5 text-right font-mono text-[11px] text-gray-100 focus:border-amber-400/60 focus:outline-none"
-                              />
-                            ) : (
-                              w.qty.toLocaleString("pt-PT")
-                            )}
-                          </td>
+                          <td className="py-1.5 pr-2 text-right font-mono text-gray-200">{w.qty.toLocaleString("pt-PT")}</td>
                           <td className="py-1.5 pr-2 text-right font-mono text-gray-500">{w.unitKg != null ? `${w.unitKg} kg` : "—"}</td>
                           <td className="py-1.5 pr-2 text-right font-mono font-semibold text-gray-100">{w.kg > 0 ? `${w.kg.toLocaleString("pt-PT")} kg` : "—"}</td>
                           <td className="py-1.5 px-2 text-center">
