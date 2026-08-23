@@ -218,6 +218,55 @@ SUMO ANANÁS — Quantidade: 7 — Peso de cada: 0,2 kg — Peso total: 1,4 kg`;
 const caseSinteseHifens = `ESTANHO - Quantidade: 126 - Peso de cada: 0,1 kg - Peso total: 12,6 kg
 MAÇO TABACO - Quantidade: 374 - Peso de cada: 0,3 kg - Peso total: 112,2 kg`;
 
+// Inventário misto com itens novos do jogo (sushi, herbal tea, bao bun,
+// paraquedas, furadora, broca) — síntese verbosa autoritativa
+const caseNovosItens = `1 (5.0)
+1 (1.0)
+51 (10.2)
+47 (9.4)
+5(1.0)
+MACHINE PISTOL
+RADIO
+SUSHI
+MOMOSHU
+SUMO LARANJA
+4(0.8)
+16(3.2)
+9(1.8)
+1 (0.2)
+1 (10.0)
+Y
+HERBAL TEA
+MEOWCHI MOCHI
+BAO BUN
+SUMO MARACUJA
+PARAQUEDAS
+1 (0.7)
+1(1.5)
+1(1.5)
+1(1.5)
+1 (0.1)
+17:23
+TELEMOVEL
+FURADORA BÁSICA
+SACO DO GINÁSIO
+BROCA BÁSICA
+BANDAGEM MACHINE PISTOL — Quantidade: 1 — Peso de cada: 5,0 kg — Peso total: 5,0 kg
+RÁDIO — Quantidade: 1 — Peso de cada: 1,0 kg — Peso total: 1,0 kg
+SUSHI — Quantidade: 51 — Peso de cada: 0,2 kg — Peso total: 10,2 kg
+MOMOSHU — Quantidade: 47 — Peso de cada: 0,2 kg — Peso total: 9,4 kg
+SUMO LARANJA — Quantidade: 5 — Peso de cada: 0,2 kg — Peso total: 1,0 kg
+HERBAL TEA — Quantidade: 4 — Peso de cada: 0,2 kg — Peso total: 0,8 kg
+MEOWCHI MOCHI — Quantidade: 16 — Peso de cada: 0,2 kg — Peso total: 3,2 kg
+BAO BUN — Quantidade: 9 — Peso de cada: 0,2 kg — Peso total: 1,8 kg
+SUMO MARACUJÁ — Quantidade: 1 — Peso de cada: 0,2 kg — Peso total: 0,2 kg
+PARAQUEDAS — Quantidade: 1 — Peso de cada: 10,0 kg — Peso total: 10,0 kg
+TELEMÓVEL — Quantidade: 1 — Peso de cada: 0,7 kg — Peso total: 0,7 kg
+FURADORA BÁSICA — Quantidade: 1 — Peso de cada: 1,5 kg — Peso total: 1,5 kg
+SACO DO GINÁSIO — Quantidade: 1 — Peso de cada: 1,5 kg — Peso total: 1,5 kg
+BROCA BÁSICA — Quantidade: 1 — Peso de cada: 1,5 kg — Peso total: 1,5 kg
+BANDAGEM — Quantidade: 1 — Peso de cada: 0,1 kg — Peso total: 0,1 kg`;
+
 function run(label: string, raw: string, expect: Record<string, [number, number]>, totQty: number, totKg: number) {
   const r = parseInventoryOCR(raw);
   const q = r.weights.reduce((s, w) => s + w.qty, 0);
@@ -394,6 +443,29 @@ fails += run(
   },
   500,
   124.8,
+);
+fails += run(
+  "caso 9: itens novos do jogo (sushi, herbal tea, bao bun, paraquedas, furadora, broca)",
+  caseNovosItens,
+  {
+    "arma medio calibre": [1, 5],
+    radio: [1, 1],
+    sushi: [51, 10.2],
+    monoshu: [47, 9.4],
+    "sumo laranja": [5, 1],
+    "herbal tea": [4, 0.8],
+    "medwchi mochi": [16, 3.2],
+    "bao bun": [9, 1.8],
+    "sumo maracuja": [1, 0.2],
+    paraquedas: [1, 10],
+    telemovel: [1, 0.7],
+    "furadora basica": [1, 1.5],
+    "saco do ginasio": [1, 1.5],
+    "broca basica": [1, 1.5],
+    bandagem: [1, 0.1],
+  },
+  141,
+  47.9,
 );
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
