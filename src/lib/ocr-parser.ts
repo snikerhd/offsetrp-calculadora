@@ -409,8 +409,13 @@ function fallbackForPair(p: Pair, unidentified: boolean, groupItems?: Set<string
         };
       }
     }
-    const def = ITEM_CATALOG.find((x) => weightClose(u, x.unitKg));
-    if (def) {
+    // Só adivinha pelo peso se o peso for pouco ambíguo: com muitos itens no
+    // catálogo a partilhar o mesmo peso unitário (0,1 kg tem mais de uma
+    // dúzia), atribuir o primeiro é quase sempre errado — melhor marcar como
+    // não identificado do que inventar um item.
+    const candidates = ITEM_CATALOG.filter((x) => weightClose(u, x.unitKg));
+    if (candidates.length > 0 && candidates.length <= 6) {
+      const def = candidates[0];
       const c = confidence(u, def.unitKg, false);
       return {
         item: def.name,

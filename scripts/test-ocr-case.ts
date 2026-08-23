@@ -363,7 +363,8 @@ fails += run(
     "aguia de bronze": [1, 2],
     "crypto pen": [5, 0.5],
     "barras ouro": [48, 48],
-    "arma branca ilegal": [2, 2],
+    // "2 (2.0)" fica como nao identificado: peso 1 kg/un e ambiguo (colete,
+    // radio, c4...) e adivinhar inventava um item errado
   },
   1182,
   482.7,
