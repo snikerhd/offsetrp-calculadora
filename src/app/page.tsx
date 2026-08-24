@@ -1,4 +1,5 @@
 import CalculadoraApp from "@/components/CalculadoraApp";
+import AuthGate from "@/components/AuthGate";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +11,9 @@ export default async function HomePage() {
     const { sql } = await import("drizzle-orm");
     await db.execute(sql`select 1`);
   }
-  return <CalculadoraApp />;
+  return (
+    <AuthGate>
+      <CalculadoraApp />
+    </AuthGate>
+  );
 }

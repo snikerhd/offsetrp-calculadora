@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from "fs";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { openaiOcr } from "@/lib/openai-ocr";
 import { puterOcr } from "@/lib/puter-ocr";
+import { isAuthed } from "@/lib/auth";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -104,6 +105,9 @@ function firstUsefulText(primary: Promise<string>, a: Promise<string>, b: Promis
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isAuthed(req)) {
+      return NextResponse.json({ error: "Sessão inválida. Inicia sessão novamente." }, { status: 401 });
+    }
     const body = await req.json();
     const { imageUrl, imageBase64, mimeType: inputMime, rawText } = body;
     if (rawText && typeof rawText === "string" && rawText.trim().length >= 3) {
