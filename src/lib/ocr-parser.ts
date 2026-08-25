@@ -154,6 +154,9 @@ const FRAGMENTS: Array<[string, string, string | null]> = [
   ["avancada", "lockpick avancada", "lockpick"],
   ["processado", "cristal processado", "cristal"],
   ["cidadao", "cartao de cidadao", "cartao"],
+  // "CARTÃO DE" numa linha e "CIDADÃO" noutra: a primeira metade sozinha não
+  // deve virar um Cartão normal
+  ["cartao de", "cartao de cidadao", null],
   ["conducao", "carta de conducao", "carta"],
   ["laranja", "sumo laranja", "sumo"],
   ["ananas", "sumo ananas", "sumo"],

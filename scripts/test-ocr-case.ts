@@ -267,6 +267,39 @@ SACO DO GINÁSIO — Quantidade: 1 — Peso de cada: 1,5 kg — Peso total: 1,5 
 BROCA BÁSICA — Quantidade: 1 — Peso de cada: 1,5 kg — Peso total: 1,5 kg
 BANDAGEM — Quantidade: 1 — Peso de cada: 0,1 kg — Peso total: 0,1 kg`;
 
+// Jogador-806: CARTÃO DE/CIDADÃO partido em duas linhas + relógio 0.1 kg
+const caseJogador806 = `Jogador-806
+Peso: 34.60 / 120.00
+1 (5.0)
+16 (1.6)
+22 (4.4)
+24(4.8)
+MACHINE PISTOL
+BANDAGEM
+BIFANA
+SUMO ANANAS
+1 (0.7)
+1 (0.1)
+1 (2.0)
+66 (9.9)
+17:23
+CORRENTE DE OURO
+TELEMÓVEL
+ALGEMAS
+KIT REPARAÇÃO
+10K
+13 (1.3)
+2(2.0)
+22 (2.2)
+1 (0.0)
+6 (0.6)
+CARTÃO DE
+ANEL DE DIAMANTE
+RADIO
+CORRENTE DE OURO
+CIDADÃO
+RELOGIO DE OURO`;
+
 function run(label: string, raw: string, expect: Record<string, [number, number]>, totQty: number, totKg: number) {
   const r = parseInventoryOCR(raw);
   const q = r.weights.reduce((s, w) => s + w.qty, 0);
@@ -407,7 +440,6 @@ fails += run(
     tigre: [12, 6],
     quadro: [99, 19.8],
     documentos: [78, 7.8],
-    "relogio ouro": [39, 7.8],
     "pulseira ouro": [38, 7.6],
     "aguia de bronze": [1, 2],
     "crypto pen": [5, 0.5],
@@ -466,6 +498,27 @@ fails += run(
   },
   141,
   47.9,
+);
+fails += run(
+  "caso 10: jogador-806 (anel 13, relogio 6, cartao de cidadao partido)",
+  caseJogador806,
+  {
+    "arma medio calibre": [1, 5],
+    bandagem: [16, 1.6],
+    bifana: [22, 4.4],
+    "sumo ananas": [24, 4.8],
+    telemovel: [1, 0.7],
+    algemas: [1, 0.1],
+    "kit reparacao": [1, 2],
+    "corrente 10k": [66, 9.9],
+    anel: [13, 1.3],
+    radio: [2, 2],
+    corrente: [22, 2.2],
+    "cartao de cidadao": [1, 0],
+    "relogio ouro": [6, 0.6],
+  },
+  176,
+  34.6,
 );
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
