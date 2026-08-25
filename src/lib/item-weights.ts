@@ -136,6 +136,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "tecido", displayName: "Tecido", unitKg: 0.1, category: "crafting", illegal: false },
   { name: "ferro velho", displayName: "Ferro Velho", unitKg: 0.2, category: "crafting", illegal: false },
   { name: "kit reparacao", displayName: "Kit Reparação", unitKg: 2, category: "crafting", illegal: false },
+  { name: "parafusos", displayName: "Parafusos", unitKg: 0.2, category: "crafting", illegal: false },
 
   // ── Outros ──
   { name: "dinheiro", displayName: "Dinheiro", unitKg: 0.00001, category: "outro", illegal: false },

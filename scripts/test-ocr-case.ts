@@ -300,6 +300,42 @@ CORRENTE DE OURO
 CIDADÃO
 RELOGIO DE OURO`;
 
+// Jogador-1938: parafusos (7x0.2) junto da bifana — sem catalogo, o par
+// 7(1.4) era absorvido pela bifana (13+7=20)
+const caseJogador1938 = `Jogador - 1938
+Peso: 44.35 / 120.00
+1 (0.7)
+44954 (0.4)
+11 (2.2)
+1 (0.0)
+1 (0.5)
+87
+TELENOVEL
+DINHEIRO
+SUMO MARACUJA
+CARTÃO DE CIDADÃO
+CANA DE PESCA
+13 (2.6)
+7(1.4)
+1 (1.0)
+5(0.5)
+25 (2.5)
+32
+BIFANA
+PARAFUSOS
+PETROL CAN
+CARTÃO
+CASCA DE BANANA
+3 (1.5)
+10(20.0)
+6(9.0)
+2(2.0)
+RESTOS
+ELETRÓNICOS
+KIT REPARAÇÃO
+OURO ESTATAL
+ARMA DE COLEÇÃO`;
+
 function run(label: string, raw: string, expect: Record<string, [number, number]>, totQty: number, totKg: number) {
   const r = parseInventoryOCR(raw);
   const q = r.weights.reduce((s, w) => s + w.qty, 0);
@@ -519,6 +555,28 @@ fails += run(
   },
   176,
   34.6,
+);
+fails += run(
+  "caso 11: jogador-1938 (parafusos separado da bifana)",
+  caseJogador1938,
+  {
+    telemovel: [1, 0.7],
+    dinheiro: [44954, 0.4],
+    "sumo maracuja": [11, 2.2],
+    "cartao de cidadao": [1, 0],
+    "cana de pesca": [1, 0.5],
+    bifana: [13, 2.6],
+    parafusos: [7, 1.4],
+    "petrol can": [1, 1],
+    cartao: [5, 0.5],
+    "casca de banana": [25, 2.5],
+    eletronicos: [3, 1.5],
+    "kit reparacao": [10, 20],
+    "ouro estatal": [6, 9],
+    "arma de colecao": [2, 2],
+  },
+  45040,
+  44.3,
 );
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
