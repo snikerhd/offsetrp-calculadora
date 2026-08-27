@@ -61,7 +61,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "algemas", displayName: "Algemas", unitKg: 0.1, category: "equipamento", illegal: true },
   { name: "rebarbadora", displayName: "Rebarbadora", unitKg: 1, category: "equipamento", illegal: true },
   { name: "mining drill", displayName: "Mining Drill", unitKg: 0.2, category: "equipamento", illegal: false },
-  { name: "pager", displayName: "Pager", unitKg: 0.1, category: "equipamento", illegal: true },
+  { name: "pager", displayName: "Pager", unitKg: 0.5, category: "equipamento", illegal: true },
   { name: "garrafa de nitro", displayName: "Garrafa de Nitro", unitKg: 1, category: "equipamento", illegal: true },
   { name: "bomba", displayName: "Bomba", unitKg: 0.3, category: "equipamento", illegal: true },
   { name: "c4", displayName: "C4", unitKg: 1, category: "equipamento", illegal: true },

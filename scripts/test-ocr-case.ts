@@ -336,6 +336,19 @@ KIT REPARAÇÃO
 OURO ESTATAL
 ARMA DE COLEÇÃO`;
 
+// Pager a 0.5 kg (peso atual) + itens de pesca/reparação
+const casePager05 = `1
+(0.5)
+1 (1.0)
+2(4.0)
+16 (4.8)
+50
+80
+PAGER
+PETROL CAN
+KIT REPARAÇÃO
+DIARIO DE BORDO`;
+
 function run(label: string, raw: string, expect: Record<string, [number, number]>, totQty: number, totKg: number) {
   const r = parseInventoryOCR(raw);
   const q = r.weights.reduce((s, w) => s + w.qty, 0);
@@ -577,6 +590,18 @@ fails += run(
   },
   45040,
   44.3,
+);
+fails += run(
+  "caso 12: pager a 0.5 kg + itens de pesca/reparação",
+  casePager05,
+  {
+    pager: [1, 0.5],
+    "petrol can": [1, 1],
+    "kit reparacao": [2, 4],
+    diario: [16, 4.8],
+  },
+  20,
+  10.3,
 );
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
