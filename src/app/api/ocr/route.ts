@@ -10,7 +10,9 @@ export const maxDuration = 60;
 export const runtime = "nodejs";
 
 const OCR_SPACE_URL = "https://api.ocr.space/parse/image";
-const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "helloworld";
+// Sem chave configurada o motor é simplesmente ignorado (antes caía na chave
+// demo "helloworld", que tem quota mínima e falha sempre em produção).
+const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "";
 const OCR_SPACE_TIMEOUT_MS = 15_000;
 const IMAGE_FETCH_TIMEOUT_MS = 20_000;
 const ENGINES_CAP_MS = 30_000;
@@ -73,6 +75,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   try { return await fetch(url, { ...init, signal: controller.signal }); } finally { clearTimeout(timer); }
 }
 async function ocrSpace(processed: Buffer): Promise<string> {
+  if (!OCR_SPACE_KEY) return "";
   try {
     const formBody = new URLSearchParams();
     formBody.append("base64Image", `data:image/jpeg;base64,${processed.toString("base64")}`);
@@ -136,7 +139,10 @@ export async function POST(req: NextRequest) {
     } else return NextResponse.json({ error: "imageUrl ou imageBase64 necessário" }, { status: 400 });
     const preview = `data:${mimeType};base64,${base64Data}`;
     const processed = await preprocessImage(base64Data);
-    const ocrText = await firstUsefulText(puterOcrWithTimeout(processed), ocrSpace(processed), tesseractOcr(processed));
+    // Motor principal: OpenAI vision (mais preciso para screenshots de inventário).
+    // Fallbacks mantidos: Puter -> OCR.space -> Tesseract.
+    const ocrFallbacks = firstUsefulText(puterOcrWithTimeout(processed), ocrSpace(processed), tesseractOcr(processed));
+    const ocrText = await firstUsefulText(openaiOcrWithTimeout(processed), ocrFallbacks, Promise.resolve(""));
     if (ocrText.length < 3) return NextResponse.json({ result: "", ocrRaw: "", preview, error: "Não foi possível extrair texto da imagem. Tenta uma screenshot mais nítida." });
     const parsed = parseInventoryOCR(ocrText);
     return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: ocrText, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
