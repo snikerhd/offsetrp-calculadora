@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
@@ -39,5 +39,10 @@
   "overrides": {
     "typescript-eslint": "8.65.0",
     "@typescript-eslint/scope-manager": "8.65.0"
+  },
+  "allowScripts": {
+    "sharp": true,
+    "esbuild": true,
+    "tesseract.js": false
   }
 }

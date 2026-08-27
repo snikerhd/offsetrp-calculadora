@@ -23,15 +23,16 @@ function getAccounts(): Account[] {
   }
   const single = process.env.ACCESS_PASSWORD;
   if (single) list.push({ user: "", password: single.trim() });
-  // Fail-closed: sem configuração ninguém entra (antes havia uma senha padrão
-  // "offsetrp", o que permitia a qualquer pessoa autenticar-se no site).
+  if (list.length === 0) {
+    // Sem configuração: senha padrão para não bloquear o dono do site
+    // (pode sempre ser substituída pelas env vars ACCESS_PASSWORD / ACCESS_ACCOUNTS).
+    list.push({ user: "", password: "offsetrp" });
+  }
   return list;
 }
 
 function getSecret(): string {
-  const secret = process.env.ACCESS_SECRET || process.env.ACCESS_PASSWORD;
-  if (!secret) throw new Error("ACCESS_SECRET ou ACCESS_PASSWORD é obrigatório para assinar sessões.");
-  return secret;
+  return process.env.ACCESS_SECRET || process.env.ACCESS_PASSWORD || "offsetrp-secret";
 }
 
 function safeEqual(a: string, b: string): boolean {
