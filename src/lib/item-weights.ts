@@ -102,6 +102,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "tubarao branco", displayName: "Tubarão Branco", unitKg: 1, category: "roubo", illegal: true },
   { name: "raia", displayName: "Raia", unitKg: 0.3, category: "roubo", illegal: true },
   { name: "polvo", displayName: "Polvo", unitKg: 0.3, category: "roubo", illegal: true },
+  { name: "caranguejo", displayName: "Caranguejo", unitKg: 0.2, category: "roubo", illegal: true },
   { name: "truta", displayName: "Truta", unitKg: 0.2, category: "outro", illegal: false },
   { name: "salmao", displayName: "Salmão", unitKg: 0.3, category: "outro", illegal: false },
   { name: "atum", displayName: "Atum", unitKg: 0.4, category: "outro", illegal: false },

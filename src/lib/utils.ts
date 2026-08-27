@@ -340,6 +340,10 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "polvos": "Polvo",
   "octopus": "Polvo",
   "squid": "Polvo",
+  "caranguejo": "Caranguejo",
+  "caranguejos": "Caranguejo",
+  "crab": "Caranguejo",
+  "crabs": "Caranguejo",
   // Itens especiais
   "acessorios": "Acessórios para armas",
   "acessórios": "Acessórios para armas",
