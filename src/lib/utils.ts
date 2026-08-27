@@ -344,6 +344,10 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "caranguejos": "Caranguejo",
   "crab": "Caranguejo",
   "crabs": "Caranguejo",
+  "flores": "Flores",
+  "flores silvestres": "Flores",
+  "flower": "Flores",
+  "flowers": "Flores",
   // Itens especiais
   "acessorios": "Acessórios para armas",
   "acessórios": "Acessórios para armas",
