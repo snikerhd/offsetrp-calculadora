@@ -11,9 +11,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Credenciais inválidas." }, { status: 401 });
     }
     const res = NextResponse.json({ ok: true });
+    // Em localhost (http) a flag Secure impediria o browser de devolver o
+    // cookie de sessão. Nos deploys reais (https) mantém-se Secure.
+    const host = (req.headers.get("host") || "").toLowerCase();
+    const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
     res.cookies.set(SESSION_COOKIE, createSessionToken(), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production" && !isLocal,
       sameSite: "lax",
       path: "/",
       maxAge: SESSION_MAX_AGE_S,
