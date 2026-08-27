@@ -348,19 +348,20 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "flores silvestres": "Flores",
   "flower": "Flores",
   "flowers": "Flores",
-  // Assalto a casa
-  "prototipo sniper": "Protótipo Sniper",
-  "prototipo de sniper": "Protótipo Sniper",
-  "sniper prototipo": "Protótipo Sniper",
-  "mala gruppe6": "Mala Gruppe6",
-  "mala gruppe 6": "Mala Gruppe6",
-  "mala gruppi6": "Mala Gruppe6",
-  "gruppe6": "Mala Gruppe6",
-  "monitor": "Monitor",
-  "monitores": "Monitor",
-  "monitor lcd": "Monitor",
-  "patentes": "Patentes",
-  "patente": "Patentes",
+  // Assalto a casa — itens novos contam como "Bens de assalto a casa"
+  // (coima unitária de 3000 € definida em data.ts, como perfume/TV/computador)
+  "prototipo sniper": "Bens de assalto a casa",
+  "prototipo de sniper": "Bens de assalto a casa",
+  "sniper prototipo": "Bens de assalto a casa",
+  "mala gruppe6": "Bens de assalto a casa",
+  "mala gruppe 6": "Bens de assalto a casa",
+  "mala gruppi6": "Bens de assalto a casa",
+  "gruppe6": "Bens de assalto a casa",
+  "monitor": "Bens de assalto a casa",
+  "monitores": "Bens de assalto a casa",
+  "monitor lcd": "Bens de assalto a casa",
+  "patentes": "Bens de assalto a casa",
+  "patente": "Bens de assalto a casa",
   // Crafting / outros
   "nylon": "Nylon",
   "petroleo": "Petróleo",
@@ -683,7 +684,8 @@ export function parseQuickInput(input: string): ParseResult {
   let ocrArmasAlto = 0;
 
   for (const parte of partes) {
-    const match = parte.match(/^(\d+)\s+(.+)$/);
+    // Aceita "45 macos", "1x relogio ouro" e "1 x relogio ouro"
+    const match = parte.match(/^(\d+)(?:\s*x\s+|\s+)(.+)$/i);
     if (!match) {
       result.erros.push(`Formato inválido: '${parte}'`);
       continue;
