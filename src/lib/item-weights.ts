@@ -96,6 +96,12 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "idolo", displayName: "Ídolo", unitKg: 0.3, category: "roubo", illegal: true },
   { name: "adaga", displayName: "Adaga", unitKg: 0.3, category: "roubo", illegal: true },
 
+  // ── Assalto a casa ──
+  { name: "prototipo sniper", displayName: "Protótipo Sniper", unitKg: 1.5, category: "roubo", illegal: true },
+  { name: "mala gruppe6", displayName: "Mala Gruppe6", unitKg: 0.5, category: "roubo", illegal: true },
+  { name: "monitor", displayName: "Monitor", unitKg: 0.5, category: "roubo", illegal: true },
+  { name: "patentes", displayName: "Patentes", unitKg: 0.1, category: "roubo", illegal: true },
+
   // ── Pesca ──
   { name: "orca", displayName: "Orca", unitKg: 10, category: "roubo", illegal: true },
   { name: "tubarao martelo", displayName: "Tubarão Martelo", unitKg: 1, category: "roubo", illegal: true },
