@@ -176,6 +176,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "furadora avancada", displayName: "Furadora Avançada", unitKg: 2, category: "outro", illegal: false },
   { name: "hammer", displayName: "Hammer", unitKg: 1, category: "outro", illegal: false },
   { name: "casca de banana", displayName: "Casca de Banana", unitKg: 0.1, category: "outro", illegal: false },
+  { name: "lanterna", displayName: "Lanterna (Flashlight)", unitKg: 1, category: "outro", illegal: false },
   { name: "flores", displayName: "Flores", unitKg: 0.1, category: "outro", illegal: false },
   { name: "cartao", displayName: "Cartão", unitKg: 0.1, category: "outro", illegal: false },
   { name: "encomenda", displayName: "Encomenda", unitKg: 0.2, category: "outro", illegal: false },

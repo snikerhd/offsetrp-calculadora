@@ -47,6 +47,8 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\bREPARA[CÇ]AD\b/gi, "REPARACAO"],
   [/\bSUMO\s+HARACUJA\b/gi, "SUMO MARACUJA"],
   [/\bSUHO\s+MARACUJA\b/gi, "SUMO MARACUJA"],
+  [/\bFLASHLIGHT\b/gi, "LANTERNA"],
+  [/\bFLASH\s+LIGHT\b/gi, "LANTERNA"],
   [/\bHACHINE\b/gi, "MACHINE"],
   [/\bSHG\b/gi, "SMG"],
   [/\bSUNO\b/gi, "SUMO"],
