@@ -92,7 +92,6 @@ function mergeSplitPairs(text: string): string {
 const ALIASES: Array<[string, string, number?]> = [
   ["strawberry shortcake", "strawberry shortcake"],
   ["strawberry", "strawberry shortcake"],
-  ["shortcake", "strawberry shortcake"],
   ["vintage pistol", "arma baixo calibre", 5],
   ["vintage", "arma baixo calibre", 5],
   ["knife", "knife"],
@@ -163,6 +162,9 @@ const FRAGMENTS: Array<[string, string, string | null]> = [
   ["maracuja", "sumo maracuja", "sumo"],
   ["secagem", "suporte de secagem", null],
   ["estatal", "ouro estatal", null],
+  // "STRAWBELLY" numa linha e "SHORTCAKE" noutra: o nome partido não deve
+  // criar duas pistas do mesmo item (o fragmento funde-se na pista strawberry)
+  ["shortcake", "strawberry shortcake", "strawberry shortcake"],
   ["10k", "corrente 10k", null],
   ["mochi", "medwchi mochi", null],
   ["smg", "carregador medio calibre", null],
