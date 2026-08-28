@@ -377,10 +377,10 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "potássio": "Nitrato de Potássio",
   "furadora avancada": "Furadora Avançada",
   "furadora avançada": "Furadora Avançada",
-  // Lanterna
-  "flashlight": "Lanterna (Flashlight)",
-  "flash light": "Lanterna (Flashlight)",
-  "lanterna": "Lanterna (Flashlight)",
+  // Flashlight
+  "flashlight": "Flashlight",
+  "flash light": "Flashlight",
+  "lanterna": "Flashlight",
   // Itens especiais
   "acessorios": "Acessórios para armas",
   "acessórios": "Acessórios para armas",
