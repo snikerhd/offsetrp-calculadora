@@ -63,6 +63,11 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\b1BK\b/gi, "10K"],
   [/\b1OK\b/gi, "10K"],
   [/\b0\.B\b/gi, "0.8"],
+  // W→H confundido pelo OCR (como HESA→MESA)
+  [/\bHISKY\b/gi, "WHISKY"],
+  // Nomes lidos em ordem invertida pelo OCR (duas linhas): "CONTRABANDO\nCAIXA"
+  [/\bCONTRABANDO\s*\n\s*CAIXA\b/gi, "CAIXA CONTRABANDO"],
+  [/\bELETR[OÓ]NICOS\s*\n\s*CAIXA\b/gi, "CAIXA ELETRONICOS"],
 ];
 
 function fixOcrTypos(text: string): string {
