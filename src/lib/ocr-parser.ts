@@ -65,6 +65,9 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\b0\.B\b/gi, "0.8"],
   // W→H confundido pelo OCR (como HESA→MESA)
   [/\bHISKY\b/gi, "WHISKY"],
+  // Primeira letra cortada pelo OCR
+  [/\bONTRABANDO\b/gi, "CONTRABANDO"],
+  [/\bISKY\b/gi, "WHISKY"],
   // Nomes lidos em ordem invertida pelo OCR (duas linhas): "CONTRABANDO\nCAIXA"
   [/\bCONTRABANDO\s*\n\s*CAIXA\b/gi, "CAIXA CONTRABANDO"],
   [/\bELETR[OÓ]NICOS\s*\n\s*CAIXA\b/gi, "CAIXA ELETRONICOS"],
