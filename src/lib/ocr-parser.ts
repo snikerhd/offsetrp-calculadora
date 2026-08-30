@@ -68,6 +68,9 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   // Nomes lidos em ordem invertida pelo OCR (duas linhas): "CONTRABANDO\nCAIXA"
   [/\bCONTRABANDO\s*\n\s*CAIXA\b/gi, "CAIXA CONTRABANDO"],
   [/\bELETR[OÓ]NICOS\s*\n\s*CAIXA\b/gi, "CAIXA ELETRONICOS"],
+  [/\bTABACO\s*\n\s*CAIXA\b/gi, "CAIXA TABACO"],
+  [/\bCAIXA\s*\n\s*TABACO\b/gi, "CAIXA TABACO"],
+  [/\bCAXA\b/gi, "CAIXA"],
 ];
 
 function fixOcrTypos(text: string): string {
