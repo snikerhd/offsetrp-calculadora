@@ -101,6 +101,12 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "mala gruppe6", displayName: "Mala Gruppe6", unitKg: 0.5, category: "roubo", illegal: true },
   { name: "monitor", displayName: "Monitor", unitKg: 0.5, category: "roubo", illegal: true },
   { name: "patentes", displayName: "Patentes", unitKg: 0.1, category: "roubo", illegal: true },
+  { name: "whisky vintage", displayName: "Whisky Vintage", unitKg: 0.1, category: "roubo", illegal: true },
+  { name: "joias", displayName: "Joias", unitKg: 0.1, category: "roubo", illegal: true },
+  { name: "mala diamantes", displayName: "Mala Diamantes", unitKg: 0.1, category: "roubo", illegal: true },
+  { name: "caixa eletronicos", displayName: "Caixa Eletrónicos", unitKg: 1, category: "roubo", illegal: true },
+  { name: "caixa tabaco", displayName: "Caixa Tabaco", unitKg: 1, category: "roubo", illegal: true },
+  { name: "caixa contrabando", displayName: "Caixa Contrabando", unitKg: 1, category: "roubo", illegal: true },
 
   // ── Pesca ──
   { name: "orca", displayName: "Orca", unitKg: 10, category: "roubo", illegal: true },

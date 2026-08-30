@@ -362,6 +362,19 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "monitor lcd": "Monitor",
   "patentes": "Patentes",
   "patente": "Patentes",
+  "whisky vintage": "Whisky Vintage",
+  "whisky": "Whisky Vintage",
+  "joias": "Joias",
+  "joia": "Joias",
+  "mala diamantes": "Mala Diamantes",
+  "mala de diamantes": "Mala Diamantes",
+  "caixa eletronicos": "Caixa Eletrónicos",
+  "caixa de eletronicos": "Caixa Eletrónicos",
+  "caixa eletrónicos": "Caixa Eletrónicos",
+  "caixa tabaco": "Caixa Tabaco",
+  "caixa de tabaco": "Caixa Tabaco",
+  "caixa contrabando": "Caixa Contrabando",
+  "caixa de contrabando": "Caixa Contrabando",
   // Crafting / outros
   "nylon": "Nylon",
   "petroleo": "Petróleo",
@@ -797,7 +810,9 @@ export function parseQuickInput(input: string): ParseResult {
     }
 
     // Verificar drogas
-    const droga = obterDrogaPorSinonimo(originalNome);
+    // Itens "CAIXA ..." (assalto a casa) nunca são drogas — o fallback
+    // parcial de "tabaco" converteria "caixa tabaco" em "Maço tabaco".
+    const droga = nome.startsWith("caixa ") ? null : obterDrogaPorSinonimo(originalNome);
     if (droga) {
       const preco = PRECOS_DROGAS[droga];
       const subtotal = qtd * preco;
