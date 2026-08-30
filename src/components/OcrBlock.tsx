@@ -77,23 +77,6 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     return data;
   }, []);
 
-  const runWithPuter = useCallback(async (source: string): Promise<string> => {
-    // Só usa o Puter.js no navegador se o visitante já tiver sessão (saldo
-    // grátis dele). Se não estiver autenticado, chamar img2txt abriria o popup
-    // de login do Puter — por isso cai-se direto para o servidor, que usa o
-    // token da conta do dono do site (sem popup).
-    if (typeof window === "undefined" || !window.puter?.ai?.img2txt) return "";
-    if (!window.puter.auth || typeof window.puter.auth.isSignedIn !== "function" || !window.puter.auth.isSignedIn()) return "";
-    try {
-      setOcrStatus("🔍 A analisar imagem com OCR no navegador (Puter)...");
-      const text = await window.puter.ai.img2txt(source);
-      return (text || "").trim();
-    } catch (error) {
-      console.warn("Puter.js OCR falhou, a cair para o servidor:", error);
-      return "";
-    }
-  }, []);
-
   const handleResult = useCallback((data: {
     result?: string;
     preview?: string;
@@ -148,14 +131,6 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     setOcrStatus("🔍 A analisar imagem com OCR...");
 
     try {
-      const puterText = await runWithPuter(ocrUrl.trim());
-      if (puterText.length >= 3) {
-        const data = await runServerOcr({ rawText: puterText, imageUrl: ocrUrl.trim() });
-        if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
-        handleResult(data);
-        return;
-      }
-
       const data = await runServerOcr({ imageUrl: ocrUrl.trim() });
       if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
       handleResult(data);
@@ -164,7 +139,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       setOcrStatus(`❌ ${msg}`);
       setOcrProcessing(false);
     }
-  }, [ocrUrl, handleResult, runWithPuter, runServerOcr]);
+  }, [ocrUrl, handleResult, runServerOcr]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,14 +159,6 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         if (!match) { setOcrStatus("❌ Formato inválido."); setOcrProcessing(false); return; }
 
         try {
-          const puterText = await runWithPuter(dataUrl);
-          if (puterText.length >= 3) {
-            const pdata = await runServerOcr({ rawText: puterText });
-            if (!pdata.result && !pdata.weaponCapture && pdata.error) throw new Error(pdata.error);
-            handleResult(pdata);
-            return;
-          }
-
           const data = await runServerOcr({ imageBase64: match[2], mimeType: match[1] });
           if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
           handleResult(data);
@@ -203,7 +170,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       };
       reader.readAsDataURL(file);
     },
-    [handleResult, runWithPuter, runServerOcr]
+    [handleResult, runServerOcr]
   );
 
   return (

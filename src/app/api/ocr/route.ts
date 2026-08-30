@@ -2,22 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
-import { openaiOcr } from "@/lib/openai-ocr";
-import { puterOcr } from "@/lib/puter-ocr";
+import { gyazoOcr, uploadToGyazo, extractGyazoId } from "@/lib/gyazo-ocr";
 import { isAuthed } from "@/lib/auth";
+
+// O OCR do Gyazo parte nomes como "CAIXA ELETRÓNICOS" em duas linhas
+// ("CAIXA" + "ELETRÓNICOS"), e items seguidos de caixa partilham o prefixo
+// "CAIXA", o que faz as regras de tipografia do parser re-casarem em cadeia.
+// Aqui faz-se uma fusão numa única passagem (sem re-processamento), devolvendo
+// cada item "CAIXA X" numa linha própria. Usa \u0001 como separador temporário
+// para que as regras seguintes não voltem a fundir.
+const S = "\u0001";
+const CAIXA_MULTILINE = /(?:^|\n)\s*\bCAIXA\s*\n\s*(ELETR[OÓ]NICOS|TABACO|CONTRABANDO)\b|\b(ELETR[OÓ]NICOS|TABACO|CONTRABANDO)\s*\n\s*CAIXA\b/gi;
+function mergeCaixaMultiline(text: string): string {
+  const cleaned = text.replace(CAIXA_MULTILINE, (m: string, a: string | undefined, b: string | undefined) => {
+    const w = ((a || b || "") + "").toUpperCase().replace(/^ELETR.*/i, "ELETRONICOS");
+    const name = w.startsWith("ELETR") ? "ELETRONICOS" : w;
+    return "\nCAIXA" + S + name;
+  });
+  return cleaned.split(S).join(" ").replace(/\n{2,}/g, "\n");
+}
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
-const OCR_SPACE_URL = "https://api.ocr.space/parse/image";
-// Sem chave configurada o motor é simplesmente ignorado (antes caía na chave
-// demo "helloworld", que tem quota mínima e falha sempre em produção).
-const OCR_SPACE_KEY = process.env.OCR_SPACE_KEY || "";
-const OCR_SPACE_TIMEOUT_MS = 15_000;
 const IMAGE_FETCH_TIMEOUT_MS = 20_000;
-const ENGINES_CAP_MS = 30_000;
-const OPENAI_TIMEOUT_MS = 25_000;
-const PUTER_TIMEOUT_MS = 25_000;
 const TESS_CACHE_PATH = join(process.cwd(), ".cache", "tessdata");
 try { mkdirSync(TESS_CACHE_PATH, { recursive: true }); } catch {}
 
@@ -74,36 +82,9 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), ms);
   try { return await fetch(url, { ...init, signal: controller.signal }); } finally { clearTimeout(timer); }
 }
-async function ocrSpace(processed: Buffer): Promise<string> {
-  if (!OCR_SPACE_KEY) return "";
-  try {
-    const formBody = new URLSearchParams();
-    formBody.append("base64Image", `data:image/jpeg;base64,${processed.toString("base64")}`);
-    formBody.append("language", "por"); formBody.append("isOverlayRequired", "false"); formBody.append("isTable", "true"); formBody.append("OCREngine", "2");
-    const r = await fetchWithTimeout(OCR_SPACE_URL, { method: "POST", headers: { apikey: OCR_SPACE_KEY, "Content-Type": "application/x-www-form-urlencoded" }, body: formBody.toString() }, OCR_SPACE_TIMEOUT_MS);
-    if (!r.ok) return ""; const data = await r.json(); return (data.ParsedResults?.[0]?.ParsedText || "").trim();
-  } catch { return ""; }
-}
 async function tesseractOcr(processed: Buffer): Promise<string> {
   try { const worker = await getWorker(); if (!worker) return ""; const { data } = await worker.recognize(processed); return (data.text || "").trim(); }
   catch { return ""; }
-}
-async function openaiOcrWithTimeout(processed: Buffer): Promise<string> {
-  const b64 = processed.toString("base64");
-  return new Promise(resolve => { const timer = setTimeout(() => resolve(""), OPENAI_TIMEOUT_MS); openaiOcr(b64).then(t => { clearTimeout(timer); resolve(t); }).catch(() => { clearTimeout(timer); resolve(""); }); });
-}
-async function puterOcrWithTimeout(processed: Buffer): Promise<string> {
-  const b64 = processed.toString("base64");
-  return new Promise(resolve => { const timer = setTimeout(() => resolve(""), PUTER_TIMEOUT_MS); puterOcr(b64).then(t => { clearTimeout(timer); resolve(t); }).catch(() => { clearTimeout(timer); resolve(""); }); });
-}
-function firstUsefulText(primary: Promise<string>, a: Promise<string>, b: Promise<string>): Promise<string> {
-  return new Promise(resolve => {
-    let done = false, fallback = "";
-    const finish = (v: string, primaryResult: boolean) => { const t = (v || "").trim(); if (done || t.length < 3) return; if (primaryResult) { done = true; resolve(t); } else fallback ||= t; };
-    primary.then(v => finish(v, true)); a.then(v => finish(v, false)); b.then(v => finish(v, false));
-    setTimeout(() => { if (!done) { done = true; resolve(fallback); } }, ENGINES_CAP_MS);
-    Promise.all([primary, a, b]).then(([x, y, z]) => { if (!done) { done = true; resolve([x, y, z].map(v => (v || "").trim()).find(v => v.length >= 3) || ""); } });
-  });
 }
 
 export async function POST(req: NextRequest) {
@@ -114,7 +95,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { imageUrl, imageBase64, mimeType: inputMime, rawText } = body;
     if (rawText && typeof rawText === "string" && rawText.trim().length >= 3) {
-      const parsed = parseInventoryOCR(rawText.trim());
+      const parsed = parseInventoryOCR(mergeCaixaMultiline(rawText.trim()));
       let rawPreview: string | undefined;
       if (imageUrl) {
         try {
@@ -138,13 +119,36 @@ export async function POST(req: NextRequest) {
       base64Data = Buffer.from(await r.arrayBuffer()).toString("base64"); mimeType = r.headers.get("content-type") || "image/png";
     } else return NextResponse.json({ error: "imageUrl ou imageBase64 necessário" }, { status: 400 });
     const preview = `data:${mimeType};base64,${base64Data}`;
-    const processed = await preprocessImage(base64Data);
-    // Motor principal: OpenAI vision (mais preciso para screenshots de inventário).
-    // Fallbacks mantidos: Puter -> OCR.space -> Tesseract.
-    const ocrFallbacks = firstUsefulText(puterOcrWithTimeout(processed), ocrSpace(processed), tesseractOcr(processed));
-    const ocrText = await firstUsefulText(openaiOcrWithTimeout(processed), ocrFallbacks, Promise.resolve(""));
+    // Motor principal: OCR do Gyazo (usa a tua conta via GYAZO_ACCESS_TOKEN).
+    // - Link gyazo.com -> pede o OCR diretamente dos metadados da captura.
+    // - Upload local / outro link -> faz upload para a tua conta Gyazo e depois
+    //   usa o OCR deles (o OCR do Gyazo só existe em capturas da tua conta).
+    // Fallback final: Tesseract local.
+    let ocrText = "";
+    let gyazoId: string | null = null;
+    if (imageUrl && typeof imageUrl === "string") {
+      gyazoId = extractGyazoId(imageUrl) || null;
+      if (gyazoId) {
+        ocrText = await gyazoOcr(gyazoId);
+      }
+    }
+    if (ocrText.length < 3) {
+      const buf = Buffer.from(base64Data, "base64");
+      const uploadedId = gyazoId ?? (await uploadToGyazo(buf));
+      if (uploadedId) ocrText = await gyazoOcr(uploadedId);
+      // O OCR do Gyazo pode não estar pronto imediatamente após o upload;
+      // espera um curto intervalo e re-tenta uma vez.
+      if (ocrText.length < 3) {
+        await new Promise(r => setTimeout(r, 1500));
+        ocrText = await gyazoOcr(uploadedId || "");
+      }
+    }
+    if (ocrText.length < 3) {
+      const processed = await preprocessImage(base64Data);
+      ocrText = await tesseractOcr(processed);
+    }
     if (ocrText.length < 3) return NextResponse.json({ result: "", ocrRaw: "", preview, error: "Não foi possível extrair texto da imagem. Tenta uma screenshot mais nítida." });
-    const parsed = parseInventoryOCR(ocrText);
+    const parsed = parseInventoryOCR(mergeCaixaMultiline(ocrText));
     return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: ocrText, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
   } catch (error) { const msg = error instanceof Error ? error.message : "Erro desconhecido"; console.error("API error:", msg); return NextResponse.json({ error: `Falha: ${msg}` }, { status: 500 }); }
 }

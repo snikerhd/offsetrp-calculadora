@@ -68,11 +68,10 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   // Primeira letra cortada pelo OCR
   [/\bONTRABANDO\b/gi, "CONTRABANDO"],
   [/\bISKY\b/gi, "WHISKY"],
-  // Nomes lidos em ordem invertida pelo OCR (duas linhas): "CONTRABANDO\nCAIXA"
-  [/\bCONTRABANDO\s*\n\s*CAIXA\b/gi, "CAIXA CONTRABANDO"],
-  [/\bELETR[OÓ]NICOS\s*\n\s*CAIXA\b/gi, "CAIXA ELETRONICOS"],
-  [/\bTABACO\s*\n\s*CAIXA\b/gi, "CAIXA TABACO"],
-  [/\bCAIXA\s*\n\s*TABACO\b/gi, "CAIXA TABACO"],
+  // Nomes de caixa partidos em duas linhas (CAIXA/CONTRABANDO/etc.) são fundidos
+  // no pré-processamento do route (mergeCaixaMultiline), numa única passagem sem
+  // re-casamento. Manter regras multi-linha aqui faria o parser re-fundir em
+  // cadeia (efeito "CAIXA CAIXA ELETRONICOS"). Aqui só a correção simples.
   [/\bCAXA\b/gi, "CAIXA"],
 ];
 
@@ -176,6 +175,10 @@ const FRAGMENTS: Array<[string, string, string | null]> = [
   // "STRAWBELLY" numa linha e "SHORTCAKE" noutra: o nome partido não deve
   // criar duas pistas do mesmo item (o fragmento funde-se na pista strawberry)
   ["shortcake", "strawberry shortcake", "strawberry shortcake"],
+  // GINGERKITTY ... COOKIE partido (MOMOSHU pode ficar no meio): o fragmento
+  // COOKIE mapeia para gingerkitty cookie sem precisar de prefixo separado.
+  ["gingerkitty", "gingerkitty cookie", null],
+  ["cookie", "gingerkitty cookie", null],
   ["10k", "corrente 10k", null],
   ["mochi", "medwchi mochi", null],
   ["smg", "carregador medio calibre", null],
