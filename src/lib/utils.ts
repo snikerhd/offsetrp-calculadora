@@ -692,7 +692,8 @@ export function parseQuickInput(input: string): ParseResult {
     erros: [],
   };
 
-  const partes = input.split(",").map((p) => p.trim()).filter(Boolean);
+  // Aceita vírgulas E linhas novas como separadores (colar OCR multi-linha)
+  const partes = input.split(/[,\n\r]+/).map((p) => p.trim()).filter(Boolean);
 
   // OCR: acumular armas por calibre para aplicar o limite de grande quantidade
   // depois de ler TODAS as linhas. Isto não altera a aba/função de Grande Quantidade.
