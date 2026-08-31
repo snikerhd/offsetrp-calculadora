@@ -940,6 +940,19 @@ export default function CalculadoraApp() {
   "coroa",
   "barra de ouro",
   "barras ouro",
+  // Itens de "Assalto a Casa" sem imagem própria: no jogo são entregues como o
+  // item agregado "Bens de assalto a casa" (que tem imagem), por isso não devem
+  // aparecer individualmente na grelha "Itens Ilegais".
+  "prototipo sniper",
+  "mala gruppe6",
+  "monitor",
+  "patentes",
+  "whisky vintage",
+  "joias",
+  "mala diamantes",
+  "caixa eletronicos",
+  "caixa tabaco",
+  "caixa contrabando",
 ]);
 
 const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1";
