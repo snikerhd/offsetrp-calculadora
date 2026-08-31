@@ -777,7 +777,10 @@ function parseSintese(text: string): ItemMatch[] | null {
 function countAccessories(fixed: string): number {
   const explicit = Number(fixed.match(/ACESS[OÓ]RIOS?\s*:\s*(\d+)/i)?.[1]);
   if (explicit > 0) return explicit;
-  const list = fixed.match(/ACESS[OÓ]RIOS?\s*:\s*([^\n]+)/i)?.[1]?.trim();
+  // A lista pode continuar na linha seguinte quando a linha termina em vírgula
+  // (ex.: "Rifle Scope,\nRifle Flashlight"). Captura todas as linhas de
+  // continuação (linhas terminadas em ",\n") antes da última.
+  const list = fixed.match(/ACESS[OÓ]RIOS?\s*:\s*((?:[^\n]+,\s*\n)*[^\n]+)/i)?.[1]?.trim();
   if (list) {
     const parts = list.split(/,| e | and |&/i).map(s => s.trim()).filter(s => s && !/^\d+$/.test(s) && s.length > 1);
     if (parts.length > 0) return parts.length;
