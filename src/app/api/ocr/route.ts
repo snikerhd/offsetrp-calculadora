@@ -134,18 +134,26 @@ export async function POST(req: NextRequest) {
     }
     // Nota: o OCR do Gyazo só existe para capturas da própria conta (o endpoint
     // de metadados é privado). Capturas de outros utilizadores caem no fallback.
+    // Se a conta é free (sem Pro), as capturas novas nunca terão OCR: o Gyazo
+    // só processa OCR em contas Pro. Nesse caso saltamos as esperas e vamos
+    // direto ao fallback.
     if (ocrText.length < 3) {
       const buf = Buffer.from(base64Data, "base64");
       const uploadedId = gyazoId ?? (await uploadToGyazo(buf));
       if (uploadedId) ocrText = await gyazoOcr(uploadedId);
-      // O OCR do Gyazo é processado de forma assíncrona após o upload e pode
-      // demorar vários segundos a ficar disponível. Re-tenta com esperas
-      // crescentes antes de desistir e cair no Tesseract.
-      const waits = [2000, 4000, 6000];
-      for (const ms of waits) {
-        if (ocrText.length >= 3) break;
-        await new Promise(r => setTimeout(r, ms));
-        ocrText = await gyazoOcr(uploadedId || "");
+      if (ocrText.length < 3) {
+        // Se a captura foi subida AGORA (upload), o OCR pode ainda estar a ser
+        // processado: re-tenta com esperas crescentes. Se já era um link Gyazo
+        // antigo sem OCR (conta free), não vale a pena esperar — os metadados
+        // já estavam processados (ou não) quando a captura foi criada.
+        if (!gyazoId) {
+          const waits = [2000, 4000, 6000];
+          for (const ms of waits) {
+            if (ocrText.length >= 3) break;
+            await new Promise(r => setTimeout(r, ms));
+            ocrText = await gyazoOcr(uploadedId || "");
+          }
+        }
       }
     }
     if (ocrText.length < 3) {
