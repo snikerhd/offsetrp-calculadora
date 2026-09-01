@@ -660,7 +660,8 @@ export default function CalculadoraApp() {
       msg += "--- ITENS ILEGAIS (base 30 000€) ---\n" + r.itens.resultados.join("\n") + `\nTOTAL ITENS: ${fmt2(30000 + r.itens.subtotal)} €\n\n`;
     }
     if (r.municao.resultados.length) {
-      msg += "--- MUNIÇÃO ---\n";
+      const baseMun = r.municao.base > 0 ? ` (base ${fmt2(r.municao.base)} €)` : "";
+      msg += `--- MUNIÇÃO${baseMun} ---\n`;
       msg += r.municao.resultados.join("\n") + `\n`;
       msg += `TOTAL MUNIÇÃO: ${fmt2(r.municao.total)} €\n\n`;
     }

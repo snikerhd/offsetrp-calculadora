@@ -1046,14 +1046,12 @@ export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }
 
   // Coima base de "Posse de Munição" (crimes graves: 10.000 € + 6 meses):
   // aplicada apenas nas Coimas Rápidas (opts.posseMunicao) quando o OCR/input
-  // detetou munição. O OCR dos Relatórios NÃO a inclui.
+  // detetou munição. O OCR dos Relatórios NÃO a inclui. A base não vira linha —
+  // vai no campo municao.base para o cabeçalho "--- MUNIÇÃO (base X €) ---".
   if (posseMunicao && result.municao.resultados.length > 0) {
     const crimePosse = CRIMES_CATALOGO.find((c) => c.nome === "Posse de Munição");
     const baseMun = crimePosse?.multa ?? 10000;
-    const mesesPosse = crimePosse?.meses ?? 0;
-    result.municao.resultados.push(
-      `  Posse de Munição (coima base) = ${fmt(baseMun)} €${mesesPosse ? ` (+${mesesPosse} meses)` : ""}`
-    );
+    result.municao.base = baseMun;
     result.municao.total += baseMun;
   }
 
