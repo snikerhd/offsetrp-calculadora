@@ -96,12 +96,28 @@ function mergeSplitPairs(text: string): string {
   return text.replace(/(\d{1,7})\s*\n\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g, "$1 ($2)");
 }
 
-// Recupera pares com o qty corrompido pelo OCR: o peso "(0.1)" fica com uma
-// letra no lugar do número e o qty cai para a linha seguinte:
-//   "Meteor Street, A(0.1)\n1"  ->  "1 (0.1)"
-// (letra única isolada + (peso) + número solto na linha seguinte)
+// Recupera pares com o qty corrompido pelo OCR: o peso "(0.1)" fica com a
+// INICIAL do nome no lugar do número e o qty cai para a linha seguinte:
+//   "Meteor Street, A(0.1)\n1"  ->  "1 (0.1) algemas"
+// A letra inicial + o peso unitário identificam o item no catálogo (apenas
+// itens ilegais cujo nome aparece no texto) — evita adivinhar.
 function recoverCorruptedQty(text: string): string {
-  return text.replace(/\b([A-Za-z])\s*\(\s*(\d+(?:\.\d+)?)\s*\)\s*\n\s*(\d{1,7})\b/g, "$3 ($2)");
+  const lower = text.toLowerCase();
+  return text.replace(
+    /\b([A-Za-z])\s*\(\s*(\d+(?:\.\d+)?)\s*\)\s*\n\s*(\d{1,7})\b/g,
+    (m: string, letter: string, peso: string, qty: string) => {
+      const u = Number(peso);
+      const cands = ITEM_CATALOG.filter(
+        (d) =>
+          d.illegal &&
+          d.name.startsWith(letter.toLowerCase()) &&
+          Math.abs(d.unitKg - u) < 0.001 &&
+          lower.includes(d.name)
+      );
+      if (cands.length !== 1) return m; // ambíguo ou sem candidato: deixa como está
+      return `${qty} (${peso}) ${cands[0].name}`;
+    }
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
