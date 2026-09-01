@@ -3,6 +3,11 @@
 import { useState, useRef, useCallback } from "react";
 import { BarChart3, Camera } from "lucide-react";
 import { ITEM_BY_NAME } from "@/lib/item-weights";
+import { CRIMES_CATALOGO } from "@/lib/data";
+
+// Coima base de "Posse de Munição" (crimes graves): 10.000 € + 6 meses.
+// Aplicada apenas no modo Coimas Rápidas — nunca no OCR dos Relatórios.
+const CRIME_POSSE_MUNICAO = CRIMES_CATALOGO.find((c) => c.nome === "Posse de Munição");
 
 interface OcrBlockProps {
   inputCls: string;
@@ -247,7 +252,9 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         const coimaAcessorios = ocrWeapon.accessoryCount * 5000;
         // Coima da ARMA em si (só no modo Coimas Rápidas — tabela de porte ilegal).
         const precoArma = mode === "coimas" ? (ARMA_PRECO[ocrWeapon.weaponItem] ?? 0) : 0;
-        const coimaTotal = coimaMunicao + coimaAcessorios + precoArma;
+        // Coima base de Posse de Munição (só no modo Coimas Rápidas, se houver munição).
+        const coimaBaseMunicao = mode === "coimas" && ocrWeapon.ammo > 0 ? (CRIME_POSSE_MUNICAO?.multa ?? 0) : 0;
+        const coimaTotal = coimaMunicao + coimaAcessorios + precoArma + coimaBaseMunicao;
         return (
           <div className="mb-2 rounded border border-amber-500/20 bg-amber-500/5 p-2">
             <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">🔫 Captura da arma</div>
@@ -266,6 +273,9 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
                 )}
                 {precoArma > 0 && (
                   <div>💰 1 {ocrWeapon.weaponItem.replace("arma ", "")} x {precoArma.toLocaleString("pt-PT")} € = <span className="text-amber-300 font-bold">{precoArma.toLocaleString("pt-PT")} €</span></div>
+                )}
+                {coimaBaseMunicao > 0 && (
+                  <div>⚖️ Posse de Munição (coima base) = <span className="text-amber-300 font-bold">{coimaBaseMunicao.toLocaleString("pt-PT")} €</span>{CRIME_POSSE_MUNICAO?.meses ? <span className="text-gray-500"> (+{CRIME_POSSE_MUNICAO.meses} meses)</span> : null}</div>
                 )}
                 <div className="mt-0.5 font-bold text-amber-200">Coima extra estimada: {coimaTotal.toLocaleString("pt-PT")} €</div>
               </div>
