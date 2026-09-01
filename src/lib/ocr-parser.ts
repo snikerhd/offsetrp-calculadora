@@ -96,6 +96,14 @@ function mergeSplitPairs(text: string): string {
   return text.replace(/(\d{1,7})\s*\n\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g, "$1 ($2)");
 }
 
+// Recupera pares com o qty corrompido pelo OCR: o peso "(0.1)" fica com uma
+// letra no lugar do número e o qty cai para a linha seguinte:
+//   "Meteor Street, A(0.1)\n1"  ->  "1 (0.1)"
+// (letra única isolada + (peso) + número solto na linha seguinte)
+function recoverCorruptedQty(text: string): string {
+  return text.replace(/\b([A-Za-z])\s*\(\s*(\d+(?:\.\d+)?)\s*\)\s*\n\s*(\d{1,7})\b/g, "$3 ($2)");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pistas de nomes: geradas a partir do catálogo + aliases + fragmentos
 // ─────────────────────────────────────────────────────────────────────────────
@@ -856,7 +864,7 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: boolean }): ParseResult {
   const includeWeapon = opts?.includeWeapon ?? false;
-  const fixed = fixOcrTypos(mergeSplitPairs(rawText));
+  const fixed = fixOcrTypos(mergeSplitPairs(recoverCorruptedQty(rawText)));
   const headerLines = detectHeaderLines(fixed.split("\n"));
 
   if (/numero de serie|num[ée]ro de s[ée]rie/i.test(fixed)) {
