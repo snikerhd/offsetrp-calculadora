@@ -132,27 +132,47 @@ export async function POST(req: NextRequest) {
         ocrText = await gyazoOcr(gyazoId);
       }
     }
-    // Nota: o OCR do Gyazo só existe para capturas da própria conta (o endpoint
-    // de metadados é privado). Capturas de outros utilizadores caem no fallback.
-    // Se a conta é free (sem Pro), as capturas novas nunca terão OCR: o Gyazo
-    // só processa OCR em contas Pro. Nesse caso saltamos as esperas e vamos
-    // direto ao fallback.
+            // Nota: o OCR do Gyazo processa-se de forma assíncrona (~10s) APÓS o upload
+    // via API — mesmo em contas free. Capturas feitas pelo desktop app podem não
+    // ter OCR. Estratégia: 1) tentar metadados do link; 2) sem OCR, FAZER UPLOAD
+    // da imagem para a conta (dispara o processamento de OCR); 3) se o Gyazo
+    // devolver a mesma captura (dedup de imagem idêntica, sem OCR), modifica a
+    // imagem ligeiramente (1 canal) e volta a subir — a captura nova ganha OCR.
+    // 4) fallback final: Tesseract local.
     if (ocrText.length < 3) {
       const buf = Buffer.from(base64Data, "base64");
       const uploadedId = gyazoId ?? (await uploadToGyazo(buf));
-      if (uploadedId) ocrText = await gyazoOcr(uploadedId);
-      if (ocrText.length < 3) {
-        // Se a captura foi subida AGORA (upload), o OCR pode ainda estar a ser
-        // processado: re-tenta com esperas crescentes. Se já era um link Gyazo
-        // antigo sem OCR (conta free), não vale a pena esperar — os metadados
-        // já estavam processados (ou não) quando a captura foi criada.
-        if (!gyazoId) {
-          const waits = [2000, 4000, 6000];
-          for (const ms of waits) {
-            if (ocrText.length >= 3) break;
-            await new Promise(r => setTimeout(r, ms));
-            ocrText = await gyazoOcr(uploadedId || "");
+      const targetId = uploadedId ?? gyazoId;
+      if (targetId) ocrText = await gyazoOcr(targetId);
+      // Dedup: se o upload devolveu o MESMO id do link original e ele não tem
+      // OCR, o Gyazo não vai processar — modifica a imagem e sobe como nova.
+      if (ocrText.length < 3 && gyazoId && uploadedId === gyazoId) {
+        try {
+          const sharpFn = await getSharp();
+          if (sharpFn) {
+            const s = sharpFn.default ?? sharpFn;
+            const modified = await s(buf).modulate({ brightness: 1.001 }).png().toBuffer();
+            const newId = await uploadToGyazo(modified);
+            if (newId && newId !== gyazoId) {
+              // Espera o processamento assíncrono do OCR (~10s comprovado).
+              for (const ms of [2000, 4000, 6000]) {
+                await new Promise(r => setTimeout(r, ms));
+                ocrText = await gyazoOcr(newId);
+                if (ocrText.length >= 3) break;
+              }
+            }
           }
+        } catch (e) {
+          console.error("gyazo re-upload modificado falhou:", e);
+        }
+      }
+      // Upload novo (não-duplicado): re-tenta com esperas crescentes.
+      if (ocrText.length < 3 && uploadedId && uploadedId !== gyazoId) {
+        const waits = [2000, 4000, 6000];
+        for (const ms of waits) {
+          if (ocrText.length >= 3) break;
+          await new Promise(r => setTimeout(r, ms));
+          ocrText = await gyazoOcr(uploadedId);
         }
       }
     }
