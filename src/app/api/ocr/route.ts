@@ -132,14 +132,19 @@ export async function POST(req: NextRequest) {
         ocrText = await gyazoOcr(gyazoId);
       }
     }
+    // Nota: o OCR do Gyazo só existe para capturas da própria conta (o endpoint
+    // de metadados é privado). Capturas de outros utilizadores caem no fallback.
     if (ocrText.length < 3) {
       const buf = Buffer.from(base64Data, "base64");
       const uploadedId = gyazoId ?? (await uploadToGyazo(buf));
       if (uploadedId) ocrText = await gyazoOcr(uploadedId);
-      // O OCR do Gyazo pode não estar pronto imediatamente após o upload;
-      // espera um curto intervalo e re-tenta uma vez.
-      if (ocrText.length < 3) {
-        await new Promise(r => setTimeout(r, 1500));
+      // O OCR do Gyazo é processado de forma assíncrona após o upload e pode
+      // demorar vários segundos a ficar disponível. Re-tenta com esperas
+      // crescentes antes de desistir e cair no Tesseract.
+      const waits = [2000, 4000, 6000];
+      for (const ms of waits) {
+        if (ocrText.length >= 3) break;
+        await new Promise(r => setTimeout(r, ms));
         ocrText = await gyazoOcr(uploadedId || "");
       }
     }
@@ -147,7 +152,7 @@ export async function POST(req: NextRequest) {
       const processed = await preprocessImage(base64Data);
       ocrText = await tesseractOcr(processed);
     }
-    if (ocrText.length < 3) return NextResponse.json({ result: "", ocrRaw: "", preview, error: "Não foi possível extrair texto da imagem. Tenta uma screenshot mais nítida." });
+    if (ocrText.length < 3) return NextResponse.json({ result: "", ocrRaw: "", preview, error: "Não foi possível extrair texto da imagem. Se colaste um link Gyazo de outra pessoa, usa uma captura da TUA conta (o OCR do Gyazo só funciona nas tuas capturas) ou faz upload da screenshot." });
     const parsed = parseInventoryOCR(mergeCaixaMultiline(ocrText));
     return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: ocrText, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
   } catch (error) { const msg = error instanceof Error ? error.message : "Erro desconhecido"; console.error("API error:", msg); return NextResponse.json({ error: `Falha: ${msg}` }, { status: 500 }); }
