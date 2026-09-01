@@ -678,7 +678,8 @@ const MUN_MEDIO = ["balas medio", "balas de medio", "45", "balas 45"];
 const MUN_ALTO = ["balas alto", "balas de alto", "556", "762", "balas rifle"];
 
 // Parse quick input
-export function parseQuickInput(input: string): ParseResult {
+export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }): ParseResult {
+  const posseMunicao = opts?.posseMunicao ?? false;
   const result: ParseResult = {
     drogas: { resultados: [], subtotal: 0 },
     itens: { resultados: [], subtotal: 0 },
@@ -1041,6 +1042,19 @@ export function parseQuickInput(input: string): ParseResult {
     result.armas.resultados = novosDetalhes;
     result.armas.total = novoTotal;
     result.armas.meses = novosMeses;
+  }
+
+  // Coima base de "Posse de Munição" (crimes graves: 10.000 € + 6 meses):
+  // aplicada apenas nas Coimas Rápidas (opts.posseMunicao) quando o OCR/input
+  // detetou munição. O OCR dos Relatórios NÃO a inclui.
+  if (posseMunicao && result.municao.resultados.length > 0) {
+    const crimePosse = CRIMES_CATALOGO.find((c) => c.nome === "Posse de Munição");
+    const baseMun = crimePosse?.multa ?? 10000;
+    const mesesPosse = crimePosse?.meses ?? 0;
+    result.municao.resultados.push(
+      `  Posse de Munição (coima base) = ${fmt(baseMun)} €${mesesPosse ? ` (+${mesesPosse} meses)` : ""}`
+    );
+    result.municao.total += baseMun;
   }
 
   // Calcular totals - só adicionar base se houver itens nessa categoria

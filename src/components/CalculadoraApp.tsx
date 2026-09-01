@@ -650,7 +650,7 @@ export default function CalculadoraApp() {
   const calcularTeste = () => {
     const texto = testeInput.trim();
     if (!texto) { showAlert("Digite algo no formato: quantidade item"); return; }
-    const r = parseQuickInput(texto);
+    const r = parseQuickInput(texto, { posseMunicao: true });
     let msg = `> ${texto}\n`;
     
     if (r.drogas.resultados.length) {
