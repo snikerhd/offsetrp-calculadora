@@ -96,12 +96,34 @@ function mergeSplitPairs(text: string): string {
   return text.replace(/(\d{1,7})\s*\n\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g, "$1 ($2)");
 }
 
+// Recupera fragmentos "N0-D)" -> "N (0.D) NOME": o OCR corrompe o par
+// "7 (0.7)" como "70-7)" ("(" vira "0-"). O peso total / qty dá o peso
+// unitário, que identifica o item no catálogo (nome presente no texto,
+// excluindo os já recuperados pela regra da letra).
+function recoverFragmentQty(text: string, used: Set<string>): string {
+  const lower = text.toLowerCase();
+  return text.replace(
+    /\b(\d{1,4})0-(\d)\)/g,
+    (m: string, qtyStr: string, d: string) => {
+      const qty = Number(qtyStr);
+      const total = Number(`0.${d}`);
+      const unit = total / qty;
+      const cands = ITEM_CATALOG.filter(
+        (c) => Math.abs(c.unitKg - unit) < 0.001 && lower.includes(c.name) && !used.has(c.name)
+      );
+      if (cands.length !== 1) return m; // ambíguo ou sem candidato: deixa como está
+      used.add(cands[0].name);
+      return `${qty} (${total}) ${cands[0].name}`;
+    }
+  );
+}
+
 // Recupera pares com o qty corrompido pelo OCR: o peso "(0.1)" fica com a
 // INICIAL do nome no lugar do número e o qty cai para a linha seguinte:
 //   "Meteor Street, A(0.1)\n1"  ->  "1 (0.1) algemas"
 // A letra inicial + o peso unitário identificam o item no catálogo (apenas
 // itens ilegais cujo nome aparece no texto) — evita adivinhar.
-function recoverCorruptedQty(text: string): string {
+function recoverCorruptedQty(text: string, used: Set<string>): string {
   const lower = text.toLowerCase();
   return text.replace(
     /\b([A-Za-z])\s*\(\s*(\d+(?:\.\d+)?)\s*\)\s*\n\s*(\d{1,7})\b/g,
@@ -112,9 +134,11 @@ function recoverCorruptedQty(text: string): string {
           d.illegal &&
           d.name.startsWith(letter.toLowerCase()) &&
           Math.abs(d.unitKg - u) < 0.001 &&
-          lower.includes(d.name)
+          lower.includes(d.name) &&
+          !used.has(d.name)
       );
       if (cands.length !== 1) return m; // ambíguo ou sem candidato: deixa como está
+      used.add(cands[0].name);
       return `${qty} (${peso}) ${cands[0].name}`;
     }
   );
@@ -880,7 +904,10 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: boolean }): ParseResult {
   const includeWeapon = opts?.includeWeapon ?? false;
-  const fixed = fixOcrTypos(mergeSplitPairs(recoverCorruptedQty(rawText)));
+  const usedRecover = new Set<string>();
+  const fixed = fixOcrTypos(
+    mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(rawText, usedRecover), usedRecover))
+  );
   const headerLines = detectHeaderLines(fixed.split("\n"));
 
   if (/numero de serie|num[ée]ro de s[ée]rie/i.test(fixed)) {
