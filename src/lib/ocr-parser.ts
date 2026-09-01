@@ -774,6 +774,24 @@ function parseSintese(text: string): ItemMatch[] | null {
 // ─────────────────────────────────────────────────────────────────────────────
 // Popup de arma
 // ─────────────────────────────────────────────────────────────────────────────
+// Identifica a arma pelo NOME conhecido no texto (aliases do catálogo que
+// mapeiam para "arma X calibre"). Escolhe o match mais específico (nome mais
+// comprido) para "Machine Pistol" ganhar sobre o genérico "Pistol".
+function findWeaponInText(fixed: string): WeaponCapture["weaponItem"] | null {
+  const norm = normalizeLine(fixed);
+  const weaponAliases = ALIASES.filter(([, item]) => /^arma (baixo|medio|alto) calibre$/.test(item));
+  let best: WeaponCapture["weaponItem"] | null = null;
+  let bestLen = 0;
+  for (const [phrase, item] of weaponAliases) {
+    const p = normalizeLine(phrase);
+    if (p.length > bestLen && new RegExp(`\\b${p.replace(/\s+/g, "\\s+")}\\b`, "i").test(norm)) {
+      best = item as WeaponCapture["weaponItem"];
+      bestLen = p.length;
+    }
+  }
+  return best;
+}
+
 function countAccessories(fixed: string): number {
   const explicit = Number(fixed.match(/ACESS[OÓ]RIOS?\s*:\s*(\d+)/i)?.[1]);
   if (explicit > 0) return explicit;
@@ -788,15 +806,20 @@ function countAccessories(fixed: string): number {
   return /ACESS[OÓ]RIO/i.test(fixed) ? 1 : 0;
 }
 
-function parseWeaponPopup(fixed: string): { capture: WeaponCapture; weights: ItemMatch[] } | null {
+function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: WeaponCapture; weights: ItemMatch[] } | null {
   const ammo = Number(fixed.match(/MUNI[CÇ][AÃ]O\s*:\s*(\d+)/i)?.[1] || 0);
-  const weapon = fixed.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || fixed.split("\n")[0]?.trim() || "";
+  // A arma é identificada pelo NOME conhecido no texto (ex.: "Machine Pistol"
+  // -> arma medio calibre), não pela primeira linha (que é lixo do OCR).
+  const knownWeapon = findWeaponInText(fixed);
+  const weapon = knownWeapon ? displayName(knownWeapon) : (fixed.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || fixed.split("\n")[0]?.trim() || "");
   const accessoryCount = countAccessories(fixed);
   if (!weapon && !ammo && !accessoryCount) return null;
 
-  let weaponItem: WeaponCapture["weaponItem"] = "arma baixo calibre";
-  if (/ALTO|RIFLE|CARABIN|SNIPER|GUSENBERG|BULLPUP|FAMAS|SHOTGUN|SPAS|DRACO/i.test(weapon)) weaponItem = "arma alto calibre";
-  else if (/MEDIO|M[EÉ]DIO|SMG|MACHINE|UZI|PDW|P90|TEC/i.test(weapon)) weaponItem = "arma medio calibre";
+  const weaponItem = knownWeapon || (() => {
+    if (/ALTO|RIFLE|CARABIN|SNIPER|GUSENBERG|BULLPUP|FAMAS|SHOTGUN|SPAS|DRACO/i.test(weapon)) return "arma alto calibre" as const;
+    if (/MEDIO|M[EÉ]DIO|SMG|MACHINE|UZI|PDW|P90|TEC/i.test(weapon)) return "arma medio calibre" as const;
+    return "arma baixo calibre" as const;
+  })();
   const ammoItem = weaponItem === "arma alto calibre" ? "balas alto" : weaponItem === "arma medio calibre" ? "balas medio" : "balas baixo";
   const capture: WeaponCapture = { weapon, weaponItem, ammo, ammoItem, accessoryCount };
 
@@ -806,6 +829,12 @@ function parseWeaponPopup(fixed: string): { capture: WeaponCapture; weights: Ite
   }
   if (accessoryCount > 0) {
     weights.push({ item: "acessorios para armas", qty: accessoryCount, kg: 0, unitKg: 0.1, confidence: 95, confidenceLevel: "high", matchReason: `Acessórios: ${accessoryCount}` });
+  }
+  // Modo Coimas Rápidas: incluir a ARMA em si (1x) — o inventário também a
+  // mostra, mas o popup garante a deduplicação (só entra aqui, uma vez).
+  if (includeWeapon) {
+    const def = ITEM_BY_NAME.get(weaponItem);
+    weights.push({ item: weaponItem, qty: 1, kg: def?.unitKg ?? 0, unitKg: def?.unitKg ?? 0, confidence: 95, confidenceLevel: "high", matchReason: "Arma inspecionada (número de série)" });
   }
   return { capture, weights };
 }
@@ -825,16 +854,31 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 // ─────────────────────────────────────────────────────────────────────────────
 // Parser principal
 // ─────────────────────────────────────────────────────────────────────────────
-export function parseInventoryOCR(rawText: string): ParseResult {
+export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: boolean }): ParseResult {
+  const includeWeapon = opts?.includeWeapon ?? false;
   const fixed = fixOcrTypos(mergeSplitPairs(rawText));
   const headerLines = detectHeaderLines(fixed.split("\n"));
 
   if (/numero de serie|num[ée]ro de s[ée]rie/i.test(fixed)) {
-    const popup = parseWeaponPopup(fixed);
+    const popup = parseWeaponPopup(fixed, includeWeapon);
     if (popup) {
-      const text = popup.weights.map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
-      const overall = popup.weights.length ? popup.weights.reduce((s, w) => s + w.confidence, 0) / popup.weights.length : 0;
-      return { text, weights: popup.weights, weaponCapture: popup.capture, overallConfidence: overall };
+      if (!includeWeapon) {
+        // Modo Relatórios (comportamento original): só balas + acessórios do
+        // popup — o resto do inventário e a arma não entram.
+        const text = popup.weights.map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+        const overall = popup.weights.length ? popup.weights.reduce((s, w) => s + w.confidence, 0) / popup.weights.length : 0;
+        return { text, weights: popup.weights, weaponCapture: popup.capture, overallConfidence: overall };
+      }
+      // Modo Coimas Rápidas: popup (balas + acessórios + ARMA 1x) + o resto do
+      // inventário. Todas as hints de ARMAS são excluídas do inventário (o
+      // "MACHINE PISTOL" do inventário é a mesma arma que está a ser
+      // inspecionada — e aliases genéricos como "pistol" também casam nele,
+      // o que criaria uma 2ª arma fantasma).
+      const body = parseInventoryBody(fixed, headerLines, WEAPON_ITEM_RE);
+      const merged = mergeResults([...body, ...popup.weights]);
+      const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+      const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
+      return { text, weights: merged, weaponCapture: popup.capture, overallConfidence: overall };
     }
   }
 
@@ -851,12 +895,24 @@ export function parseInventoryOCR(rawText: string): ParseResult {
     return { text: "", weights: [], weaponCapture: detectWeaponCapture(fixed), overallConfidence: 0 };
   }
 
+  const body = parseInventoryBody(fixed, headerLines);
+  const merged = mergeResults(body);
+  const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+  const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
+  return { text, weights: merged, weaponCapture: detectWeaponCapture(fixed), overallConfidence: overall };
+}
+
+// Fluxo normal do inventário: pares "qty (peso)" casados com pistas de nome.
+// excludeItems: itens a ignorar (ex.: a arma já contada pelo popup).
+const WEAPON_ITEM_RE = /^arma (baixo|medio|alto) calibre$/;
+function parseInventoryBody(fixed: string, headerLines: Set<number>, excludeItems?: Set<string> | RegExp): ItemMatch[] {
+  const isExcluded = (item: string) =>
+    excludeItems instanceof RegExp ? excludeItems.test(item) : excludeItems?.has(item) ?? false;
   const hints = mergeFragments(removeCoveredHints(collectHints(fixed).filter((h) => !headerLines.has(h.line))));
   const out: ItemMatch[] = [];
 
-  // Atribuição global: cada par casa com a melhor pista de nome (peso + posição).
   const allPairs = extractPairs(fixed);
-  const usableHints = hints.filter((h) => !h.timer);
+  const usableHints = hints.filter((h) => !h.timer && !isExcluded(h.item));
   const { matchOf, leftover } = assignPairsToHints(allPairs, usableHints);
   for (const p of allPairs) {
     const h = matchOf.get(p);
@@ -865,11 +921,10 @@ export function parseInventoryOCR(rawText: string): ParseResult {
   for (const p of leftover) {
     out.push(fallbackForPair(p, false, undefined));
   }
-
-  const merged = mergeResults(out);
-  const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
-  const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
-  return { text, weights: merged, weaponCapture: detectWeaponCapture(fixed), overallConfidence: overall };
+  // Exclusão aplicada também ao resultado final: o fallback adivinha pelo peso
+  // e pode re-introduzir itens excluídos (ex.: a arma já contada pelo popup).
+  if (excludeItems) return out.filter((w) => !isExcluded(w.item));
+  return out;
 }
 
 export function parseOcrText(rawText: string): ItemMatch[] {

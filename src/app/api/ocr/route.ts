@@ -93,9 +93,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Sessão inválida. Inicia sessão novamente." }, { status: 401 });
     }
     const body = await req.json();
-    const { imageUrl, imageBase64, mimeType: inputMime, rawText } = body;
+    const { imageUrl, imageBase64, mimeType: inputMime, rawText, mode } = body as { imageUrl?: string; imageBase64?: string; mimeType?: string; rawText?: string; mode?: string };
+    // Modo "coimas" (aba Coimas Rápidas): inclui a arma inspecionada + todo o
+    // inventário. Modo "relatorio" (aba Relatórios): só balas/acessórios do popup.
+    const includeWeapon = mode === "coimas";
     if (rawText && typeof rawText === "string" && rawText.trim().length >= 3) {
-      const parsed = parseInventoryOCR(mergeCaixaMultiline(rawText.trim()));
+      const parsed = parseInventoryOCR(mergeCaixaMultiline(rawText.trim()), { includeWeapon });
       let rawPreview: string | undefined;
       if (imageUrl) {
         try {
@@ -181,7 +184,7 @@ export async function POST(req: NextRequest) {
       ocrText = await tesseractOcr(processed);
     }
     if (ocrText.length < 3) return NextResponse.json({ result: "", ocrRaw: "", preview, error: "Não foi possível extrair texto da imagem. Se colaste um link Gyazo de outra pessoa, usa uma captura da TUA conta (o OCR do Gyazo só funciona nas tuas capturas) ou faz upload da screenshot." });
-    const parsed = parseInventoryOCR(mergeCaixaMultiline(ocrText));
+    const parsed = parseInventoryOCR(mergeCaixaMultiline(ocrText), { includeWeapon });
     return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: ocrText, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
   } catch (error) { const msg = error instanceof Error ? error.message : "Erro desconhecido"; console.error("API error:", msg); return NextResponse.json({ error: `Falha: ${msg}` }, { status: 500 }); }
 }

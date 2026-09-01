@@ -10,6 +10,9 @@ interface OcrBlockProps {
   neonShadow: string;
   accentColor: string;
   onResult: (txt: string) => void;
+  // "coimas": inclui a arma inspecionada + todo o inventário no resultado.
+  // "relatorio" (default): comportamento original (só balas/acessórios do popup).
+  mode?: "coimas" | "relatorio";
 }
 
 interface DetectedWeight {
@@ -22,7 +25,7 @@ interface DetectedWeight {
   matchReason: string;
 }
 
-export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentColor, onResult }: OcrBlockProps) {
+export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentColor, onResult, mode = "relatorio" }: OcrBlockProps) {
   const [ocrUrl, setOcrUrl] = useState("");
   const [ocrProcessing, setOcrProcessing] = useState(false);
   const [ocrStatus, setOcrStatus] = useState("");
@@ -45,7 +48,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       resp = await fetch("/api/ocr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, mode }),
       });
     } catch {
       throw new Error("Não foi possível contactar o servidor de OCR. Verifica a ligação à internet.");
@@ -75,7 +78,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     }
     if (!resp.ok) throw new Error(data.error || `Erro do servidor (HTTP ${resp.status}).`);
     return data;
-  }, []);
+  }, [mode]);
 
   const handleResult = useCallback((data: {
     result?: string;
@@ -238,10 +241,13 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       )}
       {ocrWeapon && (() => {
         const AMMO_PRECO: Record<string, number> = { "balas baixo": 500, "balas medio": 1000, "balas alto": 1500 };
+        const ARMA_PRECO: Record<string, number> = { "arma baixo calibre": 20000, "arma medio calibre": 30000, "arma alto calibre": 80000 };
         const precoUnitAmmo = AMMO_PRECO[ocrWeapon.ammoItem] ?? 0;
         const coimaMunicao = ocrWeapon.ammo * precoUnitAmmo;
         const coimaAcessorios = ocrWeapon.accessoryCount * 5000;
-        const coimaTotal = coimaMunicao + coimaAcessorios;
+        // Coima da ARMA em si (só no modo Coimas Rápidas — tabela de porte ilegal).
+        const precoArma = mode === "coimas" ? (ARMA_PRECO[ocrWeapon.weaponItem] ?? 0) : 0;
+        const coimaTotal = coimaMunicao + coimaAcessorios + precoArma;
         return (
           <div className="mb-2 rounded border border-amber-500/20 bg-amber-500/5 p-2">
             <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">🔫 Captura da arma</div>
@@ -257,6 +263,9 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
                 )}
                 {ocrWeapon.accessoryCount > 0 && (
                   <div>💰 {ocrWeapon.accessoryCount} acessórios x 5.000 € = <span className="text-amber-300 font-bold">{coimaAcessorios.toLocaleString("pt-PT")} €</span></div>
+                )}
+                {precoArma > 0 && (
+                  <div>💰 1 {ocrWeapon.weaponItem.replace("arma ", "")} x {precoArma.toLocaleString("pt-PT")} € = <span className="text-amber-300 font-bold">{precoArma.toLocaleString("pt-PT")} €</span></div>
                 )}
                 <div className="mt-0.5 font-bold text-amber-200">Coima extra estimada: {coimaTotal.toLocaleString("pt-PT")} €</div>
               </div>

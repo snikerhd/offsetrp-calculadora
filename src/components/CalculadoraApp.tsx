@@ -1366,6 +1366,7 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
               fillBtnTheme={fillBtnTheme}
               neonShadow={neonShadow}
               accentColor={accentColor}
+              mode="coimas"
               onResult={(txt: string) => setTesteInput(txt)}
             />
 
