@@ -182,8 +182,16 @@ export async function POST(req: NextRequest) {
     if (ocrText.length < 3) {
       const processed = await preprocessImage(base64Data);
       ocrText = await tesseractOcr(processed);
+      if (ocrText.length >= 3) console.log("OCR: recuperado via Tesseract local");
     }
-    if (ocrText.length < 3) return NextResponse.json({ result: "", ocrRaw: "", preview, error: "Não foi possível extrair texto da imagem. Se colaste um link Gyazo de outra pessoa, usa uma captura da TUA conta (o OCR do Gyazo só funciona nas tuas capturas) ou faz upload da screenshot." });
+    if (ocrText.length < 3) {
+      const diag = [
+        gyazoId ? "gyazo-metadata:sem-ocr" : "sem-link-gyazo",
+        "tesseract:falhou",
+      ].join(" | ");
+      console.error(`OCR esgotado [${diag}] imagem=${base64Data.length}b`);
+      return NextResponse.json({ result: "", ocrRaw: "", preview, error: `Não foi possível extrair texto da imagem (${diag}). Tenta: 1) colar de novo o link Gyazo (confirma que abre no browser e é uma captura NOVA); 2) fazer upload da screenshot diretamente; 3) esperar ~15s e voltar a tentar (o OCR do Gyazo processa de forma assíncrona).` });
+    }
     const parsed = parseInventoryOCR(mergeCaixaMultiline(ocrText), { includeWeapon });
     return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: ocrText, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
   } catch (error) { const msg = error instanceof Error ? error.message : "Erro desconhecido"; console.error("API error:", msg); return NextResponse.json({ error: `Falha: ${msg}` }, { status: 500 }); }
