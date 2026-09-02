@@ -315,9 +315,9 @@ export const MUNICAO_PRECOS: Record<string, number> = {
   "Balas Baixo Calibre": 150,
   "Balas Médio Calibre": 200,
   "Balas Alto Calibre": 250,
-  "Carregador Baixo Calibre": 2000,
-  "Carregador Médio Calibre": 4000,
-  "Carregador Alto Calibre": 6000,
+  "Carregador Baixo Calibre": 1800,
+  "Carregador Médio Calibre": 3000,
+  "Carregador Alto Calibre": 4200,
 };
 
 // Preços de EPI

@@ -48,9 +48,9 @@ export function calcMunicao(
     balasBaixo * 150 +
     balasMedio * 200 +
     balasAlto * 250 +
-    carrBaixo * 2000 +
-    carrMedio * 4000 +
-    carrAlto * 6000
+    carrBaixo * 1800 +
+    carrMedio * 3000 +
+    carrAlto * 4200
   );
 }
 
@@ -916,16 +916,16 @@ export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }
       let precoUnit = 0;
       let tipoCarregador = "";
       if (tipoMun === "baixo" || nome.includes("baixo")) {
-        precoUnit = 2000;
+        precoUnit = 1800;
         tipoCarregador = "baixo calibre";
       } else if (tipoMun === "medio" || nome.includes("medio")) {
-        precoUnit = 4000;
+        precoUnit = 3000;
         tipoCarregador = "medio calibre";
       } else if (tipoMun === "alto" || nome.includes("alto")) {
-        precoUnit = 6000;
+        precoUnit = 4200;
         tipoCarregador = "alto calibre";
       } else {
-        precoUnit = 2000; // Default
+        precoUnit = 1800; // Default
       }
 
       const subtotal = qtd * precoUnit;

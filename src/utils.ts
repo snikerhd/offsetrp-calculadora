@@ -713,7 +713,7 @@ export function parseQuickInput(input: string): ParseResult {
       if (nome.includes("smg") || nome.includes("medio") || nome.includes("médio")) tipoCarregador = "medio";
       else if (nome.includes("rifle") || nome.includes("shotgun") || nome.includes("alto")) tipoCarregador = "alto";
 
-      const precoUnit = tipoCarregador === "baixo" ? 2000 : tipoCarregador === "medio" ? 4000 : 6000;
+      const precoUnit = tipoCarregador === "baixo" ? 1800 : tipoCarregador === "medio" ? 3000 : 4200;
       const subtotal = qtd * precoUnit;
       const nomeCarregador = tipoCarregador === "baixo"
         ? "Carregador Baixo Calibre"

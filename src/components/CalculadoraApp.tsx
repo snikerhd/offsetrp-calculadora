@@ -434,9 +434,9 @@ export default function CalculadoraApp() {
       if (munBalasBaixo > 0) desc += `  ${munBalasBaixo} balas baixo calibre x 150 € = ${fmt(munBalasBaixo * 150)} €\n`;
       if (munBalasMedio > 0) desc += `  ${munBalasMedio} balas médio calibre x 200 € = ${fmt(munBalasMedio * 200)} €\n`;
       if (munBalasAlto > 0) desc += `  ${munBalasAlto} balas alto calibre x 250 € = ${fmt(munBalasAlto * 250)} €\n`;
-      if (munCarrBaixo > 0) desc += `  ${munCarrBaixo} carregador baixo calibre x 2.000 € = ${fmt(munCarrBaixo * 2000)} €\n`;
-      if (munCarrMedio > 0) desc += `  ${munCarrMedio} carregador médio calibre x 4.000 € = ${fmt(munCarrMedio * 4000)} €\n`;
-      if (munCarrAlto > 0) desc += `  ${munCarrAlto} carregador alto calibre x 6.000 € = ${fmt(munCarrAlto * 6000)} €\n`;
+      if (munCarrBaixo > 0) desc += `  ${munCarrBaixo} carregador baixo calibre x 1.800 € = ${fmt(munCarrBaixo * 1800)} €\n`;
+      if (munCarrMedio > 0) desc += `  ${munCarrMedio} carregador médio calibre x 3.000 € = ${fmt(munCarrMedio * 3000)} €\n`;
+      if (munCarrAlto > 0) desc += `  ${munCarrAlto} carregador alto calibre x 4.200 € = ${fmt(munCarrAlto * 4200)} €\n`;
       desc = desc.trimEnd();
       addExtra(cc, desc, multa);
       showAlert(`Multa de ${fmt2(multa)} € adicionada para CC ${cc}.`);
