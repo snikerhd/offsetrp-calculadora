@@ -156,6 +156,23 @@ const LOCAL_IMAGE_FILES: Record<string, string> = {
   "baixo": "baixo.png",
   "baixo-1": "baixo-1.png",
   "medio": "medio.png",
+  "caixa-de-arma": "caixa-de-arma.png",
+  "caixa-arma": "caixa-de-arma.png",
+  "caixa-contrabando": "caixa-contrabando.png",
+  "caixa-de-contrabando": "caixa-contrabando.png",
+  "caixa-eletronicos": "caixa-eletronicos.png",
+  "caixa-de-eletronicos": "caixa-eletronicos.png",
+  "caixa-tabaco": "caixa-tabaco.png",
+  "caixa-de-tabaco": "caixa-tabaco.png",
+  "joias": "joias.png",
+  "mala-diamantes": "mala-diamantes.png",
+  "mala-de-diamantes": "mala-diamantes.png",
+  "mala-gruppe6": "mala-gruppe6.png",
+  "monitor": "monitor.png",
+  "patentes": "patentes.png",
+  "prototipo-sniper": "prototipo-sniper.png",
+  "prototipo-de-sniper": "prototipo-sniper.png",
+  "whisky-vintage": "whisky-vintage.png",
 };
 
 function itemImageSrc(name: string): string {
@@ -941,19 +958,10 @@ export default function CalculadoraApp() {
   "coroa",
   "barra de ouro",
   "barras ouro",
-  // Itens de "Assalto a Casa" sem imagem própria: no jogo são entregues como o
-  // item agregado "Bens de assalto a casa" (que tem imagem), por isso não devem
-  // aparecer individualmente na grelha "Itens Ilegais".
-  "prototipo sniper",
-  "mala gruppe6",
-  "monitor",
-  "patentes",
-  "whisky vintage",
-  "joias",
-  "mala diamantes",
-  "caixa eletronicos",
-  "caixa tabaco",
-  "caixa contrabando",
+  // Nota: Protótipo Sniper, Mala Gruppe6, Monitor, Patentes, Whisky Vintage,
+  // Joias, Mala Diamantes e Caixas (Eletrónicos/Tabaco/Contrabando) têm agora
+  // valores próprios no Código Penal V13 e imagem própria, por isso aparecem
+  // individualmente na grelha "Itens Ilegais".
 ]);
 
 const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1";
