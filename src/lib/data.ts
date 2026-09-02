@@ -312,9 +312,9 @@ export const ITENS_ILEGAIS: Record<string, number> = {
 
 // Preços de munição (por unidade)
 export const MUNICAO_PRECOS: Record<string, number> = {
-  "Balas Baixo Calibre": 500,
-  "Balas Médio Calibre": 1000,
-  "Balas Alto Calibre": 1500,
+  "Balas Baixo Calibre": 150,
+  "Balas Médio Calibre": 200,
+  "Balas Alto Calibre": 250,
   "Carregador Baixo Calibre": 2000,
   "Carregador Médio Calibre": 4000,
   "Carregador Alto Calibre": 6000,

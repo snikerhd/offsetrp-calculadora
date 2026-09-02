@@ -45,9 +45,9 @@ export function calcMunicao(
   carrAlto: number
 ): number {
   return (
-    balasBaixo * 500 +
-    balasMedio * 1000 +
-    balasAlto * 1500 +
+    balasBaixo * 150 +
+    balasMedio * 200 +
+    balasAlto * 250 +
     carrBaixo * 2000 +
     carrMedio * 4000 +
     carrAlto * 6000
@@ -753,9 +753,9 @@ export function parseQuickInput(input: string): ParseResult {
 
     if (tipoMun) {
       let precoUnit = 0;
-      if (tipoMun === "baixo") precoUnit = 500;
-      else if (tipoMun === "medio") precoUnit = 1000;
-      else precoUnit = 1500;
+      if (tipoMun === "baixo") precoUnit = 150;
+      else if (tipoMun === "medio") precoUnit = 200;
+      else precoUnit = 250;
 
       const subtotal = qtd * precoUnit;
       result.municao.resultados.push(`  ${qtd}x Balas ${tipoMun} calibre x ${fmt(precoUnit)} = ${fmt(subtotal)}`);

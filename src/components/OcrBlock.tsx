@@ -245,7 +245,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         </div>
       )}
       {ocrWeapon && (() => {
-        const AMMO_PRECO: Record<string, number> = { "balas baixo": 500, "balas medio": 1000, "balas alto": 1500 };
+        const AMMO_PRECO: Record<string, number> = { "balas baixo": 150, "balas medio": 200, "balas alto": 250 };
         const ARMA_PRECO: Record<string, number> = { "arma baixo calibre": 20000, "arma medio calibre": 30000, "arma alto calibre": 80000 };
         const precoUnitAmmo = AMMO_PRECO[ocrWeapon.ammoItem] ?? 0;
         const coimaMunicao = ocrWeapon.ammo * precoUnitAmmo;
