@@ -111,6 +111,7 @@ export const ITEM_CATALOG: ItemDef[] = [
 
   // ── Pesca ──
   { name: "orca", displayName: "Orca", unitKg: 10, category: "roubo", illegal: true },
+  { name: "kit mergulho", displayName: "Kit Mergulho", unitKg: 10, category: "equipamento", illegal: false },
   { name: "tubarao martelo", displayName: "Tubarão Martelo", unitKg: 1, category: "roubo", illegal: true },
   { name: "tubarao branco", displayName: "Tubarão Branco", unitKg: 1, category: "roubo", illegal: true },
   { name: "raia", displayName: "Raia", unitKg: 0.3, category: "roubo", illegal: true },
