@@ -905,8 +905,24 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: boolean }): ParseResult {
   const includeWeapon = opts?.includeWeapon ?? false;
   const usedRecover = new Set<string>();
+  // O OCR do Gyazo repete o conteúdo duas vezes: primeiro a grelha embaralhada
+  // (todas as quantidades num bloco, todos os nomes noutro), depois as linhas
+  // estruturadas "N (peso)  Nome  peso-unit" — que já emparelham qty↔nome
+  // corretamente. Se existirem linhas estruturadas suficientes, usamos SÓ elas:
+  // evita que o atribuidor consuma pistas do bloco embaralhado e troque itens
+  // com o mesmo peso unitário (ex.: Folha de Tabaco ↔ Sumo Laranja, 0,2 kg).
+  const summaryLines = /numero de serie|num[ée]ro de s[ée]rie/i.test(rawText)
+    ? []
+    : rawText
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => /^\d{1,7}\s*\(\s*\d+(?:[.,]\d+)?\s*\)\s+\S/i.test(l) && /\d+(?:[.,]\d+)?\s*kg/i.test(l));
+  const sourceText =
+    summaryLines.length >= 2 && summaryLines.length * 3 <= rawText.split("\n").length + 4
+      ? summaryLines.join("\n")
+      : rawText;
   const fixed = fixOcrTypos(
-    mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(rawText, usedRecover), usedRecover))
+    mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(sourceText, usedRecover), usedRecover))
   );
   const headerLines = detectHeaderLines(fixed.split("\n"));
 
