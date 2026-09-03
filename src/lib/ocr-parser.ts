@@ -154,6 +154,8 @@ const ALIASES: Array<[string, string, number?]> = [
   ["vintage", "arma baixo calibre", 5],
   ["knife", "knife"],
   ["faca", "knife"],
+  ["copo cartao", "copo de cartao", 0.2],
+  ["copo", "copo de cartao", 0.2],
   ["carregador de smg", "carregador medio calibre"],
   ["carregador smg", "carregador medio calibre"],
   ["carregador de rifle", "carregador alto calibre"],
@@ -582,6 +584,11 @@ function assignPairsToHints(
     let bestScore = Infinity;
     let bestMap: Array<[number, number]> = [];
     const curMap = new Map<number, number>();
+    // No modo embaralhado (bloco único), a distância relevante é a POSIÇÃO na
+    // ordem de leitura — o i-º par casa com o i-º nome — e não a distância de
+    // linhas (quantidades e nomes vivem em linhas diferentes).
+    const pRank = new Map<number, number>(pIdx.map((pi, i) => [pi, i]));
+    const hRank = new Map<number, number>(hIdx.map((hi, i) => [hi, i]));
     const dfs = (k: number, lastHi: number, assigned: number, cost: number) => {
       if (cost > bestScore) return;
       if (k === n) {
@@ -596,7 +603,9 @@ function assignPairsToHints(
       const u = pairs[pi].kg / pairs[pi].qty;
       for (const hi of hIdx) {
         if (hi <= lastHi || usedHint[hi] || !weightClose(u, hints[hi].unitKg)) continue;
-        const d = Math.abs(hints[hi].line - pairs[pi].line);
+        const d = forceSingleBlock
+          ? Math.abs((hRank.get(hi) ?? 0) - (pRank.get(pi) ?? 0)) * 3
+          : Math.abs(hints[hi].line - pairs[pi].line);
         const dev = Math.abs(u - hints[hi].unitKg) / (hints[hi].unitKg || 1);
         curMap.set(pi, hi);
         dfs(k + 1, hi, assigned + 1, cost + d * 2 + dev * 10);
