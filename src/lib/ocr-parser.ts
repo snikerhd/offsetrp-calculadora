@@ -523,7 +523,8 @@ function fallbackForPair(p: Pair, unidentified: boolean, groupItems?: Set<string
 // menor, indexada por ordem original dos pares).
 function assignPairsToHints(
   pairs: Pair[],
-  hints: Hint[]
+  hints: Hint[],
+  forceSingleBlock = false
 ): { matchOf: Map<Pair, Hint>; leftover: Pair[] } {
   const matchOf = new Map<Pair, Hint>();
   const usedHint = new Array<boolean>(hints.length).fill(false);
@@ -608,6 +609,7 @@ function assignPairsToHints(
   };
 
   for (const pb of pairBlocksByIdx) {
+    if (forceSingleBlock) break;
     let best: { score: number; map: Array<[number, number]> } | null = null;
     for (const hb of hintBlocksByIdx) {
       const after = hb.start >= pb.end;
@@ -621,6 +623,19 @@ function assignPairsToHints(
         matchOf.set(pairs[pi], hints[hi]);
         usedHint[hi] = true;
       }
+    }
+  }
+
+  // Texto embaralhado (quantidades num bloco, nomes noutro): a ordem de leitura
+  // do OCR preserva a correspondência posicional — o i-º par de qty/peso casa
+  // com o i-º nome. Tratamos TODOS os pares e pistas como um único bloco e o
+  // casamento não-cruzado + custo (distância de linhas + desvio de peso) faz
+  // essa correspondência posicional, sem partir em blocos por linha.
+  if (forceSingleBlock && !matchOf.size) {
+    const res = blockMatch(pairs.map((_, i) => i), hints.map((_, i) => i));
+    for (const [pi, hi] of res.map) {
+      matchOf.set(pairs[pi], hints[hi]);
+      usedHint[hi] = true;
     }
   }
 
@@ -987,7 +1002,7 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
       // "MACHINE PISTOL" do inventário é a mesma arma que está a ser
       // inspecionada — e aliases genéricos como "pistol" também casam nele,
       // o que criaria uma 2ª arma fantasma).
-      const body = parseInventoryBody(fixed, headerLines, WEAPON_ITEM_RE);
+      const body = parseInventoryBody(fixed, headerLines, WEAPON_ITEM_RE, scrambledText);
       const merged = flagSameWeightAmbiguity(mergeResults([...body, ...popup.weights]), scrambledText);
       const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
       const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
@@ -1008,7 +1023,7 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
     return { text: "", weights: [], weaponCapture: detectWeaponCapture(fixed), overallConfidence: 0 };
   }
 
-  const body = parseInventoryBody(fixed, headerLines);
+  const body = parseInventoryBody(fixed, headerLines, undefined, scrambledText);
   const merged = flagSameWeightAmbiguity(mergeResults(body), scrambledText);
   const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
   const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
@@ -1018,7 +1033,7 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
 // Fluxo normal do inventário: pares "qty (peso)" casados com pistas de nome.
 // excludeItems: itens a ignorar (ex.: a arma já contada pelo popup).
 const WEAPON_ITEM_RE = /^arma (baixo|medio|alto) calibre$/;
-function parseInventoryBody(fixed: string, headerLines: Set<number>, excludeItems?: Set<string> | RegExp): ItemMatch[] {
+function parseInventoryBody(fixed: string, headerLines: Set<number>, excludeItems?: Set<string> | RegExp, scrambledText = false): ItemMatch[] {
   const isExcluded = (item: string) =>
     excludeItems instanceof RegExp ? excludeItems.test(item) : excludeItems?.has(item) ?? false;
   const hints = mergeFragments(removeCoveredHints(collectHints(fixed).filter((h) => !headerLines.has(h.line))));
@@ -1026,7 +1041,7 @@ function parseInventoryBody(fixed: string, headerLines: Set<number>, excludeItem
 
   const allPairs = extractPairs(fixed);
   const usableHints = hints.filter((h) => !h.timer && !isExcluded(h.item));
-  const { matchOf, leftover } = assignPairsToHints(allPairs, usableHints);
+  const { matchOf, leftover } = assignPairsToHints(allPairs, usableHints, scrambledText);
   for (const p of allPairs) {
     const h = matchOf.get(p);
     if (h) out.push(matchForPair(p, h));
