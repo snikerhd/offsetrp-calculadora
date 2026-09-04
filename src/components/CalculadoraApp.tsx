@@ -1196,7 +1196,9 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
               {Object.entries(ITENS_ILEGAIS)
                 // Estes artigos continuam válidos para o cálculo/coimas rápidas,
                 // mas não devem aparecer individualmente na grelha "Itens Ilegais".
-                .filter(([item]) => !BENS_ASSALTO_CASA_OCULTOS.has(normalizeText(item)))
+                // EXCEÇÃO: se o OCR lhes deu quantidade > 0, aparecem para serem
+                // visíveis e ajustáveis (ex.: TV LED 75" detetada no inventário).
+                .filter(([item]) => !BENS_ASSALTO_CASA_OCULTOS.has(normalizeText(item)) || (itensQuantidades[item] || 0) > 0)
                 .filter(([item]) => !searchItens || normalizeText(item).includes(normalizeText(searchItens)))
                 .map(([item, preco]) => {
                   const imgSrc = itemImageSrc(item);
