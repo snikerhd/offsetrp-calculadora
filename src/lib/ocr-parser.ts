@@ -42,6 +42,8 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\bHOHOSHU\b/gi, "MONOSHU"],
   [/\bSTRAWBELLY\b/gi, "STRAWBERRY"],
   [/\bBTFANA\b/gi, "BIFANA"],
+  [/\bHA[CÇ]O\b/gi, "MACO"],
+  [/\bSECAGEH\b/gi, "SECAGEM"],
   [/\bCORRENTE\s+DE\s+DURO\b/gi, "CORRENTE DE OURO"],
   [/\bRELOGIO\s+DE\s+DURO\b/gi, "RELOGIO DE OURO"],
   [/\bREPARA[CÇ]AD\b/gi, "REPARACAO"],
@@ -589,6 +591,9 @@ function assignPairsToHints(
     // linhas (quantidades e nomes vivem em linhas diferentes).
     const pRank = new Map<number, number>(pIdx.map((pi, i) => [pi, i]));
     const hRank = new Map<number, number>(hIdx.map((hi, i) => [hi, i]));
+    // Reutilizar o mesmo item para 2+ pares é suspeito no modo embaralhado
+    // (normalmente indica nome duplicado pelo OCR a absorver pares alheios).
+    const itemUse = new Map<string, number>();
     const dfs = (k: number, lastHi: number, assigned: number, cost: number) => {
       if (cost > bestScore) return;
       if (k === n) {
@@ -601,14 +606,20 @@ function assignPairsToHints(
       }
       const pi = pIdx[k];
       const u = pairs[pi].kg / pairs[pi].qty;
+      // No modo embaralhado (bloco único) os cruzamentos são permitidos: os
+      // nomes e os pares entrelaçam-se no texto OCR e a ordem estrita produz
+      // trocas em cadeia. O custo de distância posicional decide sozinho.
       for (const hi of hIdx) {
-        if (hi <= lastHi || usedHint[hi] || !weightClose(u, hints[hi].unitKg)) continue;
+        if ((!forceSingleBlock && hi <= lastHi) || usedHint[hi] || !weightClose(u, hints[hi].unitKg)) continue;
         const d = forceSingleBlock
           ? Math.abs((hRank.get(hi) ?? 0) - (pRank.get(pi) ?? 0)) * 3
           : Math.abs(hints[hi].line - pairs[pi].line);
         const dev = Math.abs(u - hints[hi].unitKg) / (hints[hi].unitKg || 1);
+        const dupUse = forceSingleBlock ? (itemUse.get(hints[hi].item) ?? 0) * 15 : 0;
         curMap.set(pi, hi);
-        dfs(k + 1, hi, assigned + 1, cost + d * 2 + dev * 10);
+        itemUse.set(hints[hi].item, (itemUse.get(hints[hi].item) ?? 0) + 1);
+        dfs(k + 1, hi, assigned + 1, cost + d * 2 + dev * 10 + dupUse);
+        itemUse.set(hints[hi].item, (itemUse.get(hints[hi].item) ?? 1) - 1);
         curMap.delete(pi);
       }
       dfs(k + 1, lastHi, assigned, cost);
