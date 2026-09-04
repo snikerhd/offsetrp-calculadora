@@ -1004,13 +1004,16 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
     ? []
     : rawText
         .split("\n")
-        .map((l) => {
-          const m = l.match(/\b(\d{1,7})\s*[x×]\s+([A-Za-zÀ-ÿ].*?)\s*[—–-]\s*([\d.,]+)\s*kg\b/i);
-          if (!m) return null;
-          const kg = m[3].replace(",", ".");
-          return `${m[1]} (${kg}) ${m[2].trim()}`;
-        })
-        .filter((l): l is string => l !== null);
+        .flatMap((l) => {
+          // Uma linha do paste pode conter vários itens colados ("1× Telemóvel — 0,7 kg 852× Folha Tabaco — …").
+          const re = /\b(\d{1,7})\s*[x×]\s+([A-Za-zÀ-ÿ][^—–-]*?)\s*[—–-]\s*([\d.,]+)\s*kg\b/gi;
+          const out: string[] = [];
+          for (const m of l.matchAll(re)) {
+            const kg = m[3].replace(",", ".");
+            out.push(`${m[1]} (${kg}) ${m[2].trim()}`);
+          }
+          return out;
+        });
   const allSummary = [...summaryLines, ...xSummaryLines];
   const sourceText =
     allSummary.length >= 2 && allSummary.length * 3 <= rawText.split("\n").length + 4
