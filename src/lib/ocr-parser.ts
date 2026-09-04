@@ -44,6 +44,7 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\bBTFANA\b/gi, "BIFANA"],
   [/\bHA[CÇ]O\b/gi, "MACO"],
   [/\bSECAGEH\b/gi, "SECAGEM"],
+  [/\bCHOCOCAE\b/gi, "CHOCOLATE"],
   [/\bCORRENTE\s+DE\s+DURO\b/gi, "CORRENTE DE OURO"],
   [/\bRELOGIO\s+DE\s+DURO\b/gi, "RELOGIO DE OURO"],
   [/\bREPARA[CÇ]AD\b/gi, "REPARACAO"],
@@ -150,6 +151,7 @@ function recoverCorruptedQty(text: string, used: Set<string>): string {
 // Pistas de nomes: geradas a partir do catálogo + aliases + fragmentos
 // ─────────────────────────────────────────────────────────────────────────────
 const ALIASES: Array<[string, string, number?]> = [
+  ["porte de arma", "porte de arma branca"],
   ["strawberry shortcake", "strawberry shortcake"],
   ["strawberry", "strawberry shortcake"],
   ["vintage pistol", "arma baixo calibre", 5],
@@ -995,9 +997,24 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => /^\d{1,7}\s*\(\s*\d+(?:[.,]\d+)?\s*\)\s+\S/i.test(l) && /\d+(?:[.,]\d+)?\s*kg/i.test(l));
+  // Resumo estruturado do Gyazo no formato "852× Folha Tabaco — 170,4 kg":
+  // convertemos para o formato de par "852 (170.4) folha tabaco" para o
+  // pipeline emparelhar qty↔nome diretamente (100% fiável).
+  const xSummaryLines = /numero de serie|num[ée]ro de s[ée]rie/i.test(rawText)
+    ? []
+    : rawText
+        .split("\n")
+        .map((l) => {
+          const m = l.match(/\b(\d{1,7})\s*[x×]\s+([A-Za-zÀ-ÿ].*?)\s*[—–-]\s*([\d.,]+)\s*kg\b/i);
+          if (!m) return null;
+          const kg = m[3].replace(",", ".");
+          return `${m[1]} (${kg}) ${m[2].trim()}`;
+        })
+        .filter((l): l is string => l !== null);
+  const allSummary = [...summaryLines, ...xSummaryLines];
   const sourceText =
-    summaryLines.length >= 2 && summaryLines.length * 3 <= rawText.split("\n").length + 4
-      ? summaryLines.join("\n")
+    allSummary.length >= 2 && allSummary.length * 3 <= rawText.split("\n").length + 4
+      ? allSummary.join("\n")
       : rawText;
   const fixed = fixOcrTypos(
     mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(sourceText, usedRecover), usedRecover))
