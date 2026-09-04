@@ -466,14 +466,18 @@ export default function CalculadoraApp() {
   };
 
   const calcItensRapido = () => {
-    const texto = itensInput.trim();
-    if (!texto) { showAlert("Digite uma lista de itens"); return; }
-    const partes = texto.split(",");
+    const textoBruto = itensInput.trim();
+    if (!textoBruto) { showAlert("Digite uma lista de itens"); return; }
+    // Ignora avisos do OCR (ex.: "— ⚠ ATENÇÃO: ... podem estar trocados") que
+    // viriam colados ao último item e impediriam o seu reconhecimento.
+    const texto = textoBruto.split("⚠")[0].trim();
+    // Aceita separação por vírgulas OU por linhas (texto OCR multilinha).
+    const partes = texto.split(/[\n,]+/);
     let totalUnitario = 0;
     const items: string[] = [];
     const erros: string[] = [];
     for (const parte of partes) {
-      const p = parte.trim();
+      const p = parte.trim().replace(/[—–]+\s*$/, "").trim();
       if (!p) continue;
       const m = p.match(/^(\d+)\s+(.+)$/);
       if (!m) { erros.push(`Formato inválido: '${p}'`); continue; }
