@@ -738,6 +738,49 @@ function assignPairsToHints(
     if (hi >= 0) matchOf.set(restPairs[pi], restHints[hi]);
     else leftover.push(restPairs[pi]);
   }
+
+  // ── Fase 3: transferência para pistas órfãs ──
+  // Se uma pista visível no texto ficou SEM par, mas outro item recebeu 2+ pares
+  // de peso compatível (típico quando o OCR duplica um nome, ex. "RELÓGIO OURO"
+  // ×2, e o item "gordo" absorve o par do vizinho), o par com pior proximidade
+  // de linha passa do item "gordo" para a pista órfã.
+  if (matchOf.size) {
+    const pairsByItem = new Map<string, Array<{ p: Pair; h: Hint }>>();
+    const usedHintObjs = new Set<Hint>();
+    for (const [p, h] of matchOf) {
+      usedHintObjs.add(h);
+      const arr = pairsByItem.get(h.item) ?? [];
+      arr.push({ p, h });
+      pairsByItem.set(h.item, arr);
+    }
+    for (const orphan of hints) {
+      if (orphan.timer || usedHintObjs.has(orphan)) continue;
+      // Procura um item "gordo" (2+ pares) com peso compatível com a órfã.
+      for (const [item, arr] of pairsByItem) {
+        if (item === orphan.item || arr.length < 2) continue;
+        const compat = arr.filter((e) => weightClose(e.p.kg / e.p.qty, orphan.unitKg));
+        if (!compat.length) continue;
+        // Par com pior proximidade de linha ao item doador — o mais provável
+        // de pertencer ao item órfão.
+        let worst = compat[0];
+        for (const e of compat) {
+          if (Math.abs(e.p.line - orphan.line) < Math.abs(worst.p.line - orphan.line)) continue;
+          if (Math.abs(e.h.line - e.p.line) <= Math.abs(worst.h.line - worst.p.line)) continue;
+          worst = e;
+        }
+        // Só transfere se a órfã estiver mais perto do par do que a pista do doador.
+        if (Math.abs(orphan.line - worst.p.line) >= Math.abs(worst.h.line - worst.p.line)) continue;
+        matchOf.delete(worst.p);
+        matchOf.set(worst.p, orphan);
+        usedHintObjs.add(orphan);
+        // atualiza o mapa do doador
+        const rest = (pairsByItem.get(item) ?? []).filter((e) => e.p !== worst.p);
+        pairsByItem.set(item, rest);
+        pairsByItem.set(orphan.item, [...(pairsByItem.get(orphan.item) ?? []), { p: worst.p, h: orphan }]);
+        break;
+      }
+    }
+  }
   return { matchOf, leftover };
 }
 
