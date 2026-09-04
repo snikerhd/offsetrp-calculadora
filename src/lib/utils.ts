@@ -693,8 +693,11 @@ export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }
     erros: [],
   };
 
+  // Aviso de ambiguidade do OCR (ex.: "— ⚠ ATENÇÃO: ... podem estar trocados")
+  // vem colado ao último item e impedia o seu reconhecimento — descartá-lo.
+  const textoLimpo = input.split("⚠")[0];
   // Aceita vírgulas E linhas novas como separadores (colar OCR multi-linha)
-  const partes = input.split(/[,\n\r]+/).map((p) => p.trim()).filter(Boolean);
+  const partes = textoLimpo.split(/[,\n\r]+/).map((p) => p.trim().replace(/[—–]+\s*$/, "").trim()).filter(Boolean);
 
   // OCR: acumular armas por calibre para aplicar o limite de grande quantidade
   // depois de ler TODAS as linhas. Isto não altera a aba/função de Grande Quantidade.
