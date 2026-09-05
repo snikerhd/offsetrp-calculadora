@@ -811,6 +811,12 @@ function mergeResults(items: ItemMatch[]): ItemMatch[] {
     prev.unitKg = prev.qty > 0 ? Math.round((prev.kg / prev.qty) * 1000) / 1000 : prev.unitKg;
     prev.confidence = Math.max(prev.confidence, w.confidence);
     prev.confidenceLevel = level(prev.confidence);
+    // Duas pilhas do mesmo item fundidas: o "Peso perfeito" tem de descrever o
+    // total (ex.: "6.5 kg = 65 × 0.1 kg"), não só a primeira pilha.
+    if (prev.matchReason.startsWith("Peso perfeito") && w.matchReason.startsWith("Peso perfeito")) {
+      const def = ITEM_BY_NAME.get(w.item);
+      prev.matchReason = `Peso perfeito: ${prev.kg} kg = ${prev.qty} × ${def?.unitKg ?? prev.unitKg} kg (2 pilhas no inventário)`;
+    }
   }
   return Array.from(map.values());
 }
