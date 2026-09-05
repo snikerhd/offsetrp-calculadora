@@ -55,6 +55,7 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\bSUNO\b/gi, "SUMO"],
   [/\bHEDICKIT\b/gi, "MEDICKIT"],
   [/\bBANDAGEN\b/gi, "BANDAGEM"],
+  [/\bBANDAGEH\b/gi, "BANDAGEM"],
   [/\bESTIHULANTE\b/gi, "ESTIMULANTE"],
   [/\bQUIHICA\b/gi, "QUIMICA"],
   [/\bHESA\b/gi, "MESA"],
