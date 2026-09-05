@@ -1104,20 +1104,27 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
         const overall = popup.weights.length ? popup.weights.reduce((s, w) => s + w.confidence, 0) / popup.weights.length : 0;
         return { text, weights: popup.weights, weaponCapture: popup.capture, overallConfidence: overall };
       }
-      // Modo Coimas Rápidas: popup (balas + acessórios + ARMA 1x) + o resto do
-      // inventário. Se existir resumo estruturado, o corpo vem dele (fiável);
-      // senão, do texto completo. Todas as hints de ARMAS são excluídas do
-      // inventário (a arma do popup não deve contar 2x).
+      // Modo Coimas Rápidas: popup (balas + acessórios) + o resto do inventário
+      // (incluindo a arma, com o peso real). Se existir resumo estruturado, o
+      // corpo vem dele (fiável); senão, do texto completo MAS removendo a linha
+      // de acessórios (senão "SMG Flashlight"/"Scope" viram hints fantasma que
+      // roubam pares) e a linha do nº de série.
       const usingSummary = allSummary.length >= 2;
-      // Com resumo estruturado, o par da arma vem do próprio resumo (com o
-      // peso real) — não excluímos hints de armas do corpo nem duplicamos a
-      // arma via popup; sem resumo (texto embaralhado), mantém-se a exclusão
-      // de hints de armas no corpo (o popup acrescenta a arma 1x).
-      const body = parseInventoryBody(usingSummary ? fixed : fixedFull, headerLines, usingSummary ? undefined : WEAPON_ITEM_RE, scrambledText);
-      const popupWeights = usingSummary
-        ? popup.weights.filter((w) => w.item !== popup.capture.weaponItem)
-        : popup.weights;
-      const merged = flagSameWeightAmbiguity(mergeResults([...body, ...popupWeights]), scrambledText);
+      const bodyText = usingSummary
+        ? fixed
+        : fixedFull
+            .replace(/((?:num[ée]?ro|umero)\s+de\s+s[ée]rie\s*:\s*)[^\n]*/gi, "$1")
+            .replace(/((?:A)?CESS[OÓ]RIOS?\s*:\s*)[^\n]*/gi, "$1");
+      const body = parseInventoryBody(bodyText, headerLines, undefined, scrambledText);
+      // A arma entra pelo corpo (peso real do par); popup só acrescenta arma se
+      // o corpo não a tiver (mantendo o comportamento antigo de dedupe).
+      const popupWeights = popup.weights.filter((w) => w.item !== popup.capture.weaponItem);
+      const mergedRaw = [...body, ...popupWeights];
+      if (includeWeapon && !mergedRaw.some((w) => w.item === popup.capture.weaponItem)) {
+        const def = ITEM_BY_NAME.get(popup.capture.weaponItem);
+        mergedRaw.push({ item: popup.capture.weaponItem, qty: 1, kg: def?.unitKg ?? 0, unitKg: def?.unitKg ?? 0, confidence: 95, confidenceLevel: "high", matchReason: "Arma inspecionada (número de série)" });
+      }
+      const merged = flagSameWeightAmbiguity(mergeResults(mergedRaw), scrambledText);
       const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
       const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
       return { text, weights: merged, weaponCapture: popup.capture, overallConfidence: overall };
