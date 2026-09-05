@@ -167,7 +167,7 @@ const ALIASES: Array<[string, string, number?]> = [
   ["machine pistol", "arma medio calibre", 5],
   ["micro smg", "arma medio calibre", 10],
   ["assault smg", "arma medio calibre", 10],
-  ["combat pdw", "arma medio calibre", 5],
+  ["combat pdw", "arma medio calibre", 10],
   ["p90", "arma medio calibre", 5],
   ["tec9", "arma medio calibre", 5],
   ["tec 9", "arma medio calibre", 5],
@@ -921,21 +921,23 @@ function findWeaponInText(fixed: string): WeaponCapture["weaponItem"] | null {
 }
 
 function countAccessories(fixed: string): number {
-  const explicit = Number(fixed.match(/ACESS[OÓ]RIOS?\s*:\s*(\d+)/i)?.[1]);
+  // Tolerante a letra cortada no início: "cessorios:" (= acessórios)
+  const explicit = Number(fixed.match(/(?:A)?CESS[OÓ]RIOS?\s*:\s*(\d+)/i)?.[1]);
   if (explicit > 0) return explicit;
   // A lista pode continuar na linha seguinte quando a linha termina em vírgula
   // (ex.: "Rifle Scope,\nRifle Flashlight"). Captura todas as linhas de
   // continuação (linhas terminadas em ",\n") antes da última.
-  const list = fixed.match(/ACESS[OÓ]RIOS?\s*:\s*((?:[^\n]+,\s*\n)*[^\n]+)/i)?.[1]?.trim();
+  const list = fixed.match(/(?:A)?CESS[OÓ]RIOS?\s*:\s*((?:[^\n]+,\s*\n)*[^\n]+)/i)?.[1]?.trim();
   if (list) {
     const parts = list.split(/,| e | and |&/i).map(s => s.trim()).filter(s => s && !/^\d+$/.test(s) && s.length > 1);
     if (parts.length > 0) return parts.length;
   }
-  return /ACESS[OÓ]RIO/i.test(fixed) ? 1 : 0;
+  return /CESS[OÓ]RIO/i.test(fixed) ? 1 : 0;
 }
 
 function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: WeaponCapture; weights: ItemMatch[] } | null {
-  const ammo = Number(fixed.match(/MUNI[CÇ][AÃ]O\s*:\s*(\d+)/i)?.[1] || 0);
+  // Tolerante a letra cortada: "unição: 155" (= MUNIÇÃO)
+  const ammo = Number(fixed.match(/(?:M)?UNI[CÇ][AÃ]O\s*:\s*(\d+)/i)?.[1] || 0);
   // A arma é identificada pelo NOME conhecido no texto (ex.: "Machine Pistol"
   // -> arma medio calibre), não pela primeira linha (que é lixo do OCR).
   const knownWeapon = findWeaponInText(fixed);
@@ -991,18 +993,17 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
   // corretamente. Se existirem linhas estruturadas suficientes, usamos SÓ elas:
   // evita que o atribuidor consuma pistas do bloco embaralhado e troque itens
   // com o mesmo peso unitário (ex.: Folha de Tabaco ↔ Sumo Laranja, 0,2 kg).
-  const summaryLines = /numero de serie|num[ée]ro de s[ée]rie/i.test(rawText)
-    ? []
-    : rawText
+  // Tolerante a letras cortadas pelo OCR/QR: "umero de Serie" (= número),
+  // "unição" (= munição), "cessorios" (= acessórios).
+  const hasSerie = /(?:num[ée]?ro|umero)\s+de\s+s[ée]rie/i.test(rawText);
+  const summaryLines = rawText
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => /^\d{1,7}\s*\(\s*\d+(?:[.,]\d+)?\s*\)\s+\S/i.test(l) && /\d+(?:[.,]\d+)?\s*kg/i.test(l));
   // Resumo estruturado do Gyazo no formato "852× Folha Tabaco — 170,4 kg":
   // convertemos para o formato de par "852 (170.4) folha tabaco" para o
   // pipeline emparelhar qty↔nome diretamente (100% fiável).
-  const xSummaryLines = /numero de serie|num[ée]ro de s[ée]rie/i.test(rawText)
-    ? []
-    : rawText
+  const xSummaryLines = rawText
         .split("\n")
         .flatMap((l) => {
           // Uma linha do paste pode conter vários itens colados ("1× Telemóvel — 0,7 kg 852× Folha Tabaco — …").
@@ -1014,13 +1015,36 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
           }
           return out;
         });
-  const allSummary = [...summaryLines, ...xSummaryLines];
+  // Resumo no formato "🔫 Combat PDW	1	10,0 kg	10,0 kg" (nome, qtd, total, unitário):
+  // convertemos para "1 (10.0) combat pdw". Exige DOIS valores kg (total + unitário)
+  // para não confundir com texto normal.
+  const tabSummaryLines = rawText
+        .split("\n")
+        .flatMap((l) => {
+          // Nome = sequência de letras imediatamente antes da quantidade (emojis
+          // e tabs separam-nos do lixo OCR). Exige DOIS valores kg (total +
+          // unitário) para não confundir com texto normal.
+          const re = /([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' ]*)\s+(\d{1,7})\s+([\d.,]+)\s*kg\s+([\d.,]+)\s*kg/gi;
+          const out: string[] = [];
+          for (const m of l.matchAll(re)) {
+            const name = m[1].trim();
+            if (name.length < 2) continue;
+            out.push(`${m[2]} (${m[3].replace(",", ".")}) ${name}`);
+          }
+          return out;
+        });
+  const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines];
   const sourceText =
     allSummary.length >= 2 && allSummary.length * 3 <= rawText.split("\n").length + 4
       ? allSummary.join("\n")
       : rawText;
   const fixed = fixOcrTypos(
     mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(sourceText, usedRecover), usedRecover))
+  );
+  // fixedFull = rawText inteiro, para o popup de arma (nº de série/munição/
+  // acessórios) continuar detetável mesmo quando sourceText usa só o resumo.
+  const fixedFull = fixOcrTypos(
+    mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(rawText, usedRecover), usedRecover))
   );
   const headerLines = detectHeaderLines(fixed.split("\n"));
 
@@ -1070,8 +1094,8 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
       : "";
   }
 
-  if (/numero de serie|num[ée]ro de s[ée]rie/i.test(fixed)) {
-    const popup = parseWeaponPopup(fixed, includeWeapon);
+  if (/(?:num[ée]?ro|umero)\s+de\s+s[ée]rie/i.test(fixedFull)) {
+    const popup = parseWeaponPopup(fixedFull, includeWeapon);
     if (popup) {
       if (!includeWeapon) {
         // Modo Relatórios (comportamento original): só balas + acessórios do
@@ -1081,12 +1105,19 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
         return { text, weights: popup.weights, weaponCapture: popup.capture, overallConfidence: overall };
       }
       // Modo Coimas Rápidas: popup (balas + acessórios + ARMA 1x) + o resto do
-      // inventário. Todas as hints de ARMAS são excluídas do inventário (o
-      // "MACHINE PISTOL" do inventário é a mesma arma que está a ser
-      // inspecionada — e aliases genéricos como "pistol" também casam nele,
-      // o que criaria uma 2ª arma fantasma).
-      const body = parseInventoryBody(fixed, headerLines, WEAPON_ITEM_RE, scrambledText);
-      const merged = flagSameWeightAmbiguity(mergeResults([...body, ...popup.weights]), scrambledText);
+      // inventário. Se existir resumo estruturado, o corpo vem dele (fiável);
+      // senão, do texto completo. Todas as hints de ARMAS são excluídas do
+      // inventário (a arma do popup não deve contar 2x).
+      const usingSummary = allSummary.length >= 2;
+      // Com resumo estruturado, o par da arma vem do próprio resumo (com o
+      // peso real) — não excluímos hints de armas do corpo nem duplicamos a
+      // arma via popup; sem resumo (texto embaralhado), mantém-se a exclusão
+      // de hints de armas no corpo (o popup acrescenta a arma 1x).
+      const body = parseInventoryBody(usingSummary ? fixed : fixedFull, headerLines, usingSummary ? undefined : WEAPON_ITEM_RE, scrambledText);
+      const popupWeights = usingSummary
+        ? popup.weights.filter((w) => w.item !== popup.capture.weaponItem)
+        : popup.weights;
+      const merged = flagSameWeightAmbiguity(mergeResults([...body, ...popupWeights]), scrambledText);
       const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
       const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
       return { text, weights: merged, weaponCapture: popup.capture, overallConfidence: overall };
