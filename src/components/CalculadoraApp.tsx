@@ -674,6 +674,11 @@ export default function CalculadoraApp() {
     if (!texto) { showAlert("Digite algo no formato: quantidade item"); return; }
     const r = parseQuickInput(texto, { posseMunicao: true });
     let msg = `> ${texto}\n`;
+    // Coimas do catálogo (nomes exatos dos crimes) no topo, para copy-paste na multa.
+    const coimasCatalogo = gerarCoimasCatalogo(r);
+    if (coimasCatalogo.length) {
+      msg += coimasCatalogo.join("\n") + "\n\n";
+    }
     
     if (r.drogas.resultados.length) {
       msg += "--- DROGAS ---\n" + r.drogas.resultados.join("\n") + `\nTOTAL DROGAS: ${fmt2(r.drogas.subtotal)} €\n\n`;
@@ -701,11 +706,6 @@ export default function CalculadoraApp() {
     }
     if (r.materiaPrima.resultados.length) {
       msg += "--- MATÉRIA PRIMA ---\n" + r.materiaPrima.resultados.join("\n") + `\nTOTAL MATÉRIA PRIMA: ${fmt2(r.materiaPrima.total)} €\n\n`;
-    }
-    // Coimas do catálogo (nomes exatos dos crimes, para copy-paste na multa).
-    const coimasCatalogo = gerarCoimasCatalogo(r);
-    if (coimasCatalogo.length) {
-      msg += coimasCatalogo.join("\n");
     }
     if (r.drogas.resultados.length || r.itens.resultados.length || r.municao.resultados.length || r.armas.resultados.length || r.dinheiro.resultados.length || r.sequestro.resultados.length || r.crimes.resultados.length || r.materiaPrima.resultados.length) {
       msg += `TOTAL GERAL: ${fmt2(r.totalGeral)} €`;

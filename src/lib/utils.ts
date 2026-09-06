@@ -1087,9 +1087,7 @@ export function gerarCoimasCatalogo(r: ParseResult): string[] {
     CRIMES_CATALOGO.find((c) => c.nome.toLowerCase() === nome.toLowerCase())?.nome ?? nome;
 
   if (r.municao.resultados.length) {
-    linhas.push("--- MUNIÇÃO (base 10 000 €) ---");
-    linhas.push(crime("Posse de Munição"));
-    linhas.push("");
+    linhas.push(`--- MUNIÇÃO (base 10 000 €) --- ${crime("Posse de Munição")}`);
   }
 
   if (r.armas.resultados.length) {
@@ -1103,7 +1101,6 @@ export function gerarCoimasCatalogo(r: ParseResult): string[] {
       else if (/alto calibre/i.test(t)) nomeCrime = crime("Posse de Arma de Fogo Illegal de Alto Calibre");
       linhas.push(nomeCrime ? `${t} → ${nomeCrime}` : t);
     }
-    linhas.push("");
   }
 
   if (r.drogas.resultados.length) {
@@ -1113,29 +1110,23 @@ export function gerarCoimasCatalogo(r: ParseResult): string[] {
       const limite = DROGAS_LIMITES[m[2]] ?? 20;
       return parseInt(m[1], 10) > limite;
     });
-    linhas.push("--- DROGAS ---");
+    linhas.push(grande
+      ? `--- DROGAS --- ${crime("Posse de Droga em Grande Quantidade")}`
+      : `--- DROGAS --- ${crime("Posse de Droga")}`);
     for (const l of r.drogas.resultados) linhas.push(l.trim());
-    linhas.push(grande ? crime("Posse de Droga em Grande Quantidade") : crime("Posse de Droga"));
-    linhas.push("");
   }
 
   if (r.itens.resultados.length) {
-    linhas.push("--- ITENS ILEGAIS (base 30 000 €) ---");
-    linhas.push(crime("Posse de Itens Ilegais"));
+    linhas.push(`--- ITENS ILEGAIS (base 30 000 €) --- ${crime("Posse de Itens Ilegais")}`);
     for (const l of r.itens.resultados) linhas.push(l.trim());
-    linhas.push("");
   }
 
   if (r.dinheiro.resultados.length) {
-    linhas.push("--- DINHEIRO ---");
-    linhas.push(crime("Posse de Dinheiro Não Declarado"));
-    linhas.push("");
+    linhas.push(`--- DINHEIRO --- ${crime("Posse de Dinheiro Não Declarado")}`);
   }
 
   if (r.materiaPrima.resultados.length) {
-    linhas.push("--- MATÉRIA PRIMA ---");
-    linhas.push(crime("Posse de Matéria Prima para Fins Ilegais"));
-    linhas.push("");
+    linhas.push(`--- MATÉRIA PRIMA --- ${crime("Posse de Matéria Prima para Fins Ilegais")}`);
   }
 
   return linhas;
