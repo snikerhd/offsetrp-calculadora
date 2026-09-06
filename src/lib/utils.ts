@@ -1,4 +1,4 @@
-import { ITENS_ILEGAIS, PRECOS_DROGAS, CRIMES_CATALOGO, Crime } from "@/lib/data";
+import { ITENS_ILEGAIS, PRECOS_DROGAS, CRIMES_CATALOGO, DROGAS_LIMITES, Crime } from "@/lib/data";
 import { ITEM_BY_NAME } from "@/lib/item-weights";
 
 // Alias for backwards compatibility
@@ -1076,6 +1076,71 @@ export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }
 
   return result;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Coimas catálogo: converte o resultado das Coimas Rápidas na lista de crimes
+// do catálogo (CRIMES_CATALOGO) para copy-paste direto na multa do jogo.
+// ─────────────────────────────────────────────────────────────────────────────
+export function gerarCoimasCatalogo(r: ParseResult): string[] {
+  const linhas: string[] = [];
+  const crime = (nome: string) =>
+    CRIMES_CATALOGO.find((c) => c.nome.toLowerCase() === nome.toLowerCase())?.nome ?? nome;
+
+  if (r.municao.resultados.length) {
+    linhas.push("--- MUNIÇÃO (base 10 000 €) ---");
+    linhas.push(crime("Posse de Munição"));
+    linhas.push("");
+  }
+
+  if (r.armas.resultados.length) {
+    linhas.push("--- ARMAS ---");
+    for (const l of r.armas.resultados) {
+      const t = l.trim();
+      let nomeCrime = "";
+      if (/GRANDE QUANTIDADE/i.test(t)) nomeCrime = crime("Posse de Armas em Grande Quantidade");
+      else if (/baixo calibre/i.test(t)) nomeCrime = crime("Posse de Arma de Fogo Illegal de Baixo Calibre");
+      else if (/medio calibre/i.test(t)) nomeCrime = crime("Posse de Arma de Fogo Illegal de Médio Calibre");
+      else if (/alto calibre/i.test(t)) nomeCrime = crime("Posse de Arma de Fogo Illegal de Alto Calibre");
+      linhas.push(nomeCrime ? `${t} → ${nomeCrime}` : t);
+    }
+    linhas.push("");
+  }
+
+  if (r.drogas.resultados.length) {
+    const grande = r.drogas.resultados.some((l) => {
+      const m = l.trim().match(/^(\d+)x\s+(.+?)\s+x\s/);
+      if (!m) return false;
+      const limite = DROGAS_LIMITES[m[2]] ?? 20;
+      return parseInt(m[1], 10) > limite;
+    });
+    linhas.push("--- DROGAS ---");
+    for (const l of r.drogas.resultados) linhas.push(l.trim());
+    linhas.push(grande ? crime("Posse de Droga em Grande Quantidade") : crime("Posse de Droga"));
+    linhas.push("");
+  }
+
+  if (r.itens.resultados.length) {
+    linhas.push("--- ITENS ILEGAIS (base 30 000 €) ---");
+    linhas.push(crime("Posse de Itens Ilegais"));
+    for (const l of r.itens.resultados) linhas.push(l.trim());
+    linhas.push("");
+  }
+
+  if (r.dinheiro.resultados.length) {
+    linhas.push("--- DINHEIRO ---");
+    linhas.push(crime("Posse de Dinheiro Não Declarado"));
+    linhas.push("");
+  }
+
+  if (r.materiaPrima.resultados.length) {
+    linhas.push("--- MATÉRIA PRIMA ---");
+    linhas.push(crime("Posse de Matéria Prima para Fins Ilegais"));
+    linhas.push("");
+  }
+
+  return linhas;
+}
+
 
 // Crimes por nome - sinónimos
 const SYNONYMS_CRIMES: Record<string, string> = {

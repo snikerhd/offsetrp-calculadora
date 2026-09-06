@@ -12,6 +12,7 @@ import {
   normalizeText, fmt, fmt2, cap, calcSequestro, calcMunicao,
   calcArmasGrandeQtde, calcItensIlegais, calcDroga,
   obterItemPorSinonimo, obterDrogaPorSinonimo, parseQuickInput, parseCrimesInput, getAllCrimesFlat,
+  gerarCoimasCatalogo,
 } from "@/lib/utils";
 import { ITEM_BY_NAME } from "@/lib/item-weights";
 import EntriesPanel from "@/components/EntriesPanel";
@@ -700,6 +701,11 @@ export default function CalculadoraApp() {
     }
     if (r.materiaPrima.resultados.length) {
       msg += "--- MATÉRIA PRIMA ---\n" + r.materiaPrima.resultados.join("\n") + `\nTOTAL MATÉRIA PRIMA: ${fmt2(r.materiaPrima.total)} €\n\n`;
+    }
+    // Coimas do catálogo (nomes exatos dos crimes, para copy-paste na multa).
+    const coimasCatalogo = gerarCoimasCatalogo(r);
+    if (coimasCatalogo.length) {
+      msg += coimasCatalogo.join("\n");
     }
     if (r.drogas.resultados.length || r.itens.resultados.length || r.municao.resultados.length || r.armas.resultados.length || r.dinheiro.resultados.length || r.sequestro.resultados.length || r.crimes.resultados.length || r.materiaPrima.resultados.length) {
       msg += `TOTAL GERAL: ${fmt2(r.totalGeral)} €`;
