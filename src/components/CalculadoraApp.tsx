@@ -6,13 +6,12 @@ import {
   Pencil, Link
 } from "lucide-react";
 import {
-  ITENS_ILEGAIS, PRECOS_DROGAS,
+  ITENS_ILEGAIS, PRECOS_DROGAS, DROGAS_LIMITES,
 } from "@/lib/data";
 import {
   normalizeText, fmt, fmt2, cap, calcSequestro, calcMunicao,
   calcArmasGrandeQtde, calcItensIlegais, calcDroga,
   obterItemPorSinonimo, obterDrogaPorSinonimo, parseQuickInput, parseCrimesInput, getAllCrimesFlat,
-  gerarCoimasCatalogo,
 } from "@/lib/utils";
 import { ITEM_BY_NAME } from "@/lib/item-weights";
 import EntriesPanel from "@/components/EntriesPanel";
@@ -674,29 +673,43 @@ export default function CalculadoraApp() {
     if (!texto) { showAlert("Digite algo no formato: quantidade item"); return; }
     const r = parseQuickInput(texto, { posseMunicao: true });
     let msg = `> ${texto}\n`;
-    // Coimas do catálogo (nomes exatos dos crimes) no topo, para copy-paste na multa.
-    const coimasCatalogo = gerarCoimasCatalogo(r);
-    if (coimasCatalogo.length) {
-      msg += coimasCatalogo.join("\n") + "\n\n";
-    }
-    
+
     if (r.drogas.resultados.length) {
-      msg += "--- DROGAS ---\n" + r.drogas.resultados.join("\n") + `\nTOTAL DROGAS: ${fmt2(r.drogas.subtotal)} €\n\n`;
+      const grande = r.drogas.resultados.some((l) => {
+        const m = l.trim().match(/^(\d+)x\s+(.+?)\s+x\s/);
+        if (!m) return false;
+        const limite = DROGAS_LIMITES[m[2]] ?? 20;
+        return parseInt(m[1], 10) > limite;
+      });
+      const crimeDrogas = grande ? "Posse de Droga em Grande Quantidade" : "Posse de Droga";
+      msg += `--- DROGAS --- ${crimeDrogas}\n` + r.drogas.resultados.join("\n") + `\nTOTAL DROGAS: ${fmt2(r.drogas.subtotal)} €\n\n`;
     }
     if (r.itens.resultados.length) {
-      msg += "--- ITENS ILEGAIS (base 30 000€) ---\n" + r.itens.resultados.join("\n") + `\nTOTAL ITENS: ${fmt2(30000 + r.itens.subtotal)} €\n\n`;
+      msg += `--- ITENS ILEGAIS (base 30 000€) --- Posse de Itens Ilegais\n` + r.itens.resultados.join("\n") + `\nTOTAL ITENS: ${fmt2(30000 + r.itens.subtotal)} €\n\n`;
     }
     if (r.municao.resultados.length) {
       const baseMun = r.municao.base > 0 ? ` (base ${fmt2(r.municao.base)} €)` : "";
-      msg += `--- MUNIÇÃO${baseMun} ---\n`;
+      msg += `--- MUNIÇÃO${baseMun} --- Posse de Munição\n`;
       msg += r.municao.resultados.join("\n") + `\n`;
       msg += `TOTAL MUNIÇÃO: ${fmt2(r.municao.total)} €\n\n`;
     }
     if (r.armas.resultados.length) {
-      msg += "--- ARMAS ---\n" + r.armas.resultados.join("\n") + `\nTOTAL ARMAS: ${fmt2(r.armas.total)} €\n\n`;
+      const crimeArma = (t: string): string => {
+        if (/GRANDE QUANTIDADE/i.test(t)) return "Posse de Armas em Grande Quantidade";
+        if (/baixo calibre/i.test(t)) return "Posse de Arma de Fogo Illegal de Baixo Calibre";
+        if (/medio calibre/i.test(t)) return "Posse de Arma de Fogo Illegal de Médio Calibre";
+        if (/alto calibre/i.test(t)) return "Posse de Arma de Fogo Illegal de Alto Calibre";
+        return "";
+      };
+      const linhasArmas = r.armas.resultados.map((l) => {
+        const t = l.trim();
+        const c = crimeArma(t);
+        return c && !/→/.test(t) ? `${t} → ${c}` : t;
+      });
+      msg += "--- ARMAS ---\n" + linhasArmas.join("\n") + `\nTOTAL ARMAS: ${fmt2(r.armas.total)} €\n\n`;
     }
     if (r.dinheiro.resultados.length) {
-      msg += "--- DINHEIRO ---\n" + r.dinheiro.resultados.join("\n") + `\nTOTAL: ${fmt2(r.dinheiro.total)} €\n\n`;
+      msg += `--- DINHEIRO --- Posse de Dinheiro Não Declarado\n` + r.dinheiro.resultados.join("\n") + `\nTOTAL: ${fmt2(r.dinheiro.total)} €\n\n`;
     }
     if (r.sequestro.resultados.length) {
       msg += "--- SEQUESTRO ---\n" + r.sequestro.resultados.join("\n") + `\nTOTAL: ${fmt2(r.sequestro.total)} €\n\n`;
@@ -705,7 +718,7 @@ export default function CalculadoraApp() {
       msg += "--- CRIMES ---\n" + r.crimes.resultados.join("\n") + `\nTOTAL: ${fmt2(r.crimes.totalMulta)} € (meses: ${r.crimes.totalMeses.toFixed(0)})\n\n`;
     }
     if (r.materiaPrima.resultados.length) {
-      msg += "--- MATÉRIA PRIMA ---\n" + r.materiaPrima.resultados.join("\n") + `\nTOTAL MATÉRIA PRIMA: ${fmt2(r.materiaPrima.total)} €\n\n`;
+      msg += `--- MATÉRIA PRIMA --- Posse de Matéria Prima para Fins Ilegais\n` + r.materiaPrima.resultados.join("\n") + `\nTOTAL MATÉRIA PRIMA: ${fmt2(r.materiaPrima.total)} €\n\n`;
     }
     if (r.drogas.resultados.length || r.itens.resultados.length || r.municao.resultados.length || r.armas.resultados.length || r.dinheiro.resultados.length || r.sequestro.resultados.length || r.crimes.resultados.length || r.materiaPrima.resultados.length) {
       msg += `TOTAL GERAL: ${fmt2(r.totalGeral)} €`;
