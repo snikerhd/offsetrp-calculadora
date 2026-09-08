@@ -586,8 +586,13 @@ function assignPairsToHints(
     hIdx: number[]
   ): { score: number; map: Array<[number, number]> } => {
     const n = pIdx.length;
-    let bestScore = Infinity;
+    // Inicializa com o fallback "tudo por atribuir" para podar cedo, e limita
+    // os nós explorados (a árvore pode explodir quando há muitas pistas com o
+    // mesmo peso — ex. grelhas de armas do OCR).
+    let bestScore = n * 1000;
     let bestMap: Array<[number, number]> = [];
+    let nodes = 0;
+    const MAX_NODES = 150_000;
     const curMap = new Map<number, number>();
     // No modo embaralhado (bloco único), a distância relevante é a POSIÇÃO na
     // ordem de leitura — o i-º par casa com o i-º nome — e não a distância de
@@ -598,7 +603,7 @@ function assignPairsToHints(
     // (normalmente indica nome duplicado pelo OCR a absorver pares alheios).
     const itemUse = new Map<string, number>();
     const dfs = (k: number, lastHi: number, assigned: number, cost: number) => {
-      if (cost > bestScore) return;
+      if (++nodes > MAX_NODES || cost > bestScore) return;
       if (k === n) {
         const score = (n - assigned) * 1000 + cost;
         if (score < bestScore) {
@@ -684,11 +689,16 @@ function assignPairsToHints(
   const DUP_PENALTY = 8;
   const CROSS_PENALTY = 12;
 
+  // Fallback inicial: tudo por atribuir. Poda cedo ramos caros e evita que a
+  // árvore expluda quando muitas pistas partilham o mesmo peso (grelhas).
+  let bestScore = restPairs.length * UNASSIGNED_PENALTY;
+  let nodes = 0;
+  const MAX_NODES = 150_000;
+
   const itemCount = new Map<string, number>();
   for (const [, h] of matchOf) itemCount.set(h.item, (itemCount.get(h.item) ?? 0) + 1);
   const cur = new Array<number>(restPairs.length).fill(-1);
   let bestSeq: number[] | null = null;
-  let bestScore = Infinity;
 
   // Penaliza atribuições que "cruzam" com pares já atribuídos: se o par A está
   // acima do par B, A deve preferir pistas acima das de B.
@@ -705,7 +715,7 @@ function assignPairsToHints(
   };
 
   const dfs = (k: number, assigned: number, cost: number) => {
-    if (cost > bestScore) return;
+    if (++nodes > MAX_NODES || cost > bestScore) return;
     if (k === order.length) {
       const score = (restPairs.length - assigned) * UNASSIGNED_PENALTY + cost;
       if (score < bestScore) {
