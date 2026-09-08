@@ -282,6 +282,26 @@ function lineOf(text: string, pos: number): number {
   return line;
 }
 
+// Correção de desvio decimal do OCR: no FiveM nenhum item pesa mais de 30 kg
+// por unidade, por isso "1 (150)" é tipicamente "1 (15.0)" com o ponto perdido.
+// Se dividir o peso por 10 (ou 100) der um valor compatível com um peso
+// unitário do catálogo, corrige o par.
+function fixUnitWeightOverflow(pairs: Pair[]): Pair[] {
+  const validUnits = ITEM_CATALOG.map(d => d.unitKg).filter(u => u > 0);
+  return pairs.map(p => {
+    const unit = p.kg / p.qty;
+    if (unit <= 30) return p;
+    for (const div of [10, 100]) {
+      const cand = unit / div;
+      if (cand <= 0 || cand > 30) continue;
+      if (validUnits.some(u => weightClose(cand, u))) {
+        return { ...p, kg: cand * p.qty };
+      }
+    }
+    return p;
+  });
+}
+
 function extractPairs(text: string): Pair[] {
   const out: Pair[] = [];
   const re = /(\d{1,7})\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g;
@@ -293,7 +313,7 @@ function extractPairs(text: string): Pair[] {
       out.push({ qty, kg, pos: m.index, line: lineOf(text, m.index) });
     }
   }
-  return out;
+  return fixUnitWeightOverflow(out);
 }
 
 // Procura as frases em cada linha; devolve pistas com posição/linha.
