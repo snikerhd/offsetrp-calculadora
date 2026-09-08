@@ -147,7 +147,10 @@ export async function POST(req: NextRequest) {
       // (upload + esperas + metadados), mas a função tem um limite de wall-time
       // (504 se passar). Reservamos sempre espaço para o Tesseract local correr.
       const startedAt = Date.now();
-      const BUDGET_MS = 55_000;
+      // 38s para a fase Gyazo (uploads + esperas) e ~20s reservados para o
+      // Tesseract local — a função tem um limite de wall-time (~60s), e passar
+      // desse limite devolve HTTP 504 ao cliente.
+      const BUDGET_MS = 38_000;
       const left = () => BUDGET_MS - (Date.now() - startedAt);
       const buf = Buffer.from(base64Data, "base64");
       const uploadedId = gyazoId ?? (left() > 20_000 ? await uploadToGyazo(buf) : null);
