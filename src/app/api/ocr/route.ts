@@ -143,13 +143,19 @@ export async function POST(req: NextRequest) {
     // imagem ligeiramente (1 canal) e volta a subir — a captura nova ganha OCR.
     // 4) fallback final: Tesseract local.
     if (ocrText.length < 3) {
+      // Orçamento de tempo global: o Gyazo pode precisar de vários retries
+      // (upload + esperas + metadados), mas a função tem um limite de wall-time
+      // (504 se passar). Reservamos sempre espaço para o Tesseract local correr.
+      const startedAt = Date.now();
+      const BUDGET_MS = 55_000;
+      const left = () => BUDGET_MS - (Date.now() - startedAt);
       const buf = Buffer.from(base64Data, "base64");
-      const uploadedId = gyazoId ?? (await uploadToGyazo(buf));
+      const uploadedId = gyazoId ?? (left() > 20_000 ? await uploadToGyazo(buf) : null);
       const targetId = uploadedId ?? gyazoId;
-      if (targetId) ocrText = await gyazoOcr(targetId);
+      if (targetId && left() > 15_000) ocrText = await gyazoOcr(targetId);
       // Dedup: se o upload devolveu o MESMO id do link original e ele não tem
       // OCR, o Gyazo não vai processar — modifica a imagem e sobe como nova.
-      if (ocrText.length < 3 && gyazoId && uploadedId === gyazoId) {
+      if (ocrText.length < 3 && gyazoId && uploadedId === gyazoId && left() > 35_000) {
         try {
           const sharpFn = await getSharp();
           if (sharpFn) {
@@ -157,9 +163,11 @@ export async function POST(req: NextRequest) {
             const modified = await s(buf).modulate({ brightness: 1.001 }).png().toBuffer();
             const newId = await uploadToGyazo(modified);
             if (newId && newId !== gyazoId) {
-              // Espera o processamento assíncrono do OCR (~10s comprovado).
+              // Espera o processamento assíncrono do OCR (~10s comprovado),
+              // respeitando o orçamento (mínimo 15s guardados p/ Tesseract).
               for (const ms of [2000, 4000, 6000]) {
-                await new Promise(r => setTimeout(r, ms));
+                if (left() < 20_000) break;
+                await new Promise(r => setTimeout(r, Math.min(ms, Math.max(0, left() - 15_000))));
                 ocrText = await gyazoOcr(newId);
                 if (ocrText.length >= 3) break;
               }
@@ -173,8 +181,8 @@ export async function POST(req: NextRequest) {
       if (ocrText.length < 3 && uploadedId && uploadedId !== gyazoId) {
         const waits = [2000, 4000, 6000];
         for (const ms of waits) {
-          if (ocrText.length >= 3) break;
-          await new Promise(r => setTimeout(r, ms));
+          if (ocrText.length >= 3 || left() < 15_000) break;
+          await new Promise(r => setTimeout(r, Math.min(ms, Math.max(0, left() - 12_000))));
           ocrText = await gyazoOcr(uploadedId);
         }
       }
