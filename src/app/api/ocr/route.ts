@@ -87,6 +87,22 @@ async function tesseractOcr(processed: Buffer): Promise<string> {
   catch { return ""; }
 }
 
+// DIAGNÓSTICO TEMPORÁRIO (remover): verifica token/OCR em produção.
+export async function GET(req: NextRequest) {
+  const tok = process.env.GYAZO_ACCESS_TOKEN || "";
+  const tail = tok.slice(-4);
+  const t0 = Date.now();
+  let ocrLen = -1, ocrStatus = -1;
+  try {
+    const r = await fetch(`https://api.gyazo.com/api/images/2d5209eebe508258b0dffc128b7fb6b0`, { headers: { Authorization: `Bearer ${tok}` } });
+    ocrStatus = r.status;
+    const d = await r.json();
+    const t = (d.metadata?.ocr?.description || d.ocr?.description || "").trim();
+    ocrLen = t.length;
+  } catch (e) { ocrLen = -2; }
+  return NextResponse.json({ tokenTail: tail, tokenLen: tok.length, ocrStatus, ocrLen, ms: Date.now() - t0 });
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!isAuthed(req)) {
