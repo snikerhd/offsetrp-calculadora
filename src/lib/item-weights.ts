@@ -154,6 +154,10 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "parafusos", displayName: "Parafusos", unitKg: 0.2, category: "crafting", illegal: false },
 
   // ── Outros ──
+  { name: "colchao velho", displayName: "Colchão Velho", unitKg: 0.3, category: "outro", illegal: false },
+  { name: "disco satelite", displayName: "Disco Satélite", unitKg: 0.3, category: "outro", illegal: false },
+  { name: "motor avariado", displayName: "Motor Avariado", unitKg: 0.3, category: "outro", illegal: false },
+  { name: "restos eletronicos", displayName: "Restos Eletrónicos", unitKg: 0.5, category: "outro", illegal: false },
   { name: "dinheiro", displayName: "Dinheiro", unitKg: 0.00001, category: "outro", illegal: false },
   { name: "saco plastico", displayName: "Saco Plástico", unitKg: 0.1, category: "outro", illegal: false },
   { name: "nitro", displayName: "Nitro", unitKg: 1, category: "outro", illegal: true },
