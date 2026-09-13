@@ -503,24 +503,10 @@ function fallbackForPair(p: Pair, unidentified: boolean, groupItems?: Set<string
         };
       }
     }
-    // Só adivinha pelo peso se o peso for pouco ambíguo: com muitos itens no
-    // catálogo a partilhar o mesmo peso unitário (0,1 kg tem mais de uma
-    // dúzia), atribuir o primeiro é quase sempre errado — melhor marcar como
-    // não identificado do que inventar um item.
-    const candidates = ITEM_CATALOG.filter((x) => weightClose(u, x.unitKg));
-    if (candidates.length > 0 && candidates.length <= 6) {
-      const def = candidates[0];
-      const c = confidence(u, def.unitKg, false);
-      return {
-        item: def.name,
-        qty: p.qty,
-        kg: p.kg,
-        unitKg: def.unitKg,
-        confidence: c,
-        confidenceLevel: level(c),
-        matchReason: `Peso reconhecido: ${p.kg} kg = ${p.qty} × ${def.unitKg} kg`,
-      };
-    }
+    // Só usa nomes visíveis na própria captura (groupItems). Adivinhar só pelo
+    // peso é perigoso: com tantos itens a partilhar pesos no catálogo, inventa
+    // itens ilegais à toa (ex. Águia de Bronze para um par 2.0 kg sem nome).
+    // Sem nome, fica "não identificado" — mais honesto e sem falsos positivos.
   }
   return {
     item: `item nao identificado (${Math.round(u * 100) / 100} kg/un)`,
