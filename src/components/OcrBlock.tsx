@@ -251,13 +251,16 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       // 1ª: Puter no browser (popup de login na 1ª utilização; free unlimited
       // para o dono do site). 2ª: Tesseract no browser com pré-processamento.
       // 3ª: cadeia do servidor.
-      let clientText = (await puterClientOcr(ocrUrl.trim())).text;
-      if (!clientText || looksLikeHostError(clientText) || looksLikeGarbage(clientText)) {
-        clientText = await tesseractClientOcr(await preprocessForOcr(ocrUrl.trim()));
+      let clientText = (await puterClientOcr(ocrUrl.trim()));
+      let puterReason = clientText.reason;
+      if (!clientText.text || looksLikeHostError(clientText.text) || looksLikeGarbage(clientText.text)) {
+        setOcrStatus(`🔍 Puter: ${puterReason || "texto não utilizado"} — a tentar Tesseract no browser...`);
+        clientText = { text: await tesseractClientOcr(await preprocessForOcr(ocrUrl.trim())), reason: "" };
       }
-      if (clientText.length >= 3 && !looksLikeHostError(clientText) && !looksLikeGarbage(clientText)) {
-        setOcrRawText(clientText);
-        data = await runServerOcr({ rawText: clientText });
+      const urlText = clientText.text || "";
+      if (urlText.length >= 3 && !looksLikeHostError(urlText) && !looksLikeGarbage(urlText)) {
+        setOcrRawText(urlText);
+        data = await runServerOcr({ rawText: urlText });
       } else {
         setOcrStatus("🔍 OCR no browser falhou — a tentar no servidor...");
         data = await runServerOcr({ imageUrl: ocrUrl.trim() });
@@ -293,13 +296,16 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
           let data;
           // Mesma ordem: Puter client (popup na 1ª utilização) → Tesseract
           // client (com pré-processamento) → servidor.
-          let clientText = (await puterClientOcr(dataUrl)).text;
-          if (!clientText || looksLikeHostError(clientText) || looksLikeGarbage(clientText)) {
-            clientText = await tesseractClientOcr(await preprocessForOcr(dataUrl));
+          let clientText = (await puterClientOcr(dataUrl));
+          const puterReason = clientText.reason;
+          if (!clientText.text || looksLikeHostError(clientText.text) || looksLikeGarbage(clientText.text)) {
+            setOcrStatus(`🔍 Puter: ${puterReason || "texto não utilizado"} — a tentar Tesseract no browser...`);
+            clientText = { text: await tesseractClientOcr(await preprocessForOcr(dataUrl)), reason: "" };
           }
-          if (clientText.length >= 3 && !looksLikeHostError(clientText) && !looksLikeGarbage(clientText)) {
-            setOcrRawText(clientText);
-            data = await runServerOcr({ rawText: clientText });
+          const fileText = clientText.text || "";
+          if (fileText.length >= 3 && !looksLikeHostError(fileText) && !looksLikeGarbage(fileText)) {
+            setOcrRawText(fileText);
+            data = await runServerOcr({ rawText: fileText });
           } else {
             setOcrStatus("🔍 OCR no browser falhou — a tentar no servidor...");
             data = await runServerOcr({ imageBase64: match[2], mimeType: match[1] });
