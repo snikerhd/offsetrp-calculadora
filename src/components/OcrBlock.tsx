@@ -248,12 +248,12 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       // 1ª tentativa: Puter no browser (keyless). Se não devolver texto útil,
       // cai para a cadeia completa do servidor.
       let data;
-      // 1ª: Tesseract no browser (free unlimited, sem contas), com
-      // pré-processamento (ampliar + cinzentos + inverter fundo escuro).
-      // 2ª: Puter no browser. 3ª: cadeia do servidor.
-      let clientText = await tesseractClientOcr(await preprocessForOcr(ocrUrl.trim()));
+      // 1ª: Puter no browser (popup de login na 1ª utilização; free unlimited
+      // para o dono do site). 2ª: Tesseract no browser com pré-processamento.
+      // 3ª: cadeia do servidor.
+      let clientText = (await puterClientOcr(ocrUrl.trim())).text;
       if (!clientText || looksLikeHostError(clientText) || looksLikeGarbage(clientText)) {
-        clientText = (await puterClientOcr(ocrUrl.trim())).text;
+        clientText = await tesseractClientOcr(await preprocessForOcr(ocrUrl.trim()));
       }
       if (clientText.length >= 3 && !looksLikeHostError(clientText) && !looksLikeGarbage(clientText)) {
         setOcrRawText(clientText);
@@ -291,11 +291,11 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         try {
           // 1ª tentativa: Puter no browser (keyless) sobre o data URL local.
           let data;
-          // Mesma ordem: Tesseract client (com pré-processamento) → Puter
-          // client → servidor.
-          let clientText = await tesseractClientOcr(await preprocessForOcr(dataUrl));
+          // Mesma ordem: Puter client (popup na 1ª utilização) → Tesseract
+          // client (com pré-processamento) → servidor.
+          let clientText = (await puterClientOcr(dataUrl)).text;
           if (!clientText || looksLikeHostError(clientText) || looksLikeGarbage(clientText)) {
-            clientText = (await puterClientOcr(dataUrl)).text;
+            clientText = await tesseractClientOcr(await preprocessForOcr(dataUrl));
           }
           if (clientText.length >= 3 && !looksLikeHostError(clientText) && !looksLikeGarbage(clientText)) {
             setOcrRawText(clientText);
