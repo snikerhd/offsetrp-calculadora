@@ -32,6 +32,7 @@ interface DetectedWeight {
 
 export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentColor, onResult, mode = "relatorio" }: OcrBlockProps) {
   const [ocrUrl, setOcrUrl] = useState("");
+  const [ocrPaste, setOcrPaste] = useState("");
   const [ocrProcessing, setOcrProcessing] = useState(false);
   const [ocrStatus, setOcrStatus] = useState("");
   const [ocrPreview, setOcrPreview] = useState<string | null>(null);
@@ -153,6 +154,27 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     }
   }, [ocrUrl, handleResult, runServerOcr]);
 
+  // Fluxo Google Lens: colas o link → botão Lens → "Copiar texto" no Lens →
+  // colas o texto aqui → o servidor parseia (rawText, sem OCR nem chaves).
+  const handlePasteText = useCallback(async () => {
+    const txt = ocrPaste.trim();
+    if (!txt) return;
+    setOcrProcessing(true);
+    setOcrPreview(null);
+    setOcrRawText("");
+    setOcrWeights([]);
+    setOcrWeapon(null);
+    setOcrStatus("🔍 A processar texto colado...");
+    try {
+      const data = await runServerOcr({ rawText: txt });
+      if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
+      handleResult(data);
+    } catch (error) {
+      setOcrStatus(`❌ ${error instanceof Error ? error.message : "Erro desconhecido"}`);
+      setOcrProcessing(false);
+    }
+  }, [ocrPaste, handleResult, runServerOcr]);
+
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -238,6 +260,22 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
             Clica para selecionar ficheiro
           </button>
         </div>
+      </div>
+
+      {/* Colar texto (Google Lens / ShareX) */}
+      <div className="mb-3">
+        <label className="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">🅲 Ou cola o texto (Google Lens → Copiar texto)</label>
+        <textarea
+          value={ocrPaste}
+          onChange={(e) => setOcrPaste(e.target.value)}
+          placeholder={"1 (0.7)\t81 (8.1)\t1 (5.0)…\nou: 2 Tigre, 81 Bandagem, 44168 Dinheiro"}
+          rows={3}
+          disabled={ocrProcessing}
+          className={`${inputCls} resize-y font-mono`}
+        />
+        <button onClick={handlePasteText} disabled={ocrProcessing || !ocrPaste.trim()} className={`mt-1 px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer disabled:opacity-50`}>
+          {ocrProcessing ? "..." : "Processar texto"}
+        </button>
       </div>
 
       {/* Status */}
