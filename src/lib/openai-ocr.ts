@@ -72,9 +72,12 @@ function isExhaustedKey(err: unknown): boolean {
 // OCR.space (api.ocr.space/parse/image) — free tier com key, até 25.000
 // pedidos/mês (500 requests/dia por key free). Lê bem fontes estilizadas
 // que o Tesseract apanha mal. Devolve "" em falha (o chamador segue a cadeia).
+// Causa da última falha (aparece no diagnóstico do erro no browser).
+export let lastOcrSpaceError = "";
 export async function ocrSpaceOcr(imageBase64: string, timeoutMs = 20_000): Promise<string> {
+  lastOcrSpaceError = "";
   const apiKey = process.env.OCRSPACE_API_KEY || process.env.OCRSPACE_API_KEY_2 || "";
-  if (!apiKey) return "";
+  if (!apiKey) { lastOcrSpaceError = "sem OCRSPACE_API_KEY"; return ""; }
   // Sem timeout o pedido podia ficar pendurado até a plataforma cortar (504).
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -93,7 +96,9 @@ export async function ocrSpaceOcr(imageBase64: string, timeoutMs = 20_000): Prom
       signal: controller.signal,
     });
     if (!resp.ok) {
-      console.error("OCR.space HTTP", resp.status, (await resp.text().catch(() => "")).slice(0, 200));
+      const body = (await resp.text().catch(() => "")).slice(0, 200);
+      lastOcrSpaceError = `HTTP ${resp.status}: ${body}`;
+      console.error("OCR.space HTTP", resp.status, body);
       return "";
     }
     const data = (await resp.json()) as {
@@ -103,11 +108,15 @@ export async function ocrSpaceOcr(imageBase64: string, timeoutMs = 20_000): Prom
     };
     if (data.IsErroredOnProcessing) {
       const msg = Array.isArray(data.ErrorMessage) ? data.ErrorMessage.join("; ") : data.ErrorMessage;
+      lastOcrSpaceError = `erro: ${msg || "?"}`;
       console.error("OCR.space erro:", msg);
       return "";
     }
-    return (data.ParsedResults || []).map((r) => r.ParsedText || "").join("\n").trim();
+    const text = (data.ParsedResults || []).map((r) => r.ParsedText || "").join("\n").trim();
+    if (!text) lastOcrSpaceError = "resposta sem texto";
+    return text;
   } catch (err) {
+    lastOcrSpaceError = err instanceof Error ? err.message : String(err);
     console.error("OCR.space falhou:", err);
     return "";
   } finally {

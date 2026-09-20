@@ -4,9 +4,8 @@ import { tmpdir } from "os";
 import { copyFileSync, existsSync, mkdirSync } from "fs";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { gyazoOcr, uploadToGyazo, extractGyazoId } from "@/lib/gyazo-ocr";
-import { ocrSpaceOcr } from "@/lib/openai-ocr";
-import { openaiOcr } from "@/lib/openai-ocr";
-import { puterOcr } from "@/lib/puter-ocr";
+import { ocrSpaceOcr, openaiOcr, lastOcrSpaceError } from "@/lib/openai-ocr";
+import { puterOcr, lastPuterError } from "@/lib/puter-ocr";
 import { isAuthed } from "@/lib/auth";
 
 // O OCR do Gyazo parte nomes como "CAIXA ELETRÓNICOS" em duas linhas
@@ -51,6 +50,8 @@ const GYAZO_COOLDOWN_MS = 60_000;
 // Trace da última execução (até onde o pedido chegou) — fica nos logs do
 // runtime da Vercel quando o browser só recebe um 504 opaco.
 let lastRunTrace = "";
+// Causa da última falha do Tesseract (worker/recognize/timeout).
+let lastTesseractError = "";
 // Orçamento global de wall-time do pedido (função Vercel ~60s). Começa no
 // início do POST e governa TODOS os motores — cada um só corre se existir
 // tempo para o seu timeout + folga, garantindo que a resposta JSON sai
@@ -111,9 +112,17 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   try { return await fetch(url, { ...init, signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", ...(init.headers || {}) } }); } finally { clearTimeout(timer); }
 }
 async function tesseractOcr(processed: Buffer, timeoutMs: number): Promise<string> {
+  lastTesseractError = "";
   const job = (async (): Promise<string> => {
-    try { const worker = await getWorker(); if (!worker) return ""; const { data } = await worker.recognize(processed); return (data.text || "").trim(); }
-    catch { return ""; }
+    try {
+      const worker = await getWorker();
+      if (!worker) { lastTesseractError = "import tesseract.js falhou (ver logs)"; return ""; }
+      const { data } = await worker.recognize(processed);
+      return (data.text || "").trim();
+    } catch (e) {
+      lastTesseractError = (e instanceof Error ? e.message : String(e)).slice(0, 100);
+      return "";
+    }
   })();
   let timedOut = false;
   const timer = new Promise<string>((resolve) => { setTimeout(() => { timedOut = true; resolve(""); }, timeoutMs); });
@@ -125,6 +134,7 @@ async function tesseractOcr(processed: Buffer, timeoutMs: number): Promise<strin
     // devolve de imediato; o worker é recriado na próxima chamada.
     void workerPromise?.then((w) => w?.terminate?.()).catch(() => {});
     workerPromise = null;
+    lastTesseractError = `timeout ${Math.round(timeoutMs / 1000)}s`;
     console.error("tesseract: timeout — worker terminado");
   }
   return result;
@@ -286,9 +296,9 @@ export async function POST(req: NextRequest) {
         ? "gyazo:down(cooldown)"
         : gyazoId ? "gyazo-metadata:sem-ocr" : "sem-link-gyazo";
       const diag = [
-        ocrspaceTried ? "ocrspace:falhou" : "ocrspace:sem-tempo",
-        tesseractTried ? "tesseract:falhou" : "tesseract:sem-tempo",
-        puterTried ? "puter-http:falhou" : "puter-http:sem-tempo",
+        ocrspaceTried ? `ocrspace:falhou(${lastOcrSpaceError || "sem texto"})` : "ocrspace:sem-tempo",
+        tesseractTried ? `tesseract:falhou(${lastTesseractError || "sem texto"})` : "tesseract:sem-tempo",
+        puterTried ? `puter-http:falhou(${lastPuterError || "sem texto"})` : "puter-http:sem-tempo",
         gyazoState,
       ].join(" | ");
       console.error(`OCR esgotado [${diag}] imagem=${base64Data.length}b`);

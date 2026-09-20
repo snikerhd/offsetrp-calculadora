@@ -5,9 +5,12 @@
 // está configurado ou a chamada falha.
 const PUTER_API = process.env.PUTER_API_ORIGIN || "https://api.puter.com";
 
+// Causa da última falha (aparece no diagnóstico do erro no browser).
+export let lastPuterError = "";
 export async function puterOcr(imageBase64: string, timeoutMs = 10_000): Promise<string> {
+  lastPuterError = "";
   const token = process.env.PUTER_AUTH_TOKEN;
-  if (!token || token.length < 10) return "";
+  if (!token || token.length < 10) { lastPuterError = "sem PUTER_AUTH_TOKEN"; return ""; }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -25,9 +28,9 @@ export async function puterOcr(imageBase64: string, timeoutMs = 10_000): Promise
         auth_token: token,
       }),
     });
-    if (!resp.ok) return "";
+    if (!resp.ok) { lastPuterError = `HTTP ${resp.status}`; return ""; }
     const data = await resp.json();
-    if (!data || data.success === false) return "";
+    if (!data || data.success === false) { lastPuterError = `HTTP ${resp.status} success:false`; return ""; }
 
     const r = data.result ?? data;
     if (Array.isArray(r.blocks) && r.blocks.length) {
@@ -51,8 +54,10 @@ export async function puterOcr(imageBase64: string, timeoutMs = 10_000): Promise
     }
     if (typeof r.document_annotation === "string") return r.document_annotation.trim();
     if (typeof r.text === "string") return r.text.trim();
+    lastPuterError = "resposta sem texto";
     return "";
   } catch (error) {
+    lastPuterError = error instanceof Error ? error.message : String(error);
     console.error("Puter HTTP OCR error:", error);
     return "";
   } finally {
