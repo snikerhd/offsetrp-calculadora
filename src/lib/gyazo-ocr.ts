@@ -2,7 +2,8 @@
 // Devolve os metadados da captura, incluindo o campo `ocr` (texto extraído
 // pelo OCR do Gyazo nas capturas da tua conta — Gyazo Pro). O token vem da
 // env var GYAZO_ACCESS_TOKEN. Se não houver token ou o texto não existir,
-// devolve "" e o chamador cai para o Tesseract local.
+// devolve "" e o chamador usa os motores alternativos (OpenAI/Puter). O Gyazo
+// é motor secundário: só corre quando o Tesseract local não extrai texto.
 const GYAZO_API = process.env.GYAZO_API_ORIGIN || "https://api.gyazo.com";
 const GYAZO_UPLOAD = process.env.GYAZO_UPLOAD_ORIGIN || "https://upload.gyazo.com";
 const GYAZO_TIMEOUT_MS = 15_000;

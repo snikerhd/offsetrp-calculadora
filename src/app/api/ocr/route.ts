@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { join } from "path";
-import { existsSync, mkdirSync } from "fs";
+import { tmpdir } from "os";
+import { copyFileSync, existsSync, mkdirSync } from "fs";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { gyazoOcr, uploadToGyazo, extractGyazoId } from "@/lib/gyazo-ocr";
+import { openaiOcr } from "@/lib/openai-ocr";
+import { puterOcr } from "@/lib/puter-ocr";
 import { isAuthed } from "@/lib/auth";
 
 // O OCR do Gyazo parte nomes como "CAIXA ELETRÓNICOS" em duas linhas
@@ -26,8 +29,27 @@ export const maxDuration = 60;
 export const runtime = "nodejs";
 
 const IMAGE_FETCH_TIMEOUT_MS = 20_000;
-const TESS_CACHE_PATH = join(process.cwd(), ".cache", "tessdata");
-try { mkdirSync(TESS_CACHE_PATH, { recursive: true }); } catch {}
+// Dados de língua do Tesseract: `por.traineddata` está commitado na raiz do
+// projeto. É copiado para a pasta de cache do worker na primeira execução
+// (em /tmp no Vercel, porque o resto do filesystem é read-only), para o OCR
+// funcionar sem depender da rede (CDN do jsdelivr) nem do Gyazo.
+const TESS_CACHE_PATH = process.env.VERCEL ? join(tmpdir(), "tessdata") : join(process.cwd(), ".cache", "tessdata");
+const LOCAL_TRAINEDDATA = join(process.cwd(), "por.traineddata");
+try {
+  mkdirSync(TESS_CACHE_PATH, { recursive: true });
+  const cached = join(TESS_CACHE_PATH, "por.traineddata");
+  if (!existsSync(cached) && existsSync(LOCAL_TRAINEDDATA)) copyFileSync(LOCAL_TRAINEDDATA, cached);
+} catch {}
+
+// Circuit breaker do Gyazo (motor SECUNDÁRIO — o primário é o Tesseract
+// local): se o upload/metadados falharem (serviço em baixo, ex.: HTTP 502 no
+// upload.gyazo.com), evita martelar o Gyazo durante 60s e responde via
+// Tesseract em vez de esgotar o orçamento de tempo com retries inúteis.
+let gyazoDownUntil = 0;
+const GYAZO_COOLDOWN_MS = 60_000;
+// Orçamento de wall-time do pedido para a fase Gyazo (função Vercel ~60s;
+// o download da imagem e o Tesseract primário correm antes e consomem parte).
+const REQUEST_BUDGET_MS = 45_000;
 
 type SharpModule = typeof import("sharp");
 type Sharp = { default?: SharpModule } & SharpModule;
@@ -122,40 +144,36 @@ export async function POST(req: NextRequest) {
       base64Data = Buffer.from(await r.arrayBuffer()).toString("base64"); mimeType = r.headers.get("content-type") || "image/png";
     } else return NextResponse.json({ error: "imageUrl ou imageBase64 necessário" }, { status: 400 });
     const preview = `data:${mimeType};base64,${base64Data}`;
-    // Motor principal: OCR do Gyazo (usa a tua conta via GYAZO_ACCESS_TOKEN).
-    // - Link gyazo.com -> pede o OCR diretamente dos metadados da captura.
-    // - Upload local / outro link -> faz upload para a tua conta Gyazo e depois
-    //   usa o OCR deles (o OCR do Gyazo só existe em capturas da tua conta).
-    // Fallback final: Tesseract local.
+    const requestStartedAt = Date.now();
+    // Motor PRIMÁRIO: Tesseract local (offline — usa o por.traineddata
+    // commitado; funciona mesmo com o Gyazo em baixo).
     let ocrText = "";
+    {
+      const processed = await preprocessImage(base64Data);
+      ocrText = await tesseractOcr(processed);
+      if (ocrText.length >= 3) console.log("OCR: sucesso via Tesseract local (primário)");
+    }
     let gyazoId: string | null = null;
     if (imageUrl && typeof imageUrl === "string") {
       gyazoId = extractGyazoId(imageUrl) || null;
-      if (gyazoId) {
-        ocrText = await gyazoOcr(gyazoId);
-      }
     }
-            // Nota: o OCR do Gyazo processa-se de forma assíncrona (~10s) APÓS o upload
-    // via API — mesmo em contas free. Capturas feitas pelo desktop app podem não
-    // ter OCR. Estratégia: 1) tentar metadados do link; 2) sem OCR, FAZER UPLOAD
-    // da imagem para a conta (dispara o processamento de OCR); 3) se o Gyazo
-    // devolver a mesma captura (dedup de imagem idêntica, sem OCR), modifica a
-    // imagem ligeiramente (1 canal) e volta a subir — a captura nova ganha OCR.
-    // 4) fallback final: Tesseract local.
-    if (ocrText.length < 3) {
-      // Orçamento de tempo global: o Gyazo pode precisar de vários retries
-      // (upload + esperas + metadados), mas a função tem um limite de wall-time
-      // (504 se passar). Reservamos sempre espaço para o Tesseract local correr.
-      const startedAt = Date.now();
-      // 38s para a fase Gyazo (uploads + esperas) e ~20s reservados para o
-      // Tesseract local — a função tem um limite de wall-time (~60s), e passar
-      // desse limite devolve HTTP 504 ao cliente.
-      const BUDGET_MS = 38_000;
-      const left = () => BUDGET_MS - (Date.now() - startedAt);
+    // Motor SECUNDÁRIO: OCR do Gyazo (usa a tua conta via GYAZO_ACCESS_TOKEN),
+    // só se o Tesseract não conseguir:
+    // - Link gyazo.com -> pede o OCR dos metadados da captura.
+    // - Upload local / outro link -> faz upload para a tua conta Gyazo (o OCR
+    //   deles processa de forma assíncrona, ~10s) e re-tenta com esperas.
+    // Fallbacks finais: OpenAI/Puter (se houver chaves em .env).
+    const left = () => REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
+    if (ocrText.length < 3 && Date.now() >= gyazoDownUntil && left() > 25_000) {
+      // Orçamento de tempo: conta desde o INÍCIO do pedido — o Tesseract
+      // primário e o download da imagem já gastaram parte do wall-time da
+      // função (~60s no Vercel; 504 se passar). Reserva folga para terminar.
       const buf = Buffer.from(base64Data, "base64");
-      const uploadedId = gyazoId ?? (left() > 20_000 ? await uploadToGyazo(buf) : null);
+      let attempted = false;
+      let uploadedId: string | null = gyazoId;
+      if (!uploadedId && left() > 20_000) { attempted = true; uploadedId = await uploadToGyazo(buf); }
       const targetId = uploadedId ?? gyazoId;
-      if (targetId && left() > 15_000) ocrText = await gyazoOcr(targetId);
+      if (targetId && left() > 15_000) { attempted = true; ocrText = await gyazoOcr(targetId); }
       // Dedup: se o upload devolveu o MESMO id do link original e ele não tem
       // OCR, o Gyazo não vai processar — modifica a imagem e sobe como nova.
       if (ocrText.length < 3 && gyazoId && uploadedId === gyazoId && left() > 35_000) {
@@ -189,19 +207,22 @@ export async function POST(req: NextRequest) {
           ocrText = await gyazoOcr(uploadedId);
         }
       }
+      // Gyazo continua sem OCR após todas as tentativas reais — provável
+      // serviço em baixo. Arma o cooldown para as próximas chamadas ficarem
+      // no motor primário (Tesseract) em vez de repetir uploads que falham.
+      if (ocrText.length < 3 && attempted) gyazoDownUntil = Date.now() + GYAZO_COOLDOWN_MS;
     }
+    // Fallbacks finais (usam chaves em .env se existirem; devolvem ""
+    // imediatamente quando não estão configurados).
+    if (ocrText.length < 3) ocrText = await openaiOcr(base64Data);
+    if (ocrText.length < 3) ocrText = await puterOcr(base64Data);
     if (ocrText.length < 3) {
-      const processed = await preprocessImage(base64Data);
-      ocrText = await tesseractOcr(processed);
-      if (ocrText.length >= 3) console.log("OCR: recuperado via Tesseract local");
-    }
-    if (ocrText.length < 3) {
-      const diag = [
-        gyazoId ? "gyazo-metadata:sem-ocr" : "sem-link-gyazo",
-        "tesseract:falhou",
-      ].join(" | ");
+      const gyazoState = Date.now() < gyazoDownUntil
+        ? "gyazo:down(cooldown)"
+        : gyazoId ? "gyazo-metadata:sem-ocr" : "sem-link-gyazo";
+      const diag = ["tesseract:falhou", gyazoState].join(" | ");
       console.error(`OCR esgotado [${diag}] imagem=${base64Data.length}b`);
-      return NextResponse.json({ result: "", ocrRaw: "", preview, error: `Não foi possível extrair texto da imagem (${diag}). Tenta: 1) colar de novo o link Gyazo (confirma que abre no browser e é uma captura NOVA); 2) fazer upload da screenshot diretamente; 3) esperar ~15s e voltar a tentar (o OCR do Gyazo processa de forma assíncrona).` });
+      return NextResponse.json({ result: "", ocrRaw: "", preview, error: `Não foi possível extrair texto da imagem (${diag}). O OCR local e o Gyazo falharam — tenta: 1) upload de uma screenshot mais nítida/completa; 2) colar de novo o link Gyazo daqui a ~1 minuto (pode estar em baixo — status.gyazo.com); 3) colar o texto manualmente.` });
     }
     const parsed = parseInventoryOCR(mergeCaixaMultiline(ocrText), { includeWeapon });
     return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: ocrText, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });

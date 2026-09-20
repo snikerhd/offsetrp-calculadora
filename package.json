@@ -6,7 +6,9 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:ocr": "node scripts/test-ocr-live.mjs",
+    "test:ocr:e2e": "node scripts/test-ocr-e2e.mjs"
   },
   "dependencies": {
     "@heyputer/puter.js": "^2.6.1",
