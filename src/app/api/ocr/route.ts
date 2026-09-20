@@ -149,11 +149,13 @@ export async function POST(req: NextRequest) {
     } else return NextResponse.json({ error: "imageUrl ou imageBase64 necessário" }, { status: 400 });
     const preview = `data:${mimeType};base64,${base64Data}`;
     const requestStartedAt = Date.now();
-    // Motor PRIMÁRIO: Puter (ai-ocr via API HTTP — usa PUTER_AUTH_TOKEN).
+    // Motor PRIMÁRIO: OCR.space (melhor qualidade nas fontes estilizadas do
+    // jogo; key em OCRSPACE_API_KEY, free 500 req/dia). Se a key falhar/estar
+    // ausente, devolve "" e cai para os motores seguintes.
     let ocrText = "";
     {
-      ocrText = await puterOcr(base64Data);
-      if (ocrText.length >= 3) console.log("OCR: sucesso via Puter (primário)");
+      ocrText = await ocrSpaceOcr(base64Data);
+      if (ocrText.length >= 3) console.log("OCR: sucesso via OCR.space (primário)");
     }
     // Motor SECUNDÁRIO: Tesseract local (offline — usa o por.traineddata
     // commitado; funciona mesmo sem rede/chaves).
@@ -162,10 +164,10 @@ export async function POST(req: NextRequest) {
       ocrText = await tesseractOcr(processed);
       if (ocrText.length >= 3) console.log("OCR: sucesso via Tesseract local (secundário)");
     }
-    // Motor OCR.space (com key): lê fontes estilizadas que o Tesseract apanha mal.
+    // Motor TERCIÁRIO: Puter HTTP (ai-ocr via API — usa PUTER_AUTH_TOKEN).
     if (ocrText.length < 3) {
-      ocrText = await ocrSpaceOcr(base64Data);
-      if (ocrText.length >= 3) console.log("OCR: sucesso via OCR.space (terciário)");
+      ocrText = await puterOcr(base64Data);
+      if (ocrText.length >= 3) console.log("OCR: sucesso via Puter (terciário)");
     }
     let gyazoId: string | null = null;
     if (imageUrl && typeof imageUrl === "string") {
@@ -233,7 +235,7 @@ export async function POST(req: NextRequest) {
       const gyazoState = Date.now() < gyazoDownUntil
         ? "gyazo:down(cooldown)"
         : gyazoId ? "gyazo-metadata:sem-ocr" : "sem-link-gyazo";
-      const diag = ["puter:falhou", "tesseract:falhou", gyazoState].join(" | ");
+      const diag = ["ocrspace:falhou", "tesseract:falhou", "puter-http:falhou", gyazoState].join(" | ");
       console.error(`OCR esgotado [${diag}] imagem=${base64Data.length}b`);
       return NextResponse.json({ result: "", ocrRaw: "", preview, error: `Não foi possível extrair texto da imagem (${diag}). O OCR local e o Gyazo falharam — tenta: 1) upload de uma screenshot mais nítida/completa; 2) colar de novo o link Gyazo daqui a ~1 minuto (pode estar em baixo — status.gyazo.com); 3) colar o texto manualmente.` });
     }
