@@ -83,7 +83,7 @@ export async function openaiOcr(imageBase64: string): Promise<string> {
     }
   }
 
-  // Nenhuma chave OpenAI devolveu texto útil — o chamador cai para os motores
-  // de fallback (OCR.space / tesseract).
+  // Nenhuma chave OpenAI devolveu texto útil — o chamador esgota a cadeia
+  // de motores (Puter / Tesseract / Gyazo) antes de desistir.
   return "";
 }
