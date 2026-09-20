@@ -5,15 +5,18 @@
 // está configurado ou a chamada falha.
 const PUTER_API = process.env.PUTER_API_ORIGIN || "https://api.puter.com";
 
-export async function puterOcr(imageBase64: string): Promise<string> {
+export async function puterOcr(imageBase64: string, timeoutMs = 10_000): Promise<string> {
   const token = process.env.PUTER_AUTH_TOKEN;
   if (!token || token.length < 10) return "";
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const dataUrl = `data:image/jpeg;base64,${imageBase64}`;
     const resp = await fetch(`${PUTER_API}/drivers/call`, {
       method: "POST",
       headers: { "Content-Type": "text/plain;actually=json" },
+      signal: controller.signal,
       body: JSON.stringify({
         interface: "puter-ocr",
         driver: "ai-ocr",
@@ -52,5 +55,7 @@ export async function puterOcr(imageBase64: string): Promise<string> {
   } catch (error) {
     console.error("Puter HTTP OCR error:", error);
     return "";
+  } finally {
+    clearTimeout(timer);
   }
 }

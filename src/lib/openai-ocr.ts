@@ -18,12 +18,16 @@ Inclua a linha de peso total se existir. Não invente, não traduza, não expliq
 Responda apenas com o texto extraído.`;
 
 async function openaiVisionRequest(apiKey: string, imageBase64: string): Promise<string> {
-  const resp = await fetch(OPENAI_CHAT_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const resp = await fetch(OPENAI_CHAT_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
     body: JSON.stringify({
       model: OCR_MODEL,
       max_tokens: 4000,
@@ -53,6 +57,9 @@ async function openaiVisionRequest(apiKey: string, imageBase64: string): Promise
   const data = await resp.json();
   const text = data?.choices?.[0]?.message?.content;
   return (typeof text === "string" ? text : "").trim();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function isExhaustedKey(err: unknown): boolean {
@@ -65,9 +72,12 @@ function isExhaustedKey(err: unknown): boolean {
 // OCR.space (api.ocr.space/parse/image) — free tier com key, até 25.000
 // pedidos/mês (500 requests/dia por key free). Lê bem fontes estilizadas
 // que o Tesseract apanha mal. Devolve "" em falha (o chamador segue a cadeia).
-export async function ocrSpaceOcr(imageBase64: string): Promise<string> {
+export async function ocrSpaceOcr(imageBase64: string, timeoutMs = 20_000): Promise<string> {
   const apiKey = process.env.OCRSPACE_API_KEY || process.env.OCRSPACE_API_KEY_2 || "";
   if (!apiKey) return "";
+  // Sem timeout o pedido podia ficar pendurado até a plataforma cortar (504).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const body = new URLSearchParams({
       base64Image: `data:image/jpeg;base64,${imageBase64}`,
@@ -80,6 +90,7 @@ export async function ocrSpaceOcr(imageBase64: string): Promise<string> {
       method: "POST",
       headers: { apikey: apiKey, "Content-Type": "application/x-www-form-urlencoded" },
       body,
+      signal: controller.signal,
     });
     if (!resp.ok) {
       console.error("OCR.space HTTP", resp.status, (await resp.text().catch(() => "")).slice(0, 200));
@@ -99,19 +110,24 @@ export async function ocrSpaceOcr(imageBase64: string): Promise<string> {
   } catch (err) {
     console.error("OCR.space falhou:", err);
     return "";
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 // salta para a seguinte (e guarda a posição da última que funcionou).
 // Percorre as chaves em rotação até obter texto útil. Quando uma chave esgota,
 // salta para a seguinte (e guarda a posição da última que funcionou).
-export async function openaiOcr(imageBase64: string): Promise<string> {
+export async function openaiOcr(imageBase64: string, deadlineMs?: number): Promise<string> {
   if (OCR_KEYS.length === 0) return "";
 
   const start = lastWorkingKeyIndex >= 0 ? lastWorkingKeyIndex : 0;
   const order = Array.from({ length: OCR_KEYS.length }, (_, i) => (start + i) % OCR_KEYS.length);
 
   for (const idx of order) {
+    // Respeita o orçamento global do pedido: não inicia uma chamada nova
+    // se já não houver tempo para o timeout (12s) + folga.
+    if (deadlineMs && Date.now() > deadlineMs - 15_000) break;
     try {
       const text = await openaiVisionRequest(OCR_KEYS[idx], imageBase64);
       if (text.length >= 3) {

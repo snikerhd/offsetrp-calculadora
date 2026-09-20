@@ -29,7 +29,7 @@ function mergeCaixaMultiline(text: string): string {
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
-const IMAGE_FETCH_TIMEOUT_MS = 20_000;
+const IMAGE_FETCH_TIMEOUT_MS = 12_000;
 // Dados de língua do Tesseract: `por.traineddata` está commitado na raiz do
 // projeto. É copiado para a pasta de cache do worker na primeira execução
 // (em /tmp no Vercel, porque o resto do filesystem é read-only), para o OCR
@@ -48,9 +48,11 @@ try {
 // Tesseract em vez de esgotar o orçamento de tempo com retries inúteis.
 let gyazoDownUntil = 0;
 const GYAZO_COOLDOWN_MS = 60_000;
-// Orçamento de wall-time do pedido para a fase Gyazo (função Vercel ~60s;
-// o download da imagem e o Tesseract primário correm antes e consomem parte).
-const REQUEST_BUDGET_MS = 45_000;
+// Orçamento global de wall-time do pedido (função Vercel ~60s). Começa no
+// início do POST e governa TODOS os motores — cada um só corre se existir
+// tempo para o seu timeout + folga, garantindo que a resposta JSON sai
+// sempre antes do 504 da plataforma.
+const REQUEST_BUDGET_MS = 48_000;
 
 type SharpModule = typeof import("sharp");
 type Sharp = { default?: SharpModule } & SharpModule;
@@ -61,7 +63,7 @@ async function getSharp(): Promise<Sharp | null> {
   catch (e) { console.error("sharp import failed:", e); return null; }
 }
 
-type TesseractWorker = { recognize: (input: Buffer) => Promise<{ data: { text?: string } }> };
+type TesseractWorker = { recognize: (input: Buffer) => Promise<{ data: { text?: string } }>; terminate?: () => Promise<unknown> };
 let tesseractModule: typeof import("tesseract.js") | null = null;
 async function getTesseractModule(): Promise<typeof import("tesseract.js") | null> {
   if (tesseractModule) return tesseractModule;
@@ -105,13 +107,46 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), ms);
   try { return await fetch(url, { ...init, signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", ...(init.headers || {}) } }); } finally { clearTimeout(timer); }
 }
-async function tesseractOcr(processed: Buffer): Promise<string> {
-  try { const worker = await getWorker(); if (!worker) return ""; const { data } = await worker.recognize(processed); return (data.text || "").trim(); }
-  catch { return ""; }
+async function tesseractOcr(processed: Buffer, timeoutMs: number): Promise<string> {
+  const job = (async (): Promise<string> => {
+    try { const worker = await getWorker(); if (!worker) return ""; const { data } = await worker.recognize(processed); return (data.text || "").trim(); }
+    catch { return ""; }
+  })();
+  let timedOut = false;
+  const timer = new Promise<string>((resolve) => { setTimeout(() => { timedOut = true; resolve(""); }, timeoutMs); });
+  const result = await Promise.race([job, timer]);
+  if (timedOut) {
+    // Worker pendurado — termina-o para não bloquear pedidos futuros no
+    // mesmo processo (será recriado na próxima chamada).
+    try { const w = await workerPromise; await w?.terminate?.(); } catch {}
+    workerPromise = null;
+  }
+  return result;
+}
+// OCR.space free tem limite de ~1MB por pedido: imagens maiores são
+// recomprimidas (max 2000px, JPEG q82) para caber no limite e carregar mais
+// depressa (menos tempo de upload = menos risco de timeout).
+async function compressForOcrSpace(base64Data: string): Promise<string> {
+  if (base64Data.length <= 1_200_000) return base64Data;
+  const sharpFn = await getSharp();
+  if (!sharpFn) return base64Data;
+  try {
+    const s = sharpFn.default ?? sharpFn;
+    const buf = Buffer.from(base64Data, "base64");
+    const meta = await s(buf).metadata();
+    const w = meta.width || 0, h = meta.height || 0;
+    const scale = Math.min(1, 2000 / Math.max(w || 1, h || 1));
+    const out = await s(buf).resize(Math.round(Math.max(1, w * scale)), Math.round(Math.max(1, h * scale))).jpeg({ quality: 82 }).toBuffer();
+    return out.toString("base64");
+  } catch { return base64Data; }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    // Relógio global do pedido: todos os motores (incluindo downloads)
+    // respeitam este orçamento para nunca ultrapassar o limite da função.
+    const requestStartedAt = Date.now();
+    const left = () => REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
     if (!isAuthed(req)) {
       return NextResponse.json({ error: "Sessão inválida. Inicia sessão novamente." }, { status: 401 });
     }
@@ -148,25 +183,33 @@ export async function POST(req: NextRequest) {
       base64Data = Buffer.from(await r.arrayBuffer()).toString("base64"); mimeType = r.headers.get("content-type") || "image/png";
     } else return NextResponse.json({ error: "imageUrl ou imageBase64 necessário" }, { status: 400 });
     const preview = `data:${mimeType};base64,${base64Data}`;
-    const requestStartedAt = Date.now();
     // Motor PRIMÁRIO: OCR.space (melhor qualidade nas fontes estilizadas do
-    // jogo; key em OCRSPACE_API_KEY, free 500 req/dia). Se a key falhar/estar
-    // ausente, devolve "" e cai para os motores seguintes.
+    // jogo; key em OCRSPACE_API_KEY, free 500 req/dia). Timeout próprio +
+    // portão de tempo global: nenhum motor corre sem tempo para o seu timeout
+    // + folga, por isso o pedido nunca acaba em 504.
     let ocrText = "";
-    {
-      ocrText = await ocrSpaceOcr(base64Data);
+    let ocrspaceTried = false;
+    let tesseractTried = false;
+    let puterTried = false;
+    if (left() > 12_000) {
+      ocrspaceTried = true;
+      const input = await compressForOcrSpace(base64Data);
+      ocrText = await ocrSpaceOcr(input, Math.min(20_000, Math.max(8_000, left() - 18_000)));
       if (ocrText.length >= 3) console.log("OCR: sucesso via OCR.space (primário)");
     }
     // Motor SECUNDÁRIO: Tesseract local (offline — usa o por.traineddata
-    // commitado; funciona mesmo sem rede/chaves).
-    if (ocrText.length < 3) {
+    // commitado; funciona mesmo sem rede/chaves). Com timeout duro: um worker
+    // pendurado não pode consumir o orçamento da função.
+    if (ocrText.length < 3 && left() > 12_000) {
+      tesseractTried = true;
       const processed = await preprocessImage(base64Data);
-      ocrText = await tesseractOcr(processed);
+      ocrText = await tesseractOcr(processed, Math.min(20_000, Math.max(8_000, left() - 6_000)));
       if (ocrText.length >= 3) console.log("OCR: sucesso via Tesseract local (secundário)");
     }
     // Motor TERCIÁRIO: Puter HTTP (ai-ocr via API — usa PUTER_AUTH_TOKEN).
-    if (ocrText.length < 3) {
-      ocrText = await puterOcr(base64Data);
+    if (ocrText.length < 3 && left() > 12_000) {
+      puterTried = true;
+      ocrText = await puterOcr(base64Data, 10_000);
       if (ocrText.length >= 3) console.log("OCR: sucesso via Puter (terciário)");
     }
     let gyazoId: string | null = null;
@@ -179,7 +222,6 @@ export async function POST(req: NextRequest) {
     // - Upload local / outro link -> faz upload para a tua conta Gyazo (o OCR
     //   deles processa de forma assíncrona, ~10s) e re-tenta com esperas.
     // Fallbacks finais: OpenAI/Puter (se houver chaves em .env).
-    const left = () => REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
     if (ocrText.length < 3 && Date.now() >= gyazoDownUntil && left() > 25_000) {
       // Orçamento de tempo: conta desde o INÍCIO do pedido — o Tesseract
       // primário e o download da imagem já gastaram parte do wall-time da
@@ -230,12 +272,17 @@ export async function POST(req: NextRequest) {
     }
     // Fallbacks finais (usam chaves em .env se existirem; devolvem ""
     // imediatamente quando não estão configurados).
-    if (ocrText.length < 3) ocrText = await openaiOcr(base64Data);
+    if (ocrText.length < 3 && left() > 8_000) ocrText = await openaiOcr(base64Data, requestStartedAt + REQUEST_BUDGET_MS);
     if (ocrText.length < 3) {
       const gyazoState = Date.now() < gyazoDownUntil
         ? "gyazo:down(cooldown)"
         : gyazoId ? "gyazo-metadata:sem-ocr" : "sem-link-gyazo";
-      const diag = ["ocrspace:falhou", "tesseract:falhou", "puter-http:falhou", gyazoState].join(" | ");
+      const diag = [
+        ocrspaceTried ? "ocrspace:falhou" : "ocrspace:sem-tempo",
+        tesseractTried ? "tesseract:falhou" : "tesseract:sem-tempo",
+        puterTried ? "puter-http:falhou" : "puter-http:sem-tempo",
+        gyazoState,
+      ].join(" | ");
       console.error(`OCR esgotado [${diag}] imagem=${base64Data.length}b`);
       return NextResponse.json({ result: "", ocrRaw: "", preview, error: `Não foi possível extrair texto da imagem (${diag}). O OCR local e o Gyazo falharam — tenta: 1) upload de uma screenshot mais nítida/completa; 2) colar de novo o link Gyazo daqui a ~1 minuto (pode estar em baixo — status.gyazo.com); 3) colar o texto manualmente.` });
     }
