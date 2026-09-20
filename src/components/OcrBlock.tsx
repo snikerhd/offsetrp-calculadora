@@ -106,6 +106,14 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     }
   }, []);
 
+  // Alguns hosts (ex.: Imgur no UK) devolvem uma página de erro "Content not
+  // viewable in your region" em vez da imagem. O OCR "extrai" esse HTML como
+  // texto e pareceria um resultado válido. Deteta essas mensagens e trata-as
+  // como falha, para cair nos motores seguintes (servidor/Tesseract).
+  const looksLikeHostError = useCallback((t: string): boolean =>
+    /not\s+viewable|not\s+available\s+in\s+your\s+region|content\s+unavailable|region\s+(?:lock|block)|removed\s+from\s+imgur|40[34]\s+(?:not\s+)?found|forbidden|access\s+denied/i.test(t),
+  []);
+
   const handleResult = useCallback((data: {
     result?: string;
     preview?: string;
@@ -164,7 +172,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       // cai para a cadeia completa do servidor.
       let data;
       const clientText = await puterClientOcr(ocrUrl.trim());
-      if (clientText.length >= 3) {
+      if (clientText.length >= 3 && !looksLikeHostError(clientText)) {
         setOcrRawText(clientText);
         data = await runServerOcr({ rawText: clientText });
       } else {
@@ -201,7 +209,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
           // 1ª tentativa: Puter no browser (keyless) sobre o data URL local.
           let data;
           const clientText = await puterClientOcr(dataUrl);
-          if (clientText.length >= 3) {
+          if (clientText.length >= 3 && !looksLikeHostError(clientText)) {
             setOcrRawText(clientText);
             data = await runServerOcr({ rawText: clientText });
           } else {

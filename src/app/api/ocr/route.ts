@@ -119,7 +119,10 @@ export async function POST(req: NextRequest) {
     // Modo "coimas" (aba Coimas Rápidas): inclui a arma inspecionada + todo o
     // inventário. Modo "relatorio" (aba Relatórios): só balas/acessórios do popup.
     const includeWeapon = mode === "coimas";
-    if (rawText && typeof rawText === "string" && rawText.trim().length >= 3) {
+    // Texto que veio de um host bloqueado/erro (ex.: Imgur "Content not viewable
+    // in your region") não é inventário — rejeita para não "parsear" lixo.
+    const HOST_ERROR_RE = /not\s+viewable|not\s+available\s+in\s+your\s+region|content\s+unavailable|region\s+(?:lock|block)|removed\s+from\s+imgur|40[34]\s+(?:not\s+)?found|forbidden|access\s+denied/i;
+    if (rawText && typeof rawText === "string" && rawText.trim().length >= 3 && !HOST_ERROR_RE.test(rawText)) {
       const parsed = parseInventoryOCR(mergeCaixaMultiline(rawText.trim()), { includeWeapon });
       let rawPreview: string | undefined;
       if (imageUrl) {
