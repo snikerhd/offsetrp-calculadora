@@ -85,6 +85,32 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     return data;
   }, [mode]);
 
+  // OCR client-side via Tesseract.js (CDN, sem chaves/contas/limites — o mesmo
+  // motor que o servidor usa, mas no browser). Carrega o script à primeira e
+  // devolve "" em caso de falha (o chamador cai para o Puter/servidor).
+  const tesseractClientOcr = useCallback(async (src: string): Promise<string> => {
+    const w = window as unknown as { Tesseract?: { recognize: (img: string, lang: string) => Promise<{ data?: { text?: string } }> } };
+    if (!w.Tesseract) {
+      await new Promise<void>((resolve) => {
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+        s.onload = () => resolve();
+        s.onerror = () => resolve();
+        document.head.appendChild(s);
+        // Timeout de segurança: se o CDN estiver bloqueado, não fica pendente.
+        setTimeout(resolve, 15_000);
+      });
+    }
+    if (!w.Tesseract) return "";
+    try {
+      const out = await w.Tesseract.recognize(src, "por");
+      return out?.data?.text?.trim() || "";
+    } catch (err) {
+      console.warn("Tesseract client OCR falhou:", err);
+      return "";
+    }
+  }, []);
+
   // OCR client-side via puter.js (https://developer.puter.com/tutorials/free-unlimited-ocr-api/):
   // keyless e grátis (modelo user-pays — usa o saldo do visitante). Espera até
   // ~5s pelo script async do layout; devolve "" se indisponível ou falhar, e o
@@ -174,12 +200,17 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       // 1ª tentativa: Puter no browser (keyless). Se não devolver texto útil,
       // cai para a cadeia completa do servidor.
       let data;
-      const { text: clientText, reason: puterReason } = await puterClientOcr(ocrUrl.trim());
+      // 1ª: Tesseract no browser (free unlimited, sem contas). 2ª: Puter no
+      // browser (keyless, mas exige conta/região OK). 3ª: cadeia do servidor.
+      let clientText = await tesseractClientOcr(ocrUrl.trim());
+      if (!clientText || looksLikeHostError(clientText)) {
+        clientText = (await puterClientOcr(ocrUrl.trim())).text;
+      }
       if (clientText.length >= 3 && !looksLikeHostError(clientText)) {
         setOcrRawText(clientText);
         data = await runServerOcr({ rawText: clientText });
       } else {
-        setOcrStatus(`🔍 Puter indisponível (${puterReason || "erro de host"}) — a tentar OCR no servidor...`);
+        setOcrStatus("🔍 OCR no browser falhou — a tentar no servidor...");
         data = await runServerOcr({ imageUrl: ocrUrl.trim() });
       }
       if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
@@ -189,7 +220,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       setOcrStatus(`❌ ${msg}`);
       setOcrProcessing(false);
     }
-  }, [ocrUrl, handleResult, runServerOcr, puterClientOcr]);
+  }, [ocrUrl, handleResult, runServerOcr, puterClientOcr, tesseractClientOcr]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -211,12 +242,16 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         try {
           // 1ª tentativa: Puter no browser (keyless) sobre o data URL local.
           let data;
-          const { text: clientText, reason: puterReason } = await puterClientOcr(dataUrl);
+          // Mesma ordem: Tesseract client → Puter client → servidor.
+          let clientText = await tesseractClientOcr(dataUrl);
+          if (!clientText || looksLikeHostError(clientText)) {
+            clientText = (await puterClientOcr(dataUrl)).text;
+          }
           if (clientText.length >= 3 && !looksLikeHostError(clientText)) {
             setOcrRawText(clientText);
             data = await runServerOcr({ rawText: clientText });
           } else {
-            setOcrStatus(`🔍 Puter indisponível (${puterReason || "erro de host"}) — a tentar OCR no servidor...`);
+            setOcrStatus("🔍 OCR no browser falhou — a tentar no servidor...");
             data = await runServerOcr({ imageBase64: match[2], mimeType: match[1] });
           }
           if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
@@ -229,7 +264,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       };
       reader.readAsDataURL(file);
     },
-    [handleResult, runServerOcr, puterClientOcr]
+    [handleResult, runServerOcr, puterClientOcr, tesseractClientOcr]
   );
 
   return (
