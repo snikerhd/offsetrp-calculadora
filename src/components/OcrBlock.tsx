@@ -214,6 +214,15 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
             <button onClick={handleOcrUrl} disabled={ocrProcessing || !ocrUrl.trim()} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer disabled:opacity-50`}>
               {ocrProcessing ? "..." : "Analisar"}
             </button>
+            <a
+              href={`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(ocrUrl.trim())}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Abre a imagem no Google Lens — copia o texto de lá e cola no campo de texto manual"
+              className={`flex items-center px-3 py-2 rounded text-xs font-bold uppercase whitespace-nowrap opacity-80 hover:opacity-100 ${fillBtnTheme} ${!ocrUrl.trim() ? "pointer-events-none opacity-40" : ""}`}
+            >
+              Lens
+            </a>
           </div>
         </div>
 
