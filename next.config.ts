@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Pacotes nativos/ESM não podem ser bundle-izados pelo webpack do servidor
+  // (sharp tenta resolver headers do libvips; chrome-lens-ocr usa undici/dynamic
+  // imports). Externos = require() em runtime, incluídos no tracing da lambda.
+  serverExternalPackages: ["chrome-lens-ocr", "sharp"],
   experimental: {
     serverActions: {
       bodySizeLimit: "4mb",

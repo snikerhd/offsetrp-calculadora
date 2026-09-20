@@ -6,6 +6,7 @@ import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { gyazoOcr, uploadToGyazo, extractGyazoId } from "@/lib/gyazo-ocr";
 import { ocrSpaceOcr, openaiOcr, lastOcrSpaceError } from "@/lib/openai-ocr";
 import { puterOcr, lastPuterError } from "@/lib/puter-ocr";
+import { lensOcr, lastLensError } from "@/lib/lens-ocr";
 import { isAuthed } from "@/lib/auth";
 
 // O OCR do Gyazo parte nomes como "CAIXA ELETRÓNICOS" em duas linhas
@@ -204,10 +205,20 @@ export async function POST(req: NextRequest) {
     // portão de tempo global: nenhum motor corre sem tempo para o seu timeout
     // + folga, por isso o pedido nunca acaba em 504.
     let ocrText = "";
+    let lensTried = false;
     let ocrspaceTried = false;
     let tesseractTried = false;
     let puterTried = false;
+    // Motor PRIMÁRIO: Google Lens via API do Chromium (chrome-lens-ocr) —
+    // grátis, sem chave, sem conta. Qualidade comprovada igual ao Lens do
+    // browser (~3s na imagem de referência, texto + pesos).
     if (left() > 12_000) {
+      lensTried = true;
+      ocrText = await lensOcr(base64Data, 15_000);
+      if (ocrText.length >= 3) console.log("OCR: sucesso via Google Lens (primário)");
+    }
+    // Motor SECUNDÁRIO: OCR.space (key em OCRSPACE_API_KEY, free 500 req/dia).
+    if (ocrText.length < 3 && left() > 12_000) {
       ocrspaceTried = true;
       const input = await compressForOcrSpace(base64Data);
       ocrText = await ocrSpaceOcr(input, Math.min(20_000, Math.max(8_000, left() - 18_000)));
@@ -288,7 +299,7 @@ export async function POST(req: NextRequest) {
     }
     // Fallbacks finais (usam chaves em .env se existirem; devolvem ""
     // imediatamente quando não estão configurados).
-    lastRunTrace = `ocrspace=${ocrspaceTried ? "tentado" : "saltado"} tesseract=${tesseractTried ? "tentado" : "saltado"} puter=${puterTried ? "tentado" : "saltado"} gyazo=${gyazoId ? "tentado" : "saltado"} @${((Date.now() - requestStartedAt) / 1000).toFixed(1)}s`;
+    lastRunTrace = `lens=${lensTried ? "tentado" : "saltado"} ocrspace=${ocrspaceTried ? "tentado" : "saltado"} tesseract=${tesseractTried ? "tentado" : "saltado"} puter=${puterTried ? "tentado" : "saltado"} gyazo=${gyazoId ? "tentado" : "saltado"} @${((Date.now() - requestStartedAt) / 1000).toFixed(1)}s`;
     console.log(`OCR trace: ${lastRunTrace}`);
     if (ocrText.length < 3 && left() > 8_000) ocrText = await openaiOcr(base64Data, requestStartedAt + REQUEST_BUDGET_MS);
     if (ocrText.length < 3) {
@@ -296,6 +307,7 @@ export async function POST(req: NextRequest) {
         ? "gyazo:down(cooldown)"
         : gyazoId ? "gyazo-metadata:sem-ocr" : "sem-link-gyazo";
       const diag = [
+        lensTried ? `lens:falhou(${lastLensError || "sem texto"})` : "lens:sem-tempo",
         ocrspaceTried ? `ocrspace:falhou(${lastOcrSpaceError || "sem texto"})` : "ocrspace:sem-tempo",
         tesseractTried ? `tesseract:falhou(${lastTesseractError || "sem texto"})` : "tesseract:sem-tempo",
         puterTried ? `puter-http:falhou(${lastPuterError || "sem texto"})` : "puter-http:sem-tempo",
