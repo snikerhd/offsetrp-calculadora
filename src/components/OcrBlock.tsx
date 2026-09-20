@@ -85,6 +85,54 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     return data;
   }, [mode]);
 
+  // Pré-processa a imagem no browser antes do OCR: amplia ×2, converte para
+  // escala de cinzentos e inverte se o fundo for escuro (screenshots do jogo
+  // têm texto claro sobre fundo escuro — sem isto o Tesseract devolve lixo).
+  const preprocessForOcr = useCallback(async (src: string): Promise<string> => {
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error("load"));
+        im.src = src;
+      });
+      const scale = Math.min(2, 2400 / Math.max(img.width || 1, img.height || 1)) || 1;
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.width * scale);
+      cv.height = Math.round(img.height * scale);
+      const ctx = cv.getContext("2d");
+      if (!ctx) return src;
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      const d = ctx.getImageData(0, 0, cv.width, cv.height);
+      let sum = 0;
+      const gray = new Uint8ClampedArray(d.data.length / 4);
+      for (let i = 0, j = 0; i < d.data.length; i += 4, j++) {
+        const g = Math.round(0.299 * d.data[i] + 0.587 * d.data[i + 1] + 0.114 * d.data[i + 2]);
+        gray[j] = g;
+        sum += g;
+      }
+      const invert = sum / gray.length < 128;
+      for (let j = 0, i = 0; j < gray.length; j++, i += 4) {
+        const v = invert ? 255 - gray[j] : gray[j];
+        d.data[i] = v; d.data[i + 1] = v; d.data[i + 2] = v; d.data[i + 3] = 255;
+      }
+      ctx.putImageData(d, 0, 0);
+      return cv.toDataURL("image/png");
+    } catch {
+      return src;
+    }
+  }, []);
+
+  // Texto "lixo": demasiados símbolos/números sem palavras utilizáveis —
+  // resultado típico de OCR sem pré-processamento; melhor ignorar e cair
+  // para o passo seguinte da cadeia.
+  const looksLikeGarbage = useCallback((text: string): boolean => {
+    const t = text.replace(/\s+/g, "");
+    if (t.length < 3) return true;
+    const alnum = (t.match(/[a-zA-ZÀ-ÿ0-9]/g) || []).length;
+    return alnum / t.length < 0.6;
+  }, []);
+
   // OCR client-side via Tesseract.js (CDN, sem chaves/contas/limites — o mesmo
   // motor que o servidor usa, mas no browser). Carrega o script à primeira e
   // devolve "" em caso de falha (o chamador cai para o Puter/servidor).
@@ -200,13 +248,14 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       // 1ª tentativa: Puter no browser (keyless). Se não devolver texto útil,
       // cai para a cadeia completa do servidor.
       let data;
-      // 1ª: Tesseract no browser (free unlimited, sem contas). 2ª: Puter no
-      // browser (keyless, mas exige conta/região OK). 3ª: cadeia do servidor.
-      let clientText = await tesseractClientOcr(ocrUrl.trim());
-      if (!clientText || looksLikeHostError(clientText)) {
+      // 1ª: Tesseract no browser (free unlimited, sem contas), com
+      // pré-processamento (ampliar + cinzentos + inverter fundo escuro).
+      // 2ª: Puter no browser. 3ª: cadeia do servidor.
+      let clientText = await tesseractClientOcr(await preprocessForOcr(ocrUrl.trim()));
+      if (!clientText || looksLikeHostError(clientText) || looksLikeGarbage(clientText)) {
         clientText = (await puterClientOcr(ocrUrl.trim())).text;
       }
-      if (clientText.length >= 3 && !looksLikeHostError(clientText)) {
+      if (clientText.length >= 3 && !looksLikeHostError(clientText) && !looksLikeGarbage(clientText)) {
         setOcrRawText(clientText);
         data = await runServerOcr({ rawText: clientText });
       } else {
@@ -220,7 +269,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       setOcrStatus(`❌ ${msg}`);
       setOcrProcessing(false);
     }
-  }, [ocrUrl, handleResult, runServerOcr, puterClientOcr, tesseractClientOcr]);
+  }, [ocrUrl, handleResult, runServerOcr, puterClientOcr, tesseractClientOcr, preprocessForOcr, looksLikeGarbage]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -242,12 +291,13 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         try {
           // 1ª tentativa: Puter no browser (keyless) sobre o data URL local.
           let data;
-          // Mesma ordem: Tesseract client → Puter client → servidor.
-          let clientText = await tesseractClientOcr(dataUrl);
-          if (!clientText || looksLikeHostError(clientText)) {
+          // Mesma ordem: Tesseract client (com pré-processamento) → Puter
+          // client → servidor.
+          let clientText = await tesseractClientOcr(await preprocessForOcr(dataUrl));
+          if (!clientText || looksLikeHostError(clientText) || looksLikeGarbage(clientText)) {
             clientText = (await puterClientOcr(dataUrl)).text;
           }
-          if (clientText.length >= 3 && !looksLikeHostError(clientText)) {
+          if (clientText.length >= 3 && !looksLikeHostError(clientText) && !looksLikeGarbage(clientText)) {
             setOcrRawText(clientText);
             data = await runServerOcr({ rawText: clientText });
           } else {
@@ -264,7 +314,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       };
       reader.readAsDataURL(file);
     },
-    [handleResult, runServerOcr, puterClientOcr, tesseractClientOcr]
+    [handleResult, runServerOcr, puterClientOcr, tesseractClientOcr, preprocessForOcr, looksLikeGarbage]
   );
 
   return (
