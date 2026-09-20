@@ -77,8 +77,9 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       data = JSON.parse(text);
     } catch {
       throw new Error(
-        `O servidor devolveu uma resposta inválida${resp.status ? ` (HTTP ${resp.status})` : ""}. ` +
-        "O OCR pode ter excedido o limite do plano gratuito — espera uns segundos e tenta novamente."
+        resp.status === 504 || resp.status === 502
+          ? `O OCR excedeu o tempo limite do servidor (HTTP ${resp.status}). Espera ~1 minuto e tenta novamente — se voltar a acontecer, tenta com upload de ficheiro em vez de link, ou cola o texto manualmente.`
+          : `O servidor devolveu uma resposta inválida${resp.status ? ` (HTTP ${resp.status})` : ""}. Espera uns segundos e tenta novamente.`
       );
     }
     if (!resp.ok) throw new Error(data.error || `Erro do servidor (HTTP ${resp.status}).`);

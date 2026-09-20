@@ -1,6 +1,8 @@
 // Teste E2E do POST /api/ocr: arranca `next dev`, cria a cookie de sessão
 // HMAC (ACCESS_PASSWORD de .env.local) e envia uma imagem sintética gerada
-// localmente. Valida o motor primário (Tesseract) sem usar o Gyazo.
+// localmente. Valida a cadeia de motores (OCR.space → Tesseract → …) sem
+// usar o Gyazo. E2E_DEADLINE_MS aborta o pedido (simula o limite de tempo da
+// função serverless: se estourar aqui, em produção seria HTTP 504).
 import { spawn } from "child_process";
 import { createHmac } from "crypto";
 import { readFileSync } from "fs";
@@ -11,6 +13,8 @@ const PORT = Number(process.env.E2E_PORT || 3210);
 const BASE = `http://localhost:${PORT}`;
 // Com E2E_NO_SPAWN=1 usa um servidor já em execução (ex.: `next start` de produção).
 const spawnServer = !process.env.E2E_NO_SPAWN;
+// Aborta o pedido após este tempo (ms) — deve ser inferior ao maxDuration.
+const deadlineMs = Number(process.env.E2E_DEADLINE_MS || 0);
 
 function loadEnv(file) {
   for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
@@ -69,11 +73,18 @@ try {
   const body = e2eUrl
     ? { imageUrl: e2eUrl }
     : { imageBase64, mimeType: "image/png" };
-  const resp = await fetch(`${BASE}/api/ocr`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify(body),
-  });
+  let resp;
+  try {
+    resp = await fetch(`${BASE}/api/ocr`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify(body),
+      signal: deadlineMs ? AbortSignal.timeout(deadlineMs) : undefined,
+    });
+  } catch (err) {
+    console.log(`PEDIDO ABORTADO APÓS ${deadlineMs}ms — em produção isto seria HTTP 504`);
+    throw err;
+  }
   console.log("HTTP", resp.status);
   const json = await resp.json();
   console.log("ocrRaw:", JSON.stringify(json.ocrRaw || ""));

@@ -48,6 +48,9 @@ try {
 // Tesseract em vez de esgotar o orçamento de tempo com retries inúteis.
 let gyazoDownUntil = 0;
 const GYAZO_COOLDOWN_MS = 60_000;
+// Trace da última execução (até onde o pedido chegou) — fica nos logs do
+// runtime da Vercel quando o browser só recebe um 504 opaco.
+let lastRunTrace = "";
 // Orçamento global de wall-time do pedido (função Vercel ~60s). Começa no
 // início do POST e governa TODOS os motores — cada um só corre se existir
 // tempo para o seu timeout + folga, garantindo que a resposta JSON sai
@@ -116,10 +119,13 @@ async function tesseractOcr(processed: Buffer, timeoutMs: number): Promise<strin
   const timer = new Promise<string>((resolve) => { setTimeout(() => { timedOut = true; resolve(""); }, timeoutMs); });
   const result = await Promise.race([job, timer]);
   if (timedOut) {
-    // Worker pendurado — termina-o para não bloquear pedidos futuros no
-    // mesmo processo (será recriado na próxima chamada).
-    try { const w = await workerPromise; await w?.terminate?.(); } catch {}
+    // Termina o worker SEM await: se a inicialização estiver presa (rede/CDN
+    // lento no cold start da lambda), o await podia bloquear para sempre e
+    // anular este timeout — o 504 acontecia mesmo com Promise.race. O race()
+    // devolve de imediato; o worker é recriado na próxima chamada.
+    void workerPromise?.then((w) => w?.terminate?.()).catch(() => {});
     workerPromise = null;
+    console.error("tesseract: timeout — worker terminado");
   }
   return result;
 }
@@ -272,6 +278,8 @@ export async function POST(req: NextRequest) {
     }
     // Fallbacks finais (usam chaves em .env se existirem; devolvem ""
     // imediatamente quando não estão configurados).
+    lastRunTrace = `ocrspace=${ocrspaceTried ? "tentado" : "saltado"} tesseract=${tesseractTried ? "tentado" : "saltado"} puter=${puterTried ? "tentado" : "saltado"} gyazo=${gyazoId ? "tentado" : "saltado"} @${((Date.now() - requestStartedAt) / 1000).toFixed(1)}s`;
+    console.log(`OCR trace: ${lastRunTrace}`);
     if (ocrText.length < 3 && left() > 8_000) ocrText = await openaiOcr(base64Data, requestStartedAt + REQUEST_BUDGET_MS);
     if (ocrText.length < 3) {
       const gyazoState = Date.now() < gyazoDownUntil
