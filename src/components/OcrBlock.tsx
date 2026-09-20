@@ -85,6 +85,27 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     return data;
   }, [mode]);
 
+  // OCR client-side via puter.js (https://developer.puter.com/tutorials/free-unlimited-ocr-api/):
+  // keyless e grátis (modelo user-pays — usa o saldo do visitante). Espera até
+  // ~5s pelo script async do layout; devolve "" se indisponível ou falhar, e o
+  // chamador cai para a cadeia do servidor (Puter HTTP → Tesseract → Gyazo →
+  // OpenAI). Primeira tentativa = motor primário de facto.
+  const puterClientOcr = useCallback(async (src: string): Promise<string> => {
+    const w = window as unknown as { puter?: { ai?: { img2txt?: (s: string) => Promise<unknown> } } };
+    for (let i = 0; i < 20 && !w.puter?.ai?.img2txt; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    const fn = w.puter?.ai?.img2txt;
+    if (!fn) return "";
+    try {
+      const out = await fn(src);
+      return typeof out === "string" ? out.trim() : "";
+    } catch (err) {
+      console.warn("Puter client OCR falhou:", err);
+      return "";
+    }
+  }, []);
+
   const handleResult = useCallback((data: {
     result?: string;
     preview?: string;
@@ -139,7 +160,17 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     setOcrStatus("🔍 A analisar imagem com OCR...");
 
     try {
-      const data = await runServerOcr({ imageUrl: ocrUrl.trim() });
+      // 1ª tentativa: Puter no browser (keyless). Se não devolver texto útil,
+      // cai para a cadeia completa do servidor.
+      let data;
+      const clientText = await puterClientOcr(ocrUrl.trim());
+      if (clientText.length >= 3) {
+        setOcrRawText(clientText);
+        data = await runServerOcr({ rawText: clientText });
+      } else {
+        setOcrStatus("🔍 Puter indisponível — a tentar OCR no servidor...");
+        data = await runServerOcr({ imageUrl: ocrUrl.trim() });
+      }
       if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
       handleResult(data);
     } catch (error) {
@@ -147,7 +178,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       setOcrStatus(`❌ ${msg}`);
       setOcrProcessing(false);
     }
-  }, [ocrUrl, handleResult, runServerOcr]);
+  }, [ocrUrl, handleResult, runServerOcr, puterClientOcr]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,7 +198,16 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         if (!match) { setOcrStatus("❌ Formato inválido."); setOcrProcessing(false); return; }
 
         try {
-          const data = await runServerOcr({ imageBase64: match[2], mimeType: match[1] });
+          // 1ª tentativa: Puter no browser (keyless) sobre o data URL local.
+          let data;
+          const clientText = await puterClientOcr(dataUrl);
+          if (clientText.length >= 3) {
+            setOcrRawText(clientText);
+            data = await runServerOcr({ rawText: clientText });
+          } else {
+            setOcrStatus("🔍 Puter indisponível — a tentar OCR no servidor...");
+            data = await runServerOcr({ imageBase64: match[2], mimeType: match[1] });
+          }
           if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
           handleResult(data);
         } catch (error) {
@@ -178,7 +218,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
       };
       reader.readAsDataURL(file);
     },
-    [handleResult, runServerOcr]
+    [handleResult, runServerOcr, puterClientOcr]
   );
 
   return (
