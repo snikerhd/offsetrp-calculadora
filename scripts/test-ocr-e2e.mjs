@@ -24,7 +24,14 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="240">
   <rect width="900" height="240" fill="white"/>
   <text x="40" y="120" font-size="44" font-family="Arial" fill="black">CAIXA ELETRONICOS 2 (1.5kg)</text>
 </svg>`;
-const png = await sharp(Buffer.from(svg)).png().toBuffer();
+// E2E_IMAGE=<ficheiro> usa uma imagem real (ex.: screenshot Imgur descarregada)
+// em vez da sintética; neste caso exige-se apenas ocrRaw não-vazio.
+const e2eImageFile = process.env.E2E_IMAGE || "";
+// E2E_URL=<url> testa o modo imageUrl (download server-side).
+const e2eUrl = process.env.E2E_URL || "";
+const png = e2eImageFile
+  ? readFileSync(e2eImageFile)
+  : await sharp(Buffer.from(svg)).png().toBuffer();
 const imageBase64 = png.toString("base64");
 
 const server = spawnServer
@@ -59,10 +66,13 @@ try {
   const sig = createHmac("sha256", secret).update(payload).digest("hex");
   const cookie = `oc_session=${payload}.${sig}`;
 
+  const body = e2eUrl
+    ? { imageUrl: e2eUrl }
+    : { imageBase64, mimeType: "image/png" };
   const resp = await fetch(`${BASE}/api/ocr`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ imageBase64, mimeType: "image/png" }),
+    body: JSON.stringify(body),
   });
   console.log("HTTP", resp.status);
   const json = await resp.json();
@@ -71,7 +81,11 @@ try {
   console.log("error:", json.error || "(nenhum)");
   // O critério é a extração OCR (ocrRaw com texto) — a imagem sintética não
   // contém itens de inventário válidos, pelo que parsed.text vazio é esperado.
-  if (resp.status === 200 && (json.ocrRaw || "").includes("CAIXA")) {
+  const realImage = e2eImageFile || e2eUrl;
+  const ok = realImage
+    ? resp.status === 200 && (json.ocrRaw || "").length >= 3 && !/not\s+viewable|region|forbidden/i.test(json.ocrRaw || "")
+    : resp.status === 200 && (json.ocrRaw || "").includes("CAIXA");
+  if (ok) {
     console.log("TESTE E2E: PASS ✅");
   } else {
     console.log("TESTE E2E: FAIL ❌");

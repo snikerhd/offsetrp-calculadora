@@ -102,7 +102,7 @@ async function preprocessImage(base64Data: string): Promise<Buffer> {
 }
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), ms);
-  try { return await fetch(url, { ...init, signal: controller.signal }); } finally { clearTimeout(timer); }
+  try { return await fetch(url, { ...init, signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", ...(init.headers || {}) } }); } finally { clearTimeout(timer); }
 }
 async function tesseractOcr(processed: Buffer): Promise<string> {
   try { const worker = await getWorker(); if (!worker) return ""; const { data } = await worker.recognize(processed); return (data.text || "").trim(); }
