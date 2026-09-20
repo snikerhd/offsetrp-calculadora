@@ -62,6 +62,47 @@ function isExhaustedKey(err: unknown): boolean {
   return /quota|insufficient|usage limit|billing|out of tokens|credit|too many/i.test(msg);
 }
 
+// OCR.space (api.ocr.space/parse/image) — free tier com key, até 25.000
+// pedidos/mês (500 requests/dia por key free). Lê bem fontes estilizadas
+// que o Tesseract apanha mal. Devolve "" em falha (o chamador segue a cadeia).
+export async function ocrSpaceOcr(imageBase64: string): Promise<string> {
+  const apiKey = process.env.OCRSPACE_API_KEY || process.env.OCRSPACE_API_KEY_2 || "";
+  if (!apiKey) return "";
+  try {
+    const body = new URLSearchParams({
+      base64Image: `data:image/jpeg;base64,${imageBase64}`,
+      language: "por",
+      OCREngine: "2",
+      scale: "true",
+      isTable: "true",
+    });
+    const resp = await fetch("https://api.ocr.space/parse/image", {
+      method: "POST",
+      headers: { apikey: apiKey, "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!resp.ok) {
+      console.error("OCR.space HTTP", resp.status, (await resp.text().catch(() => "")).slice(0, 200));
+      return "";
+    }
+    const data = (await resp.json()) as {
+      ParsedResults?: Array<{ ParsedText?: string }>;
+      IsErroredOnProcessing?: boolean;
+      ErrorMessage?: string | string[];
+    };
+    if (data.IsErroredOnProcessing) {
+      const msg = Array.isArray(data.ErrorMessage) ? data.ErrorMessage.join("; ") : data.ErrorMessage;
+      console.error("OCR.space erro:", msg);
+      return "";
+    }
+    return (data.ParsedResults || []).map((r) => r.ParsedText || "").join("\n").trim();
+  } catch (err) {
+    console.error("OCR.space falhou:", err);
+    return "";
+  }
+}
+
+// salta para a seguinte (e guarda a posição da última que funcionou).
 // Percorre as chaves em rotação até obter texto útil. Quando uma chave esgota,
 // salta para a seguinte (e guarda a posição da última que funcionou).
 export async function openaiOcr(imageBase64: string): Promise<string> {

@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { copyFileSync, existsSync, mkdirSync } from "fs";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { gyazoOcr, uploadToGyazo, extractGyazoId } from "@/lib/gyazo-ocr";
+import { ocrSpaceOcr } from "@/lib/openai-ocr";
 import { openaiOcr } from "@/lib/openai-ocr";
 import { puterOcr } from "@/lib/puter-ocr";
 import { isAuthed } from "@/lib/auth";
@@ -160,6 +161,11 @@ export async function POST(req: NextRequest) {
       const processed = await preprocessImage(base64Data);
       ocrText = await tesseractOcr(processed);
       if (ocrText.length >= 3) console.log("OCR: sucesso via Tesseract local (secundário)");
+    }
+    // Motor OCR.space (com key): lê fontes estilizadas que o Tesseract apanha mal.
+    if (ocrText.length < 3) {
+      ocrText = await ocrSpaceOcr(base64Data);
+      if (ocrText.length >= 3) console.log("OCR: sucesso via OCR.space (terciário)");
     }
     let gyazoId: string | null = null;
     if (imageUrl && typeof imageUrl === "string") {
