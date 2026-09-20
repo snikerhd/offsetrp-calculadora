@@ -7,8 +7,10 @@ import { readFileSync } from "fs";
 import sharp from "sharp";
 
 const ROOT = "C:/Users/steam/offsetrp-calculadora";
-const PORT = 3210;
+const PORT = Number(process.env.E2E_PORT || 3210);
 const BASE = `http://localhost:${PORT}`;
+// Com E2E_NO_SPAWN=1 usa um servidor já em execução (ex.: `next start` de produção).
+const spawnServer = !process.env.E2E_NO_SPAWN;
 
 function loadEnv(file) {
   for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
@@ -25,11 +27,13 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="240">
 const png = await sharp(Buffer.from(svg)).png().toBuffer();
 const imageBase64 = png.toString("base64");
 
-const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "-p", String(PORT)], {
-  cwd: ROOT,
-  stdio: ["ignore", "pipe", "pipe"],
-  env: process.env,
-});
+const server = spawnServer
+  ? spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "-p", String(PORT)], {
+      cwd: ROOT,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+    })
+  : null;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitForServer(timeoutMs = 60_000) {
   const start = Date.now();
@@ -41,7 +45,7 @@ async function waitForServer(timeoutMs = 60_000) {
       return true;
     } catch {}
     await wait(500);
-    if (server.killed) throw new Error("servidor morreu ao arrancar");
+    if (server?.killed) throw new Error("servidor morreu ao arrancar");
   }
   throw new Error("timeout à espera do servidor");
 }
@@ -74,6 +78,6 @@ try {
     process.exitCode = 1;
   }
 } finally {
-  server.kill();
-  await wait(500);
+  server?.kill();
+  if (spawnServer) await wait(500);
 }
