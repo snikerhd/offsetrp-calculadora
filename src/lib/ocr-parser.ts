@@ -199,6 +199,14 @@ const ALIASES: Array<[string, string, number?]> = [
   ["candy", "candy cane"],
   // "ÁGUA" cortada pelo OCR aparece como "ÁGI"
   ["agi", "agua"],
+  // Subtítulo inglês do jogo sob o ícone do Petróleo. O OCR costuma colar o
+  // subtítulo ao nome ("OILPETRÓLEO") e como as pistas usam \b...\b, sem o
+  // espaço o "petroleo" isolado nunca é detetado — o par do Petróleo rouba
+  // então a pista de outro item com o mesmo peso (ex. Estimulante, 0.2 kg).
+  ["oilpetroleo", "petroleo"],
+  ["oil petroleo", "petroleo"],
+  ["oil", "petroleo"],
+  ["oilp", "petroleo"],
   ["medickit", "medickits"],
   ["medickits", "medickits"],
   ["barra de ouro", "barras ouro"],
