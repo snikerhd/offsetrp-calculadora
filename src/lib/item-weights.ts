@@ -51,6 +51,11 @@ export const ITEM_CATALOG: ItemDef[] = [
 
   // ── Acessórios ──
   { name: "acessorios para armas", displayName: "Acessórios para Armas", unitKg: 0.1, category: "acessorio", illegal: true },
+  // Anexos de arma que aparecem como itens próprios no inventário (1 kg/un)
+  { name: "smg suppressor", displayName: "SMG Suppressor", unitKg: 1, category: "acessorio", illegal: true },
+  { name: "rifle suppressor", displayName: "Rifle Suppressor", unitKg: 1, category: "acessorio", illegal: true },
+  { name: "rifle extended clip", displayName: "Rifle Extended Clip", unitKg: 1, category: "acessorio", illegal: true },
+  { name: "pistol extended clip", displayName: "Pistol Extended Clip", unitKg: 1, category: "acessorio", illegal: true },
 
   // ── Equipamento ──
   { name: "colete", displayName: "Colete", unitKg: 1, category: "equipamento", illegal: true },
