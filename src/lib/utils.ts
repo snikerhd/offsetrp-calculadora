@@ -394,6 +394,15 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "flashlight": "Flashlight",
   "flash light": "Flashlight",
   "lanterna": "Flashlight",
+  // Acessórios de arma (suppressores e carregadores extendidos)
+  "smg suppressor": "Acessórios para armas",
+  "rifle suppressor": "Acessórios para armas",
+  "pistol suppressor": "Acessórios para armas",
+  "suppressor": "Acessórios para armas",
+  "supressor": "Acessórios para armas",
+  "rifle extended clip": "Acessórios para armas",
+  "pistol extended clip": "Acessórios para armas",
+  "extended clip": "Acessórios para armas",
   // Itens especiais
   "acessorios": "Acessórios para armas",
   "acessórios": "Acessórios para armas",
