@@ -92,12 +92,12 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "tv led 75", displayName: "TV LED 75\"", unitKg: 1, category: "roubo", illegal: true },
   { name: "computador", displayName: "Computador", unitKg: 0.5, category: "roubo", illegal: true },
   { name: "pack vinhos", displayName: "Pack Vinhos", unitKg: 0.2, category: "roubo", illegal: true },
-  { name: "arma de colecao", displayName: "Arma de Coleção", unitKg: 2, category: "roubo", illegal: true },
+  { name: "arma de colecao", displayName: "Arma de Coleção", unitKg: 1, category: "roubo", illegal: true }, // 2 (2.0) → 1 kg/un (captura real)
   { name: "tigre", displayName: "Tigre", unitKg: 0.5, category: "roubo", illegal: true },
   { name: "documentos", displayName: "Documentos", unitKg: 0.1, category: "roubo", illegal: true },
   { name: "aguia de bronze", displayName: "Águia de Bronze", unitKg: 2, category: "roubo", illegal: true },
   { name: "crypto pen", displayName: "Crypto Pen", unitKg: 0.1, category: "roubo", illegal: true },
-  { name: "coroa", displayName: "Coroa", unitKg: 0.3, category: "roubo", illegal: true },
+  { name: "coroa", displayName: "Coroa", unitKg: 2, category: "roubo", illegal: true }, // 2 (4.0) → 2 kg/un (captura real; era 0.3 e caía como "não identificado")
   { name: "pack safira", displayName: "Pack Safira", unitKg: 0.5, category: "roubo", illegal: true },
   { name: "idolo", displayName: "Ídolo", unitKg: 0.3, category: "roubo", illegal: true },
   { name: "adaga", displayName: "Adaga", unitKg: 0.3, category: "roubo", illegal: true },
@@ -217,6 +217,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "passaporte", displayName: "Passaporte", unitKg: 0.1, category: "outro", illegal: false },
   { name: "porte de arma branca", displayName: "Porte de Arma Branca", unitKg: 0, category: "outro", illegal: false },
   { name: "branca", displayName: "Porte de Arma Branca", unitKg: 0, category: "outro", illegal: false },
+  { name: "fogo de artificio", displayName: "Fogo de Artifício", unitKg: 0.3, category: "outro", illegal: false },
 ];
 
 // Quick lookup by canonical name

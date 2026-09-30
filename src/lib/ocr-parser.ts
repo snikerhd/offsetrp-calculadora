@@ -77,6 +77,13 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   // re-casamento. Manter regras multi-linha aqui faria o parser re-fundir em
   // cadeia (efeito "CAIXA CAIXA ELETRONICOS"). Aqui só a correção simples.
   [/\bCAXA\b/gi, "CAIXA"],
+  // Fogo de Artifício: F→H (W→H pattern) e "de" omitido.
+  // [\s\S]*? não serve (engole linhas); usa [\wÀ-ÿ]* para apanhar acentos
+  // (\w não inclui Í/Ç/etc. e o regex cortava em "ARTIF", deixando "ÍCIO" órfão).
+  [/\bHOGO\s+ARTIF[\wÀ-ÿ]*/gi, "FOGO DE ARTIFICIO"],
+  [/\bFOGO\s+ARTIF[\wÀ-ÿ]*/gi, "FOGO DE ARTIFICIO"],
+  [/\bFOGOS\s+ARTIF[\wÀ-ÿ]*/gi, "FOGO DE ARTIFICIO"],
+  [/\bFOGO\s+(?:DE\s+)?ARTIF[\wÀ-ÿ]*/gi, "FOGO DE ARTIFICIO"],
 ];
 
 function fixOcrTypos(text: string): string {
@@ -217,6 +224,16 @@ const ALIASES: Array<[string, string, number?]> = [
   ["minerio", "minerios"],
   ["pepita", "pepitas"],
   ["safira", "safiras"],
+  // Fogo de Artifício: o OCR costuma omitir o "de" ("FOGO ARTIFÍCIO") ou
+  // separar as palavras em linhas diferentes. Sem estes aliases o item
+  // aparece como "item nao identificado".
+  ["fogo artificio", "fogo de artificio"],
+  ["fogo de artificio", "fogo de artificio"],
+  ["fogos artificio", "fogo de artificio"],
+  ["fogos de artificio", "fogo de artificio"],
+  ["artificio", "fogo de artificio"],
+  ["fireworks", "fogo de artificio"],
+  ["firework", "fogo de artificio"],
 ];
 
 // Fragmentos: sufixo de um nome partido pelo OCR (ex.: FORTALECIDO de
