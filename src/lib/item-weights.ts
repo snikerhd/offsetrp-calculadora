@@ -77,7 +77,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "diamante bruto", displayName: "Diamante Bruto", unitKg: 0.1, category: "roubo", illegal: true },
   { name: "diamante", displayName: "Diamante", unitKg: 0.1, category: "roubo", illegal: true },
   { name: "safiras", displayName: "Safiras", unitKg: 0.1, category: "roubo", illegal: true },
-  { name: "barras ouro", displayName: "Barras de Ouro", unitKg: 5, category: "roubo", illegal: true },
+  { name: "barras ouro", displayName: "Barras de Ouro", unitKg: 1, category: "roubo", illegal: true },
   { name: "pepitas", displayName: "Pepitas", unitKg: 0.1, category: "roubo", illegal: true },
   { name: "ouro estatal", displayName: "Ouro Estatal", unitKg: 1.5, category: "roubo", illegal: true },
   { name: "quadro", displayName: "Quadro", unitKg: 0.2, category: "roubo", illegal: true },
