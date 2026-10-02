@@ -583,7 +583,10 @@ function assignPairsToHints(
     let cur: Block | null = null;
     for (let i = 0; i < pairs.length; i++) {
       const ln = pairs[i].line;
-      if (cur && ln === cur.end + 1) {
+      // Blocos = linhas visuais consecutivas: pares na mesma linha ficam no mesmo
+      // bloco e linhas seguidas continuam o bloco (antes ln === cur.end + 1 separava
+      // pares da mesma linha e colava linhas diferentes, trocando itens entre eles).
+      if (cur && ln <= cur.end + 1) {
         cur.items.push(i);
         cur.end = ln;
       } else {
@@ -597,7 +600,8 @@ function assignPairsToHints(
     let cur: Block | null = null;
     for (let i = 0; i < hints.length; i++) {
       const ln = hints[i].line;
-      if (cur && ln === cur.end + 1) {
+      // Mesma regra dos nomes: pistas na mesma linha partilham o mesmo bloco.
+      if (cur && ln <= cur.end + 1) {
         cur.items.push(i);
         cur.end = ln;
       } else {
@@ -782,7 +786,10 @@ function assignPairsToHints(
       itemCount.set(h.item, dup);
       cur[pi] = -1;
     }
-    dfs(k + 1, assigned, cost + UNASSIGNED_PENALTY);
+    // Saltar um par custa UNASSIGNED_PENALTY, mas essa penalizacao ja entra no
+    // score final ((n - assigned) * UNASSIGNED_PENALTY + cost): soma-la aqui
+    // contava-a duas vezes e a Fase 2 devolvia tudo como leftover.
+    dfs(k + 1, assigned, cost);
   };
 
   dfs(0, 0, 0);
