@@ -603,6 +603,41 @@ fails += run(
   20,
   10.3,
 );
+// Jogador-564: o painel de pesos do jogo ("Nome: QTD -> TOTAL kg") salva o
+// caso quando a grelha perde pares (Cristal 190 (19.0)) ou troca itens com o
+// mesmo peso unitario (Cristal vs Bandagem, 0,1 kg/un).
+const caseJogador564 = `Jogador-564 Peso: 76.80 / 120.00
+81 (24.3) CRISTAL PROCESSADO
+1 (5.0) MESA QU\u00cdMICA 1 (5.0)
+MESA QU\u00cdMICA 1 (0.0)
+81 (16.2) ESTIMULANTE
+8 (1.6) MOMOSHU
+19 (1.9) SACO PL\u00c1STICO CRISTAL 13 (1.3)
+BANDAGEM
+96 PETROL CAN Cristal: 190 \u2192 19,0 kg
+Cristal Processado: 81 \u2192 24,3 kg
+Estimulante: 81 \u2192 16,2 kg
+Mesa Qu\u00edmica: 2 \u2192 10,0 kg
+Momoshu: 8 \u2192 1,6 kg
+Saco Pl\u00e1stico: 19 \u2192 1,9 kg
+Bandagem: 13 \u2192 1,3 kg
+Petrol Can: 1 \u2192 1,0 kg`;
+fails += run(
+  "caso 13: jogador-564 (painel de pesos do jogo)",
+  caseJogador564,
+  {
+    cristal: [190, 19],
+    "cristal processado": [81, 24.3],
+    estimulante: [81, 16.2],
+    "mesa quimica": [2, 10],
+    monoshu: [8, 1.6],
+    "saco plastico": [19, 1.9],
+    bandagem: [13, 1.3],
+    "petrol can": [1, 1],
+  },
+  395,
+  75.3,
+);
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
 
