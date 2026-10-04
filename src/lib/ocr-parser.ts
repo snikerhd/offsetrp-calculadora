@@ -942,6 +942,19 @@ function parseSintese(text: string): ItemMatch[] | null {
       items.push(sinteseMatch(normalizeLine(m[1]), qty, kg, unit > 0 ? unit : kg / qty));
     }
     if (hitVerbose) continue;
+    // Painel de pesos do inventario (autoritativo): "Cristal: 190 -> 19,0 kg".
+    // Traz quantidade + peso total por item e sobrevive ao OCR mesmo quando os
+    // pares "qty (peso)" da grelha se perdem ou trocam (ex.: Cristal vs Bandagem,
+    // ambos 0,1 kg/un). Setas/separadores em escape unicode porque o OCR alterna
+    // entre seta, "->", ">" e o travesao no lugar da seta.
+    const panelRe =
+      /([^\n:]{3,80}?)\s*:\s*(\d[\d\s]*)\s*(?:[\u2192\u279C\u279E\u27A4\u21D2]|=>|-{1,2}>|[\u203A\u00BB]|>|[\u2014\u2013-])\s*(\d+(?:[.,]\d+)?)\s*kg/gi;
+    while ((m = panelRe.exec(line))) {
+      const qty = Number(m[2].replace(/\s+/g, ""));
+      const kg = Number(m[3].replace(",", "."));
+      if (!Number.isFinite(qty) || !Number.isFinite(kg) || qty <= 0 || kg <= 0) continue;
+      items.push(sinteseMatch(normalizeLine(m[1]).replace(/^[\d\s]+/, ""), qty, kg, kg / qty));
+    }
     const re = /(\d[\d\s]*)\s*[×x]\s*([^—–―\n-]*?)\s*[—–―-]\s*([\d.,]+)\s*kg/g;
     while ((m = re.exec(line))) {
       const qty = Number(m[1].replace(/\s+/g, ""));
