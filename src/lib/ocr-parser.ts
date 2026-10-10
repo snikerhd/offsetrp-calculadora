@@ -370,6 +370,10 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   // (cobre listas multi-linha e a lista colada numa só linha do chat).
   const reB = /(?:^|[•])\s*([^•\n()]+?)\s*\(\s*[xX×]?\s*(\d{1,7})\s*\)/gm;
   while ((m = reB.exec(text))) push(Number(m[2]), m[1], m.index);
+  // Formato C: "• Nome: xN" — nome, dois-pontos, qty com "x" (sem parênteses).
+  // Ex.: "• Caixa Eletrónicos: x6" → qty 6, nome "Caixa Eletrónicos".
+  const reC = /(?:^|[•])\s*([^•\n:]+?):\s*[xX×]?\s*(\d{1,7})/gm;
+  while ((m = reC.exec(text))) push(Number(m[2]), m[1], m.index);
   return out;
 }
 
