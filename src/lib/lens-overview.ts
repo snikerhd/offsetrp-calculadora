@@ -89,14 +89,9 @@ async function getBrowser() {
       headless: chromium.headless,
     });
   }
-  // Dev local: tenta puppeteer completo, senão puppeteer-core sem path
-  try {
-    const puppeteer = (await import("puppeteer")).default;
-    return puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
-  } catch {
-    const puppeteer = (await import("puppeteer-core")).default;
-    return puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
-  }
+  // Dev local: usa puppeteer-core (só o que está instalado)
+  const puppeteer = (await import("puppeteer-core")).default;
+  return puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
 }
 
 /**
@@ -112,7 +107,7 @@ export async function lensOverviewOcr(imageUrl: string, timeoutMs = 25_000): Pro
     const page = await browser.newPage();
     // Bloqueia recursos pesados para acelerar (imagens, fonts, media)
     await page.setRequestInterception(true);
-    page.on("request", (req) => {
+    page.on("request", (req: { resourceType: () => string; abort: () => void; continue: () => void }) => {
       const t = req.resourceType();
       if (["image", "media", "font", "stylesheet"].includes(t)) req.abort();
       else req.continue();
