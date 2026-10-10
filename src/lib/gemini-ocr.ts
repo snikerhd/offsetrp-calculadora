@@ -45,24 +45,27 @@ class GeminiHttpError extends Error {
   }
 }
 
-type SharpModule = typeof import("sharp");
-type Sharp = { default?: SharpModule } & SharpModule;
-let sharpModule: Sharp | null = null;
-async function getSharp(): Promise<Sharp | null> {
-  if (sharpModule) return sharpModule;
-  try { sharpModule = (await import("sharp")) as unknown as Sharp; return sharpModule; }
-  catch { return null; }
+// sharp é ESM: default export É o construtor Sharp
+let SharpConstructor: (buf: Buffer | string | Uint8Array) => any = null;
+async function getSharp(): Promise<(buf: Buffer | string | Uint8Array) => any> {
+  if (SharpConstructor) return SharpConstructor;
+  try {
+    const mod = await import("sharp");
+    SharpConstructor = mod.default ?? mod;
+    return SharpConstructor;
+  } catch {
+    return null;
+  }
 }
 
 /** Reduz custo/tempo de visão: ~896px em JPEG é suficiente para texto+ícones. */
 async function optimizeForVision(base64Data: string): Promise<{ base64: string; mime: string }> {
   const buf = Buffer.from(base64Data, "base64");
-  const sharpMod = await getSharp();
-  if (!sharpMod) return { base64: base64Data, mime: "image/png" };
+  const Sharp = await getSharp();
+  if (!Sharp) return { base64: base64Data, mime: "image/png" };
   try {
-    const s = (sharpMod.default ?? sharpMod) as unknown as SharpModule;
-    const meta = await s(buf).metadata();
-    let img = s(buf).rotate().resize(896, 896, { fit: "inside", withoutEnlargement: true });
+    const meta = await Sharp(buf).metadata();
+    let img = Sharp(buf).rotate().resize(896, 896, { fit: "inside", withoutEnlargement: true });
     if (meta.hasAlpha) img = img.flatten({ background: "#111827" });
     const jpeg = await img.jpeg({ quality: 85, mozjpeg: true }).toBuffer();
     return { base64: jpeg.toString("base64"), mime: "image/jpeg" };
