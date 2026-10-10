@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { lensOcr, lastLensError } from "@/lib/lens-ocr";
-import { fetchLensOverviewText, lensOverviewOcr, lastLensOverviewError } from "@/lib/lens-overview";
+import { fetchLensOverviewText } from "@/lib/lens-overview";
 import { geminiOcr, geminiConfigured, lastGeminiError } from "@/lib/gemini-ocr";
 import { isAuthed } from "@/lib/auth";
 
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     // Primeiro tenta reaproveitar o texto do AI Overview do Google Lens, caso
     // o Google o inclua no HTML inicial. É best-effort: o Google muitas vezes
     // gera esse conteúdo apenas no browser; nesse caso seguimos para o OCR normal.
-    if (imageUrl && mode === "coimas") {
+    if (imageUrl) {
       const overviewText = await fetchLensOverviewText(imageUrl);
       if (overviewText) {
         const overviewParsed = parseInventoryOCR(mergeCaixaMultiline(overviewText), { includeWeapon });
@@ -117,7 +117,6 @@ export async function POST(req: NextRequest) {
     // corre sem tempo para o seu timeout + folga — o pedido nunca dá 504.
     let ocrText = "";
     let lensTried = false;
-    let lensOverviewTried = false;
     let geminiTried = false;
     // "Utilizável" = há texto E o parser consegue extrair itens dele. O Lens do
     // novo layout devolve só nomes (badges "x64" sem parênteses não formam
@@ -127,23 +126,13 @@ export async function POST(req: NextRequest) {
     };
     const ocrUsable = (): boolean => ocrText.length >= 3 && parsedCount(ocrText) > 0;
     // Motor PRIMÁRIO: Google Lens via API do Chromium (chrome-lens-ocr) —
-    // grátis, sem chave, sem conta. Qualidade comprovada igual ao Lens do
-    // browser (~3s na imagem de referência, texto + pesos).
+    // grátis, sem chave, sem conta. (~3s na imagem de referência).
     if (left() > 12_000) {
       lensTried = true;
       ocrText = await lensOcr(base64Data, 15_000);
       if (ocrText.length >= 3) console.log("OCR: sucesso via Google Lens (primário)");
     }
-    // Motor SECUNDÁRIO: AI Overview do Lens via Puppeteer (grátis, sem chave).
-    // Abre o Lens no browser headless, aceita cookies, extrai o AI Overview.
-    // Só corre se temos URL da imagem (upload base64 não tem URL público).
-    if (!ocrUsable() && imageUrl && left() > 25_000) {
-      lensOverviewTried = true;
-      const g = await lensOverviewOcr(imageUrl as string, 20_000);
-      if (parsedCount(g) > 0) ocrText = g;
-      if (ocrUsable()) console.log("OCR: sucesso via Lens AI Overview (Puppeteer, sem chave)");
-    }
-    // Motor TERCIÁRIO (com chave): Gemini vision — só se os anteriores falharem.
+    // Motor SECUNDÁRIO (com chave): Gemini vision — só se os anteriores falharem.
     // Studio) — lê a grelha como o Lens manual e devolve itens estruturados,
     // convertidos em "• Nome (xN)" para o parser qty-only. Só substitui o
     // texto do Lens se o resultado do Gemini parsear (nunca perde texto bom).
@@ -153,12 +142,11 @@ export async function POST(req: NextRequest) {
       if (parsedCount(g) > 0) ocrText = g;
       if (ocrUsable()) console.log("OCR: sucesso via Gemini vision (secundário com chave)");
     }
-    lastRunTrace = `lens=${lensTried ? "tentado" : "saltado"} lensOverview=${lensOverviewTried ? `tentado(${lastLensOverviewError || "ok"})` : (imageUrl ? "saltado" : "sem-url")} gemini=${geminiTried ? `tentado(${lastGeminiError || "ok"})` : geminiConfigured() ? "saltado" : "sem-chave"} @${((Date.now() - requestStartedAt) / 1000).toFixed(1)}s`;
+    lastRunTrace = `lens=${lensTried ? "tentado" : "saltado"} gemini=${geminiTried ? `tentado(${lastGeminiError || "ok"})` : geminiConfigured() ? "saltado" : "sem-chave"} @${((Date.now() - requestStartedAt) / 1000).toFixed(1)}s`;
     console.log(`OCR trace: ${lastRunTrace}`);
     if (!ocrUsable()) {
       const diag = [
         lensTried ? `lens:falhou(${lastLensError || "sem texto"})` : "lens:sem-tempo",
-        lensOverviewTried ? `lensOverview:falhou(${lastLensOverviewError || "sem texto"})` : (imageUrl ? "lensOverview:sem-tempo" : "lensOverview:sem-url"),
         geminiTried ? `gemini:falhou(${lastGeminiError || "sem itens"})` : (geminiConfigured() ? "gemini:sem-tempo" : "gemini:sem-chave"),
       ].join(" | ");
       console.error(`OCR esgotado [${diag}] imagem=${base64Data.length}b`);
