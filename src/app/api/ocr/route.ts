@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseInventoryOCR } from "@/lib/ocr-parser";
 import { lensOcr, lastLensError } from "@/lib/lens-ocr";
+import { fetchLensOverviewText } from "@/lib/lens-overview";
 import { geminiOcr, geminiConfigured, lastGeminiError } from "@/lib/gemini-ocr";
 import { isAuthed } from "@/lib/auth";
 
@@ -79,6 +80,27 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: rawText.trim(), preview: rawPreview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
     }
+    // Primeiro tenta reaproveitar o texto do AI Overview do Google Lens, caso
+    // o Google o inclua no HTML inicial. É best-effort: o Google muitas vezes
+    // gera esse conteúdo apenas no browser; nesse caso seguimos para o OCR normal.
+    if (imageUrl && mode === "coimas") {
+      const overviewText = await fetchLensOverviewText(imageUrl);
+      if (overviewText) {
+        const overviewParsed = parseInventoryOCR(mergeCaixaMultiline(overviewText), { includeWeapon });
+        if (overviewParsed.weights.length > 0 || overviewParsed.weaponCapture) {
+          console.log("OCR: itens extraídos do texto pré-renderizado do Google Lens AI Overview");
+          return NextResponse.json({
+            result: overviewParsed.text,
+            detectedWeights: overviewParsed.weights,
+            overallConfidence: overviewParsed.overallConfidence,
+            weaponCapture: overviewParsed.weaponCapture ?? null,
+            ocrRaw: overviewText,
+            error: overviewParsed.text || overviewParsed.weaponCapture ? undefined : "O Google Lens não devolveu itens reconhecíveis.",
+          });
+        }
+      }
+    }
+
     let base64Data: string, mimeType: string;
     if (imageBase64) { base64Data = imageBase64; mimeType = inputMime || "image/png"; }
     else if (imageUrl) {

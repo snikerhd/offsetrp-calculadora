@@ -138,7 +138,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     setOcrRawText("");
     setOcrWeights([]);
     setOcrWeapon(null);
-    setOcrStatus("🔍 A analisar imagem com OCR...");
+    setOcrStatus("🔍 A tentar obter o texto do AI Overview do Google Lens; se não estiver disponível, uso o OCR automático...");
 
     try {
       // OCR no servidor: Google Lens (grátis) → Gemini vision (com GEMINI_API_KEY).
@@ -238,7 +238,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
               href={`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(ocrUrl.trim())}`}
               target="_blank"
               rel="noreferrer"
-              title="Abre a imagem no Google Lens — copia o texto de lá e cola no campo de texto manual"
+              title="Abre a imagem no Google Lens para veres o AI Overview manualmente, se necessário"
               className={`flex items-center px-3 py-2 rounded text-xs font-bold uppercase whitespace-nowrap opacity-80 hover:opacity-100 ${fillBtnTheme} ${!ocrUrl.trim() ? "pointer-events-none opacity-40" : ""}`}
             >
               Lens
