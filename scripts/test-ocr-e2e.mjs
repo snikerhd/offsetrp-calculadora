@@ -1,8 +1,9 @@
 // Teste E2E do POST /api/ocr: arranca `next dev`, cria a cookie de sessão
 // HMAC (ACCESS_PASSWORD de .env.local) e envia uma imagem sintética gerada
-// localmente. Valida a cadeia de motores (OCR.space → Tesseract → …) sem
-// usar o Gyazo. E2E_DEADLINE_MS aborta o pedido (simula o limite de tempo da
-// função serverless: se estourar aqui, em produção seria HTTP 504).
+// localmente. Valida a cadeia de motores (Google Lens → Gemini vision) sem
+// usar chaves do Gyazo/OCR.space. E2E_DEADLINE_MS aborta o pedido (simula o
+// limite de tempo da função serverless: se estourar aqui, em produção seria
+// HTTP 504).
 import { spawn } from "child_process";
 import { createHmac } from "crypto";
 import { readFileSync } from "fs";

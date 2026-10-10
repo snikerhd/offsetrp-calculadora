@@ -141,9 +141,8 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     setOcrStatus("🔍 A analisar imagem com OCR...");
 
     try {
-      // OCR.space é o motor nº 1 e corre no servidor — o browser envia a imagem
-      // sem tentativas locais. Cadeia no servidor: OCR.space → Puter HTTP →
-      // Tesseract → Gyazo → OpenAI.
+      // OCR no servidor: Google Lens (grátis) → Gemini vision (com GEMINI_API_KEY).
+      // O browser envia a imagem sem tentativas locais.
       const data = await runServerOcr({ imageUrl: ocrUrl.trim() });
       if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
       handleResult(data);
@@ -193,9 +192,8 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         if (!match) { setOcrStatus("❌ Formato inválido."); setOcrProcessing(false); return; }
 
         try {
-          // OCR.space é o motor nº 1 e corre no servidor — envia o ficheiro
-          // direto (base64). Cadeia: OCR.space → Puter HTTP → Tesseract →
-          // Gyazo → OpenAI.
+          // OCR no servidor: Google Lens (grátis) → Gemini vision (com GEMINI_API_KEY).
+          // O browser envia o ficheiro direto (base64).
           const data = await runServerOcr({ imageBase64: match[2], mimeType: match[1] });
           if (!data.result && !data.weaponCapture && data.error) throw new Error(data.error);
           handleResult(data);
