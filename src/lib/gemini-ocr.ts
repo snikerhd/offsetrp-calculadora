@@ -46,8 +46,8 @@ class GeminiHttpError extends Error {
 }
 
 // sharp é ESM: default export É o construtor Sharp
-let SharpConstructor: (buf: Buffer | string | Uint8Array) => any = null;
-async function getSharp(): Promise<(buf: Buffer | string | Uint8Array) => any> {
+let SharpConstructor: ((buf: Buffer | string | Uint8Array) => any) | null = null;
+async function getSharp(): Promise<((buf: Buffer | string | Uint8Array) => any) | null> {
   if (SharpConstructor) return SharpConstructor;
   try {
     const mod = await import("sharp");
