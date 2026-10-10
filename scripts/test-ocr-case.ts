@@ -656,6 +656,33 @@ fails += run(
   73,
   71.4,
 );
+
+// Google Lens (chrome-lens-ocr): lista "• Nome (xN)" — nome primeiro, qty
+// entre parênteses com "x", sem peso. Uma só linha (pior caso do parser).
+const caseLensBullets = "• Arma de Coleção (x64)• Barra de Ouro (x5)• C4 (x3)• Caixa Arma (x1)• Caixa Contrabando (x1)• Caixa Eletrônicos (x6)• Caixa Tabaco (x12)• Computador (x115)• Crypto Pen (x3)• Documentos (x382)• Joias (x1)• Mala Diamantes (x1)• Mala Gruppe6 (x50)• Monitor (x71)• Ouro Estatal (x196)";
+fails += run(
+  "caso 15: Google Lens '• Nome (xN)' numa só linha",
+  caseLensBullets,
+  {
+    "arma de colecao": [64, 64],
+    "barras ouro": [5, 5],
+    c4: [3, 3],
+    "caixa arma": [1, 1],
+    "caixa contrabando": [1, 1],
+    "caixa eletronicos": [6, 6],
+    "caixa tabaco": [12, 12],
+    computador: [115, 57.5],
+    "crypto pen": [3, 0.3],
+    documentos: [382, 38.2],
+    joias: [1, 0.1],
+    "mala diamantes": [1, 0.1],
+    "mala gruppe6": [50, 25],
+    monitor: [71, 35.5],
+    "ouro estatal": [196, 294],
+  },
+  911,
+  542.7,
+);
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
 

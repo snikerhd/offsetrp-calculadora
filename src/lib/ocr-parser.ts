@@ -276,6 +276,11 @@ interface PhrasePattern {
 
 const BARE_NAME_DENY = new Set(["branca"]);
 
+// Lookup normalizado → { item, unitKg } para o modo sem peso (qty-only):
+// cobre nomes do catálogo, displayNames e aliases ("barra de ouro" →
+// "barras ouro") com a MESMA primeira-entrada-ganha do PHRASES.
+const PHRASE_BY_NORM = new Map<string, { item: string; unitKg: number }>();
+
 function buildPhrases(): PhrasePattern[] {
   const out: PhrasePattern[] = [];
   const seen = new Set<string>();
@@ -287,6 +292,7 @@ function buildPhrases(): PhrasePattern[] {
     const def = ITEM_BY_NAME.get(item);
     const u = unitKg ?? def?.unitKg;
     if (u == null) return;
+    if (!frag && !PHRASE_BY_NORM.has(norm)) PHRASE_BY_NORM.set(norm, { item, unitKg: u });
     out.push({ re: new RegExp(`\\b${norm.replace(/\s+/g, "\\s+")}\\b`, "g"), item, unitKg: u, frag, prefix });
   };
 
@@ -338,24 +344,33 @@ function extractPairs(text: string): Pair[] {
       out.push({ qty, kg, pos: m.index, line: lineOf(text, m.index) });
     }
   }
+  return fixUnitWeightOverflow(out);
+}
 
-// Pares "N Nome" sem peso (novo layout de inventário onde a OCR não mostra pesos).
-// O peso unitário vem do catálogo e o total = qty * unitKg.
+// Pares de quantidade sem peso (qty-only) — dois formatos suportados:
+//   A) linha própria "64 Arma de Coleção" (qty primeiro);
+//   B) Google Lens "• Arma de Coleção (x64)" (nome primeiro, qty com "x").
+// O peso unitário vem do catálogo/aliases e o total = qty * unitKg.
 function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; line: number }> {
   const out: Array<{ qty: number; name: string; line: number }> = [];
-  // Nome começa com letra/dígito, permite acentos, hífens, apóstrofos e múltiplas palavras.
-  const re = /^(\d{1,7})\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*)$/gm;
+  const seen = new Set<string>();
+  const push = (qty: number, rawName: string, pos: number) => {
+    const name = rawName.trim();
+    if (!(qty > 0) || name.length === 0) return;
+    const key = `${qty}:${normalizeLine(name)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ qty, name, line: lineOf(text, pos) });
+  };
+  // Formato A: "64 Arma de Coleção" (linha própria, sem peso).
+  const reA = /^(\d{1,7})\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*)$/gm;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
-    const qty = Number(m[1]);
-    const name = m[2].trim();
-    if (qty > 0 && name.length > 0) {
-      out.push({ qty, name, line: lineOf(text, m.index) });
-    }
-  }
+  while ((m = reA.exec(text))) push(Number(m[1]), m[2], m.index);
+  // Formato B: "• Arma de Coleção (x64)" — separador "•" ou início de linha
+  // (cobre listas multi-linha e a lista colada numa só linha do chat).
+  const reB = /(?:^|[•])\s*([^•\n()]+?)\s*\(\s*[xX×]?\s*(\d{1,7})\s*\)/gm;
+  while ((m = reB.exec(text))) push(Number(m[2]), m[1], m.index);
   return out;
-}
-  return fixUnitWeightOverflow(out);
 }
 
 // Procura as frases em cada linha; devolve pistas com posição/linha.
@@ -1118,19 +1133,24 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
           }
           return out;
         });
-  // Extrai pares "N Nome" sem peso (layout novo onde a OCR não mostra pesos).
-// O peso unitário vem do catálogo e o total = qty * unitKg.
-const qtyOnlyPairs = extractQtyOnlyPairs(rawText);
+  // Pares qty-only ("64 Arma" / "• Arma (x64)") só entram no resumo quando o
+// texto original não tem pares "N (peso)" próprios — nunca duplica itens do
+// layout antigo. Lookup via PHRASE_BY_NORM (catálogo + aliases do parser).
 const qtyOnlySummary: string[] = [];
-for (const p of qtyOnlyPairs) {
-  const def = ITEM_BY_NAME.get(normalizeLine(p.name));
-  const unitKg = def?.unitKg ?? 0;
-  const kg = p.qty * unitKg;
-  qtyOnlySummary.push(`${p.qty} (${kg.toFixed(1)}) ${p.name}`);
+if (extractPairs(rawText).length < 2) {
+  for (const p of extractQtyOnlyPairs(rawText)) {
+    const def = PHRASE_BY_NORM.get(normalizeLine(p.name));
+    const unitKg = def?.unitKg ?? 0;
+    const kg = Math.round(p.qty * unitKg * 1000) / 1000;
+    qtyOnlySummary.push(`${p.qty} (${kg}) ${p.name}`);
+  }
 }
 const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qtyOnlySummary];
+  // Com qty-only sintetizado, o resumo é obrigatório: o gatilho de contagem
+  // de linhas não dispara em listas curtas (ex.: Lens numa só linha).
   const sourceText =
-    allSummary.length >= 2 && allSummary.length * 3 <= rawText.split("\n").length + 4
+    allSummary.length >= 2 &&
+    (allSummary.length * 3 <= rawText.split("\n").length + 4 || qtyOnlySummary.length >= 2)
       ? allSummary.join("\n")
       : rawText;
   const fixed = fixOcrTypos(
