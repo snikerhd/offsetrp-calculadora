@@ -22,7 +22,10 @@ export async function lensOcr(base64Data: string, timeoutMs = 15_000): Promise<s
     // de emparelhamento direto qty↔nome que o parser aceita como fiável.
     const segs = result.segments as Array<{ text: string; boundingBox: { centerPerX: number; centerPerY: number } }>;
     const colOf = (x: number) => (x < 0.2 ? 0 : x < 0.4 ? 1 : x < 0.6 ? 2 : x < 0.8 ? 3 : 4);
-    const isQtyBadge = (t: string) => /^\d{1,7}\s*\(/.test(t.trim());
+    // Detecta ambos os formatos de badge de quantidade:
+//   - Formato antigo: "64 (1.0)"  →  qty badge com peso
+//   - Formato novo:   "(x64)"     →  qty badge sem peso (xN)
+const isQtyBadge = (t: string) => /^\d{1,7}\s*\(/.test(t.trim()) || /^\(x\d{1,7}\)$/i.test(t.trim());
     const isNoise = (t: string) => /^\d{1,2}:\d{2}$/.test(t.trim()) || t.trim() === "+";
     // Agrupar por coluna → linhas (y), juntando segmentos da mesma linha.
     const columns: Array<Array<{ y: number; x: number; text: string }>> = [[], [], [], [], []];
@@ -57,7 +60,10 @@ export async function lensOcr(base64Data: string, timeoutMs = 15_000): Promise<s
       }
     }
     const text = lines.join("\n").trim();
-    return text;
+    // Fallback: se a reconstrução da grelha falhar (poucas linhas), devolve
+    // o texto bruto dos segmentos — o parser já lê "• Name (xN)" e "N Name".
+    const fallback = segs.map((s) => s.text.trim()).filter(Boolean).join("\n");
+    return text.length > 0 && lines.length >= 2 ? text : fallback;
   } catch (e) {
     lastLensError = e instanceof Error ? e.message : String(e);
     return "";

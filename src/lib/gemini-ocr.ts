@@ -126,7 +126,7 @@ export async function geminiOcr(base64Data: string, timeoutMs = 15_000): Promise
         );
         if (!res.ok) {
           const detail = await res.text().catch(() => "");
-          // Chave/quota: repetir com outros modelos não resolve — sai já.
+          // Chave/quota: 401/403 = chave inválida (sai já). 429 = quota global esgotada (não adianta retry).
           if (res.status === 401 || res.status === 403) { lastGeminiError = `chave rejeitada (HTTP ${res.status})`; return ""; }
           if (res.status === 429) { lastGeminiError = "quota gratuita esgotada (HTTP 429)"; return ""; }
           if (res.status === 404) { lastError = `${model} indisponível`; break; } // próximo modelo

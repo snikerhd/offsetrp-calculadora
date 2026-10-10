@@ -39,7 +39,17 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   try { return await fetch(url, { ...init, signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", ...(init.headers || {}) } }); } finally { clearTimeout(timer); }
 }
 export async function POST(req: NextRequest) {
+  // Hard timeout wrapper: garante que a resposta sai antes do 504 do Vercel (60s)
+  const HARD_TIMEOUT_MS = 55_000;
+  const hardTimeout = new Promise<NextResponse>((resolve) => {
+    setTimeout(() => {
+      resolve(NextResponse.json({ result: "", ocrRaw: "", preview: "", error: "Tempo esgotado (55s). Tenta imagem menor ou cola o texto manualmente." }, { status: 504 }));
+    }, HARD_TIMEOUT_MS);
+  });
+
   try {
+    // Race: ou a lógica principal termina, ou o hard timeout dispara
+    return await Promise.race([(async () => {
     // Relógio global do pedido: todos os motores (incluindo downloads)
     // respeitam este orçamento para nunca ultrapassar o limite da função.
     const requestStartedAt = Date.now();
@@ -123,5 +133,6 @@ export async function POST(req: NextRequest) {
     }
     const parsed = parseInventoryOCR(mergeCaixaMultiline(ocrText), { includeWeapon });
     return NextResponse.json({ result: parsed.text, detectedWeights: parsed.weights, overallConfidence: parsed.overallConfidence, weaponCapture: parsed.weaponCapture ?? null, ocrRaw: ocrText, preview, error: parsed.text || parsed.weaponCapture ? undefined : "Não foram identificados itens automaticamente." });
-  } catch (error) { const msg = error instanceof Error ? error.message : "Erro desconhecido"; console.error("API error:", msg); return NextResponse.json({ error: `Falha: ${msg}` }, { status: 500 }); }
+  })(), hardTimeout]);
+} catch (error) { const msg = error instanceof Error ? error.message : "Erro desconhecido"; console.error("API error:", msg); return NextResponse.json({ error: `Falha: ${msg}` }, { status: 500 }); }
 }
