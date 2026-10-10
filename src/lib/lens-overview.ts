@@ -70,3 +70,107 @@ export async function fetchLensOverviewText(imageUrl: string): Promise<string> {
     clearTimeout(timer);
   }
 }
+// Scraper do AI Overview do Google Lens via Puppeteer (browser headless).
+// Abre o Lens com o URL da imagem, aceita cookies se pedir, espera o AI
+// Overview renderizar e extrai o texto. Sem API key, sem conta.
+// Requer @sparticuz/chromium + puppeteer-core em serverless (Vercel).
+export let lastLensOverviewError = "";
+
+// Chromium serverless para Vercel; em dev usa o puppeteer normal se disponível.
+async function getBrowser() {
+  const isVercel = Boolean(process.env.VERCEL);
+  if (isVercel) {
+    const chromium = (await import("@sparticuz/chromium")).default;
+    const puppeteer = (await import("puppeteer-core")).default;
+    return puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+  }
+  // Dev local: tenta puppeteer completo, senão puppeteer-core sem path
+  try {
+    const puppeteer = (await import("puppeteer")).default;
+    return puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  } catch {
+    const puppeteer = (await import("puppeteer-core")).default;
+    return puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  }
+}
+
+/**
+ * Abre o Lens com o URL da imagem, espera o AI Overview e devolve o texto.
+ * Devolve "" se falhar/timeout — o caller decide se usa fallback.
+ */
+export async function lensOverviewOcr(imageUrl: string, timeoutMs = 25_000): Promise<string> {
+  lastLensOverviewError = "";
+  const url = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
+  let browser: Awaited<ReturnType<typeof getBrowser>> | null = null;
+  try {
+    browser = await getBrowser();
+    const page = await browser.newPage();
+    // Bloqueia recursos pesados para acelerar (imagens, fonts, media)
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      const t = req.resourceType();
+      if (["image", "media", "font", "stylesheet"].includes(t)) req.abort();
+      else req.continue();
+    });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+
+    // Aceitar cookies se o banner aparecer (botão "Aceitar todos" / "Accept all")
+    for (const sel of [
+      'button:has-text("Aceitar todos")',
+      'button:has-text("Accept all")',
+      'button[aria-label*="Aceitar"]',
+      'button[aria-label*="Accept"]',
+    ]) {
+      try {
+        const btn = await page.$(sel);
+        if (btn) { await btn.click(); break; }
+      } catch {}
+    }
+
+    // Espera o AI Overview aparecer (selectors do Google Lens)
+    const aiSelectors = [
+      '[data-attrid*="ai_overview"]',
+      ".AOVhaf", // classe do AI Overview container no Lens
+      "[jsname][data-ai-overview]",
+      "div[role='region'][aria-label*='Overview']",
+      ".wDYxhc", // resultado AI genérico do Google
+    ];
+    let found = false;
+    for (const sel of aiSelectors) {
+      try {
+        await page.waitForSelector(sel, { timeout: Math.min(8_000, timeoutMs / 2) });
+        found = true;
+        break;
+      } catch {}
+    }
+    // Fallback: espera um tempo fixo para o JS carregar
+    if (!found) await new Promise((r) => setTimeout(r, 5_000));
+
+    // Extrai todo o texto visível da página (AI Overview + texto OCR)
+    const text = await page.evaluate(() => {
+      // Prioriza o AI Overview se existir
+      const ai =
+        document.querySelector(".AOVhaf") ??
+        document.querySelector("[data-attrid*='ai_overview']") ??
+        document.querySelector("[jsname][data-ai-overview]");
+      if (ai?.textContent) return (ai.textContent as string).trim();
+      // Fallback: texto principal da página
+      const main = document.querySelector("main") ?? document.body;
+      return (main?.textContent ?? "").replace(/\s+/g, " ").trim();
+    });
+
+    await browser.close();
+    browser = null;
+    if (text.length < 10) { lastLensOverviewError = "AI Overview vazio ou não encontrado"; return ""; }
+    return text;
+  } catch (e) {
+    lastLensOverviewError = e instanceof Error ? e.message : String(e);
+    if (browser) { try { await browser.close(); } catch {} }
+    return "";
+  }
+}
