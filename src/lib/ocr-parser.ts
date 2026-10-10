@@ -338,6 +338,23 @@ function extractPairs(text: string): Pair[] {
       out.push({ qty, kg, pos: m.index, line: lineOf(text, m.index) });
     }
   }
+
+// Pares "N Nome" sem peso (novo layout de inventário onde a OCR não mostra pesos).
+// O peso unitário vem do catálogo e o total = qty * unitKg.
+function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; line: number }> {
+  const out: Array<{ qty: number; name: string; line: number }> = [];
+  // Nome começa com letra/dígito, permite acentos, hífens, apóstrofos e múltiplas palavras.
+  const re = /^(\d{1,7})\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*)$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const qty = Number(m[1]);
+    const name = m[2].trim();
+    if (qty > 0 && name.length > 0) {
+      out.push({ qty, name, line: lineOf(text, m.index) });
+    }
+  }
+  return out;
+}
   return fixUnitWeightOverflow(out);
 }
 
@@ -1101,7 +1118,17 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
           }
           return out;
         });
-  const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines];
+  // Extrai pares "N Nome" sem peso (layout novo onde a OCR não mostra pesos).
+// O peso unitário vem do catálogo e o total = qty * unitKg.
+const qtyOnlyPairs = extractQtyOnlyPairs(rawText);
+const qtyOnlySummary: string[] = [];
+for (const p of qtyOnlyPairs) {
+  const def = ITEM_BY_NAME.get(normalizeLine(p.name));
+  const unitKg = def?.unitKg ?? 0;
+  const kg = p.qty * unitKg;
+  qtyOnlySummary.push(`${p.qty} (${kg.toFixed(1)}) ${p.name}`);
+}
+const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qtyOnlySummary];
   const sourceText =
     allSummary.length >= 2 && allSummary.length * 3 <= rawText.split("\n").length + 4
       ? allSummary.join("\n")

@@ -638,6 +638,24 @@ fails += run(
   395,
   75.3,
 );
+
+fails += run(
+  "caso 14: inventário em grade N Nome (sem peso no OCR)",
+  `64 Arma de Coleção
+5 Barra de Ouro
+1 Caixa Arma
+2 Hot Chocolate
+1 Extintor`,
+  {
+    "arma de colecao": [64, 64],
+    "barras ouro": [5, 5],
+    "caixa arma": [1, 1],
+    "hot chocolate": [2, 0.4],
+    "extintor": [1, 1],
+  },
+  73,
+  71.4,
+);
 console.log(fails === 0 ? "\nTODOS OK ✓" : `\n${fails} FALHAS TOTAIS`);
 process.exit(fails === 0 ? 0 : 1);
 

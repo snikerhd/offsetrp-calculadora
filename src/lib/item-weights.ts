@@ -113,6 +113,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "caixa eletronicos", displayName: "Caixa Eletrónicos", unitKg: 1, category: "roubo", illegal: true },
   { name: "caixa tabaco", displayName: "Caixa Tabaco", unitKg: 1, category: "roubo", illegal: true },
   { name: "caixa contrabando", displayName: "Caixa Contrabando", unitKg: 1, category: "roubo", illegal: true },
+  { name: "caixa arma", displayName: "Caixa Arma", unitKg: 1, category: "roubo", illegal: true },
 
   // ── Pesca ──
   { name: "orca", displayName: "Orca", unitKg: 10, category: "roubo", illegal: true },
