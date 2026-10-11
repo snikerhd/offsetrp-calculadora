@@ -1153,18 +1153,32 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 //   "Machine Pistol (x1) — Munições: 75 | Acessórios: Drum Magazine (1)"
 // Separa em linhas próprias (MUNIÇÃO:/ACESSÓRIOS:) que o parser reconhece e
 // limpa o sufixo da linha do item — senão o "Munições: 75" vira "item fantasma".
+// Mapa arma → calibre da munição (classe 3=alto, 2=médio, 1=baixo).
+const WEAPON_CALIBER: Record<string, string> = {
+  "tactical carbine": "alto", "bullpup rifle mk2": "alto", "bullpup mk2": "alto",
+  "bullpup rifle": "alto", "advanced rifle": "alto", "military rifle": "alto",
+  "tactical rifle": "alto", "rifle mk2": "alto", "double barrel": "alto",
+  "assault rifle": "alto", "compact rifle": "alto", "gusenberg": "alto",
+  "shotgun": "alto", "spas": "alto", "draco": "alto", "famas": "alto",
+  "assault smg": "medio", "machine pistol": "medio", "micro smg": "medio",
+  "combat pdw": "medio", "smg": "medio", "p90": "medio", "tec9": "medio",
+  "pistol 50": "baixo", "sns": "baixo", "vintage": "baixo", "revolver": "baixo",
+  "ap pistol": "baixo", "pistol": "baixo",
+};
 function normalizeWeaponMeta(text: string): string {
   return text.replace(
-    /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,7})\s*(balas?\s+\w+\s+calibre)?.*$/gim,
+    /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,7})[ ]*(balas?\s+\w+\s+calibre)?.*$/gim,
     (_m, item, ammo, balas) => {
       let out = item.trim();
       if (balas) {
-        // "Nome (x1) — Munição: 243 balas alto calibre" → "Nome (x1)\n243 balas alto"
-        // (a munição vira item "balas X" com a quantidade; o parser calcula por calibre).
         const ammoName = balas.replace(/\s+calibre$/i, "").trim();
         out += `\n${ammo} ${ammoName}`;
       } else {
-        out += `\nMUNIÇÃO: ${ammo}`;
+        // Sem calibre explícito: determina pelo nome da arma.
+        const weaponName = item.replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
+        const caliber = WEAPON_CALIBER[normalizeLine(weaponName)];
+        if (caliber) out += `\n${ammo} balas ${caliber}`;
+        else out += `\nMUNIÇÃO: ${ammo}`;
       }
       return out;
     }
@@ -1238,6 +1252,7 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
 // layout antigo. Lookup via PHRASE_BY_NORM (catálogo + aliases do parser).
 const qtyOnlySummary: string[] = [];
 let ammoAlto = 0, ammoMedio = 0, ammoBaixo = 0;
+const qtyOnlyMap = new Map<string, { name: string; qty: number }>();
 if (extractPairs(rawText).length < 2) {
   for (const p of extractQtyOnlyPairs(rawText)) {
     const def = PHRASE_BY_NORM.get(normalizeLine(p.name));
@@ -1251,9 +1266,19 @@ if (extractPairs(rawText).length < 2) {
       else ammoBaixo += qty;
       qty = 1;
     }
-    const kg = Math.round(qty * unitKg * 1000) / 1000;
-    qtyOnlySummary.push(`${qty} (${kg}) ${p.name}`);
+    // Soma por nome: 2× "Tactical Carbine (x1)" → 1 entrada "2 (kg) Tactical Carbine"
+    // (evita que o parseSintese dedupique linhas idênticas e sub-conta).
+    const key = normalizeLine(p.name);
+    const prev = qtyOnlyMap.get(key);
+    if (prev) prev.qty += qty;
+    else qtyOnlyMap.set(key, { name: p.name, qty });
   }
+}
+for (const { name, qty } of qtyOnlyMap.values()) {
+  const def = PHRASE_BY_NORM.get(normalizeLine(name));
+  const unitKg = def?.unitKg ?? 0;
+  const kg = Math.round(qty * unitKg * 1000) / 1000;
+  qtyOnlySummary.push(`${qty} (${kg}) ${name}`);
 }
 const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qtyOnlySummary];
   // Com qty-only sintetizado, o resumo é obrigatório: o gatilho de contagem
