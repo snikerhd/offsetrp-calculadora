@@ -100,7 +100,7 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     if (data.ocrRaw) setOcrRawText(data.ocrRaw);
     setOcrWeights(data.detectedWeights || []);
     setOcrOverallConfidence(data.overallConfidence ?? null);
-    setOcrWeapon(data.weaponCapture || null);
+    setOcrWeapon(null); // TESTE: captura da arma desligada no frontend
 
     if (data.error && !data.result && !data.weaponCapture) {
       setOcrStatus(`❌ ${data.error}`);
