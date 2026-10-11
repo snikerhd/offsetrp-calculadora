@@ -36,13 +36,16 @@ REGRAS ABSOLUTAS (segue-as à risca):
 - NUNCA escrevas frases, descrições, explicações, resumos ou introduções.
 - NUNCA comeces com "A imagem", "The image", "Isto é", "This is", "Este menu", etc.
 - Devolve EXCLUSIVAMENTE um objeto JSON válido, sem markdown, sem texto antes ou depois.
+- NUNCA traduzas os nomes para inglês. Usa o nome EXACTO em PORTUGUÊS da imagem.
+- NUNCA adiciones nomes em inglês (ex.: NÃO "Pistol .50 (Desert Eagle)", só "Pistol .50").
 
 Formato exacto:
-{ "items": [ { "name": "nome do item EXACTAMENTE como escrito na imagem", "qty": 123 } ] }
+{ "items": [ { "name": "nome EXACTO em português", "qty": 123 } ] }
 
-- "name": texto literal do jogo (português), sem traduzir nem corrigir a grafia.
-- "qty": o número visível no quadrado (ex.: x64 → 64). Se não houver quantidade visível, usa 1.
-- Lista TODOS os quadrados/itens visíveis, por ordem de leitura (esquerda→direita, cima→baixo). Máximo 80.
+- "name": texto literal do jogo em PORTUGUÊS, sem traduzir, sem inglês, sem corrigir a grafia.
+- "qty": o número de unidades visível no item (ex.: x64 → 64). Se não houver, usa 1.
+- Para ARMAS com munição visível: o "qty" da arma é 1, e adiciona um item separado { "name": "MUNIÇÃO", "qty": <número> }. A munição é do calibre da arma: Classe 3 (rifle)=alto, Classe 2 (SMG)=médio, Classe 1 (pistola)=baixo.
+- Lista TODOS os itens visíveis, por ordem de leitura. Máximo 80.
 - Se a imagem NÃO for um inventário de itens, devolve { "items": [] } e nada mais.`;
 
 class GeminiHttpError extends Error {

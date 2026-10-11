@@ -1233,17 +1233,18 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
 // texto original não tem pares "N (peso)" próprios — nunca duplica itens do
 // layout antigo. Lookup via PHRASE_BY_NORM (catálogo + aliases do parser).
 const qtyOnlySummary: string[] = [];
-let arsenalAmmo = 0;
+let ammoAlto = 0, ammoMedio = 0, ammoBaixo = 0;
 if (extractPairs(rawText).length < 2) {
   for (const p of extractQtyOnlyPairs(rawText)) {
     const def = PHRASE_BY_NORM.get(normalizeLine(p.name));
     const unitKg = def?.unitKg ?? 0;
     let qty = p.qty;
-    // Arsenal: arma com qty alto (>50) é a MUNIÇÃO lida por engano (cada arma é 1,
-    // ex.: "Tactical Carbine (x243)" = 1 arma com 243 balas). Conta 1 arma; a
-    // munição (qty) soma em arsenalAmmo para ir para o weaponCapture.
+    // Arsenal: arma com qty alto (>50) é a MUNIÇÃO lida por engano (cada arma é 1).
+    // Conta 1 arma; a munição vai para o calibre da arma (classe 3=alto, 2=médio, 1=baixo).
     if (def && /^arma (baixo|medio|alto) calibre$/.test(def.item) && qty > 50) {
-      arsenalAmmo += qty;
+      if (def.item === "arma alto calibre") ammoAlto += qty;
+      else if (def.item === "arma medio calibre") ammoMedio += qty;
+      else ammoBaixo += qty;
       qty = 1;
     }
     const kg = Math.round(qty * unitKg * 1000) / 1000;
@@ -1397,15 +1398,13 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
       };
     }
   }
-  // Munição do arsenal (armas com qty alto = munição lida por engano): soma ao
-  // weaponCapture. Se não havia captura, cria uma a partir da arma predominante.
-  if (WEAPON_CAPTURE_ENABLED && arsenalAmmo > 0) {
-    if (wc) wc.ammo = (wc.ammo || 0) + arsenalAmmo;
-    else {
-      const wItem = merged.find((w) => WEAPON_ITEM_RE.test(w.item));
-      const wItemName = wItem?.item ?? "arma baixo calibre";
-      const ammoItem = wItemName === "arma alto calibre" ? "balas alto" : wItemName === "arma medio calibre" ? "balas medio" : "balas baixo";
-      wc = { weapon: wItem ? displayName(wItem.item) : "Arma", weaponItem: wItemName as WeaponCapture["weaponItem"], ammo: arsenalAmmo, ammoItem, accessoryCount: 0 };
+  // Munição do arsenal por calibre (classe 3=alto, 2=médio, 1=baixo): adiciona
+  // como itens "balas X calibre" para a coima calcular o preço por calibre.
+  for (const [item, qty] of [["balas alto", ammoAlto], ["balas medio", ammoMedio], ["balas baixo", ammoBaixo]] as Array<[string, number]>) {
+    if (qty > 0) {
+      const def = ITEM_BY_NAME.get(item);
+      const unitKg = def?.unitKg ?? 0;
+      merged.push({ item, qty, kg: Math.round(qty * unitKg * 1000) / 1000, unitKg, confidence: 90, confidenceLevel: "medium", matchReason: "Munição do arsenal (por calibre)" });
     }
   }
   const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
