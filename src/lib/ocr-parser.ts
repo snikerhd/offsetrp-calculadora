@@ -172,25 +172,25 @@ const ALIASES: Array<[string, string, number?]> = [
   ["carregador smg", "carregador medio calibre"],
   ["carregador de rifle", "carregador alto calibre"],
   ["carregador de pistola", "carregador baixo calibre"],
-  // Munições renomeadas no jogo para calibres específicos. O normalizeLine
-  // troca "." e "," por espaço, por isso "5.56"->"5 56" e "0.45"->"0 45";
-  // cobrimos as variantes com e sem separador para o OCR não falhar.
-  // Mapeamento: 5.56 e 0.45 = alto calibre (rifle); 9mm = médio; Cartuchos 12 = baixo.
-  ["balas 5.56", "balas alto"],
-  ["balas 556", "balas alto"],
-  ["bala 5.56", "balas alto"],
-  ["balas 5,56", "balas alto"],
-  ["balas 0.45", "balas alto"],
-  ["bala 0.45", "balas alto"],
-  ["balas 045", "balas alto"],
-  ["balas 45", "balas alto"],
-  ["balas 9mm", "balas medio"],
-  ["bala 9mm", "balas medio"],
-  ["balas 9 mm", "balas medio"],
-  ["cartuchos 12", "balas baixo"],
-  ["cartucho 12", "balas baixo"],
-  ["cartuchos 12 gauge", "balas baixo"],
-  ["cartucho 12 gauge", "balas baixo"],
+  // Munições renomeadas no jogo para calibres específicos. Têm nome de "Balas"
+  // mas são CARREGADORES (magazines, 0,2 kg) — mapeiam para carregador X calibre.
+  // O normalizeLine troca "." e "," por espaço ("5.56"->"5 56", "0.45"->"0 45"),
+  // por isso cobrimos as variantes. 5.56 e 0.45 = alto; 9mm = médio; 12 = baixo.
+  ["balas 5.56", "carregador alto calibre"],
+  ["balas 556", "carregador alto calibre"],
+  ["bala 5.56", "carregador alto calibre"],
+  ["balas 5,56", "carregador alto calibre"],
+  ["balas 0.45", "carregador alto calibre"],
+  ["bala 0.45", "carregador alto calibre"],
+  ["balas 045", "carregador alto calibre"],
+  ["balas 45", "carregador alto calibre"],
+  ["balas 9mm", "carregador medio calibre"],
+  ["bala 9mm", "carregador medio calibre"],
+  ["balas 9 mm", "carregador medio calibre"],
+  ["cartuchos 12", "carregador baixo calibre"],
+  ["cartucho 12", "carregador baixo calibre"],
+  ["cartuchos 12 gauge", "carregador baixo calibre"],
+  ["cartucho 12 gauge", "carregador baixo calibre"],
   // Arsenal de armas (nomes completos do jogo). CLASSE 1=baixo, 2=médio, 3=alto.
   ["tactical carbine", "arma alto calibre", 15],
   ["bullpup rifle mk2", "arma alto calibre", 15],
