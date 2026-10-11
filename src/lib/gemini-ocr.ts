@@ -27,13 +27,22 @@ export function geminiConfigured(): boolean {
 
 // Prompt focado no inventário: só interessa name+qty, com os nomes EXATOS do
 // jogo (o parser tem aliases para variações, mas o literal é o ideal).
-const PROMPT = `És um leitor de inventário de GTA V (FiveM). Analisa a imagem e devolve APENAS JSON válido, sem markdown:
-{ "items": [ { "name": "nome do item EXATAMENTE como escrito na imagem", "qty": 123 } ] }
-Regras:
-- Lista TODOS os quadrados/itens visíveis, por ordem de leitura (esquerda→direita, cima→baixo).
-- "name" = texto literal do jogo (português), sem traduzir nem corrigir a grafia.
-- "qty" = o número visível no quadrado (ex.: x64 → 64). Se não houver quantidade, usa 1.
-- Máximo 80 itens. Se a imagem não for um inventário, devolve { "items": [] }.`;
+// Regras anti-prosa EXPLÍCITAS: o Gemini por vezes descreve a imagem em vez de
+// listar; isto força-o a devolver SEMPRE o JSON de itens.
+const PROMPT = `És um extrator de inventário de GTA V (FiveM). A tua ÚNICA tarefa é ler os itens da imagem e devolver JSON.
+
+REGRAS ABSOLUTAS (segue-as à risca):
+- NUNCA escrevas frases, descrições, explicações, resumos ou introduções.
+- NUNCA comeces com "A imagem", "The image", "Isto é", "This is", "Este menu", etc.
+- Devolve EXCLUSIVAMENTE um objeto JSON válido, sem markdown, sem texto antes ou depois.
+
+Formato exacto:
+{ "items": [ { "name": "nome do item EXACTAMENTE como escrito na imagem", "qty": 123 } ] }
+
+- "name": texto literal do jogo (português), sem traduzir nem corrigir a grafia.
+- "qty": o número visível no quadrado (ex.: x64 → 64). Se não houver quantidade visível, usa 1.
+- Lista TODOS os quadrados/itens visíveis, por ordem de leitura (esquerda→direita, cima→baixo). Máximo 80.
+- Se a imagem NÃO for um inventário de itens, devolve { "items": [] } e nada mais.`;
 
 class GeminiHttpError extends Error {
   status: number;
@@ -77,7 +86,7 @@ async function optimizeForVision(base64Data: string): Promise<{ base64: string; 
 function parseItems(raw: string): Array<{ name: string; qty: number }> {
   const cleaned = raw.replace(/```(?:json)?/gi, "").trim();
   let obj: unknown;
-  try { obj = JSON.parse(cleaned); } catch { return []; }
+  try { obj = JSON.parse(cleaned); } catch { return parseItemsFromProse(cleaned); }
   const rec = (obj ?? {}) as Record<string, unknown>;
   const arr = Array.isArray(rec.items) ? rec.items : [];
   const out: Array<{ name: string; qty: number }> = [];
@@ -88,6 +97,52 @@ function parseItems(raw: string): Array<{ name: string; qty: number }> {
     if (!name) continue;
     const qty = Math.floor(Number(String(r.qty ?? "1").replace(/[^\d]/g, "")));
     out.push({ name, qty: Number.isFinite(qty) && qty > 0 ? qty : 1 });
+    if (out.length >= 80) break;
+  }
+  return out;
+}
+
+// Fallback: quando o Gemini devolve prosa em vez de JSON (ex.: "The image
+// shows ... containing items like a Bifana, Sumo Maracujá, ..."), extrai os
+// nomes de itens de frases descritivas. A prosa raramente traz quantidades,
+// por isso assume 1 salvo quando há "(xN)"/"xN" explícito.
+function parseItemsFromProse(raw: string): Array<{ name: string; qty: number }> {
+  const text = raw.replace(/\s+/g, " ");
+  // Frases que introduzem a lista de itens, da mais específica para a mais
+  // genérica. "such as" vem POR ÚLTIMO porque aparece cedo em descrições
+  // genéricas ("such as a FiveM server") e não na lista de itens.
+  const introducers = [
+    /items?\s+like\s+(.+)/i,
+    /itens?\s+como\s+(.+)/i,
+    /containing\s+(.+)/i,
+    /contendo\s+(.+)/i,
+    /including\s+(.+)/i,
+    /incluindo\s+(.+)/i,
+    /featuring\s+(.+)/i,
+    /consists?\s+of\s+(.+)/i,
+    /such\s+as\s+(.+)/i,
+  ];
+  let src = "";
+  for (const re of introducers) {
+    const m = text.match(re);
+    if (m && m[1]) { src = m[1]; break; }
+  }
+  if (!src) src = text;
+  src = src.split(/\.\s|\.$/)[0]; // corta no fim da frase (fim da lista)
+  const out: Array<{ name: string; qty: number }> = [];
+  const seen = new Set<string>();
+  for (const part of src.split(/,|\band\b|\be\b/i)) {
+    let s = part.trim().replace(/^(a|an|o|os|as|the|um|uma|uns|umas)\s+/i, "");
+    if (!s) continue;
+    let qty = 1;
+    const qm = s.match(/\(?\s*x\s*(\d{1,6})\s*\)?\s*$/i) || s.match(/\bx\s*(\d{1,6})\b/i);
+    if (qm) { qty = Number(qm[1]) || 1; s = s.replace(/\s*\(?\s*x\s*\d{1,6}\s*\)?\s*$/i, "").trim(); }
+    s = s.replace(/[.;:)\]]+$/, "").trim();
+    if (s.length < 2 || s.length > 60 || !/[a-zà-ú]/i.test(s)) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: s, qty });
     if (out.length >= 80) break;
   }
   return out;
