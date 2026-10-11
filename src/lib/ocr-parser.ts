@@ -191,6 +191,19 @@ const ALIASES: Array<[string, string, number?]> = [
   ["cartucho 12", "balas baixo"],
   ["cartuchos 12 gauge", "balas baixo"],
   ["cartucho 12 gauge", "balas baixo"],
+  // Arsenal de armas (nomes completos do jogo). CLASSE 1=baixo, 2=médio, 3=alto.
+  ["tactical carbine", "arma alto calibre", 15],
+  ["bullpup rifle mk2", "arma alto calibre", 15],
+  ["bullpup mk2", "arma alto calibre", 15],
+  ["bullpup rifle", "arma alto calibre", 15],
+  ["advanced rifle", "arma alto calibre", 15],
+  ["military rifle", "arma alto calibre", 15],
+  ["tactical rifle", "arma alto calibre", 15],
+  ["rifle mk2", "arma alto calibre", 15],
+  ["double barrel", "arma alto calibre", 15],
+  ["pistol 50", "arma baixo calibre", 5],
+  ["sns", "arma baixo calibre", 5],
+  ["revolver mk2", "arma baixo calibre", 5],
   ["machine pistol", "arma medio calibre", 5],
   ["micro smg", "arma medio calibre", 10],
   ["assault smg", "arma medio calibre", 10],
@@ -1106,7 +1119,8 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
 function detectWeaponCapture(text: string): WeaponCapture | null {
   const armaMatch = (text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "").replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
   // "MUNIÇÃO:" ou "MUNIÇÕES:" (a IA do Lens usa o plural).
-  const ammo = Number(text.match(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/i)?.[1] || 0);
+  // Soma TODAS as "MUNIÇÃO:/MUNIÇÕES: N" (arsenal com várias armas → munição total).
+  const ammo = [...text.matchAll(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/gi)].reduce((s, m) => s + Number(m[1]), 0);
   const accessoryCount = countAccessories(text);
   // Só detecta se houver metadata explícita (ARMA:/MUNIÇÃO:/ACESSÓRIOS:) — evita
   // falsos positivos em inventários que só têm um item-arma sem contexto.
@@ -1141,12 +1155,21 @@ function normalizeWeaponMeta(text: string): string {
   );
 }
 
+// Arsenal de armas: "Tactical Carbine (Munição: 243)" → "Tactical Carbine (x1)"
+// + "MUNIÇÃO: 243" (a arma conta-se por calibre; a munição soma no weaponCapture).
+// "Pistol .50 (Munição: ícone cheio/sem indicação)" → só "Pistol .50 (x1)".
+function normalizeWeaponAmmo(text: string): string {
+  return text
+    .replace(/^([^\n(]+?)\s*\(\s*MUNI[CÇ][AÃ]O\s*:\s*(\d{1,7})\s*\)\s*$/gim, (_m, name, ammo) => `${name.trim()} (x1)\nMUNIÇÃO: ${ammo}`)
+    .replace(/^([^\n(]+?)\s*\(\s*MUNI[CÇ][AÃ]O\s*:[^)]*\)\s*$/gim, (_m, name) => `${name.trim()} (x1)`);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Parser principal
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: boolean }): ParseResult {
   const includeWeapon = opts?.includeWeapon ?? false;
-  rawText = normalizeWeaponMeta(rawText);
+  rawText = normalizeWeaponAmmo(normalizeWeaponMeta(rawText));
   const usedRecover = new Set<string>();
   // O OCR do Gyazo repete o conteúdo duas vezes: primeiro a grelha embaralhada
   // (todas as quantidades num bloco, todos os nomes noutro), depois as linhas
@@ -1322,31 +1345,34 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
 
   const body = parseInventoryBody(fixed, headerLines, undefined, scrambledText);
   const merged = flagSameWeightAmbiguity(mergeResults(body), scrambledText);
-  // Uma arma no inventário é 1 unidade. Um qty>1 numa "arma X calibre" é quase
-  // sempre o nº de munições lido por engano pelo OCR/Gemini (a imagem da arma
-  // mostra "Munição: 75" e o Gemini cola 75 como quantidade da arma). Corrige:
-  // a arma fica 1x e o excedente vai para a munição do weaponCapture.
-  let ammoFromWeapon = 0;
-  for (const w of merged) {
-    if (WEAPON_ITEM_RE.test(w.item) && w.qty > 1) {
-      ammoFromWeapon = Math.max(ammoFromWeapon, w.qty);
-      w.qty = 1;
-      w.kg = w.unitKg ?? 0;
-      w.matchReason = "Arma (1 unidade; excedente = munição)";
-    }
-  }
+  // Arsenal: as armas contam-se por calibre (várias linhas "(Munição: N)" viram
+  // "x1" cada uma) e a munição soma no weaponCapture. Só quando NÃO há munição
+  // capturada é que um qty>1 numa "arma X calibre" é a munição lida por engano
+  // (ex.: o Gemini colou "Machine Pistol (x75)") — aí a arma fica 1x e o qty vira
+  // munição. Se já há munição (arsenal), NÃO mexe na contagem das armas.
   let wc: WeaponCapture | null = detectWeaponCapture(fixedFull);
-  if (ammoFromWeapon > 0 && (!wc || wc.ammo === 0)) {
-    const wItem = merged.find((w) => WEAPON_ITEM_RE.test(w.item));
-    const wItemName = wItem?.item ?? "arma baixo calibre";
-    const ammoItem = wItemName === "arma alto calibre" ? "balas alto" : wItemName === "arma medio calibre" ? "balas medio" : "balas baixo";
-    wc = {
-      weapon: wItem ? displayName(wItem.item) : "Arma",
-      weaponItem: wItemName as WeaponCapture["weaponItem"],
-      ammo: ammoFromWeapon,
-      ammoItem,
-      accessoryCount: wc?.accessoryCount ?? 0,
-    };
+  if (!wc || wc.ammo === 0) {
+    let ammoFromWeapon = 0;
+    for (const w of merged) {
+      if (WEAPON_ITEM_RE.test(w.item) && w.qty > 1) {
+        ammoFromWeapon = Math.max(ammoFromWeapon, w.qty);
+        w.qty = 1;
+        w.kg = w.unitKg ?? 0;
+        w.matchReason = "Arma (1 unidade; excedente = munição)";
+      }
+    }
+    if (ammoFromWeapon > 0) {
+      const wItem = merged.find((w) => WEAPON_ITEM_RE.test(w.item));
+      const wItemName = wItem?.item ?? "arma baixo calibre";
+      const ammoItem = wItemName === "arma alto calibre" ? "balas alto" : wItemName === "arma medio calibre" ? "balas medio" : "balas baixo";
+      wc = {
+        weapon: wItem ? displayName(wItem.item) : "Arma",
+        weaponItem: wItemName as WeaponCapture["weaponItem"],
+        ammo: ammoFromWeapon,
+        ammoItem,
+        accessoryCount: wc?.accessoryCount ?? 0,
+      };
+    }
   }
   const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
   const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
