@@ -1322,9 +1322,35 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
 
   const body = parseInventoryBody(fixed, headerLines, undefined, scrambledText);
   const merged = flagSameWeightAmbiguity(mergeResults(body), scrambledText);
+  // Uma arma no inventário é 1 unidade. Um qty>1 numa "arma X calibre" é quase
+  // sempre o nº de munições lido por engano pelo OCR/Gemini (a imagem da arma
+  // mostra "Munição: 75" e o Gemini cola 75 como quantidade da arma). Corrige:
+  // a arma fica 1x e o excedente vai para a munição do weaponCapture.
+  let ammoFromWeapon = 0;
+  for (const w of merged) {
+    if (WEAPON_ITEM_RE.test(w.item) && w.qty > 1) {
+      ammoFromWeapon = Math.max(ammoFromWeapon, w.qty);
+      w.qty = 1;
+      w.kg = w.unitKg ?? 0;
+      w.matchReason = "Arma (1 unidade; excedente = munição)";
+    }
+  }
+  let wc: WeaponCapture | null = detectWeaponCapture(fixedFull);
+  if (ammoFromWeapon > 0 && (!wc || wc.ammo === 0)) {
+    const wItem = merged.find((w) => WEAPON_ITEM_RE.test(w.item));
+    const wItemName = wItem?.item ?? "arma baixo calibre";
+    const ammoItem = wItemName === "arma alto calibre" ? "balas alto" : wItemName === "arma medio calibre" ? "balas medio" : "balas baixo";
+    wc = {
+      weapon: wItem ? displayName(wItem.item) : "Arma",
+      weaponItem: wItemName as WeaponCapture["weaponItem"],
+      ammo: ammoFromWeapon,
+      ammoItem,
+      accessoryCount: wc?.accessoryCount ?? 0,
+    };
+  }
   const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
   const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
-  return { text, weights: merged, weaponCapture: detectWeaponCapture(fixedFull), overallConfidence: overall };
+  return { text, weights: merged, weaponCapture: wc, overallConfidence: overall };
 }
 
 // Fluxo normal do inventário: pares "qty (peso)" casados com pistas de nome.
