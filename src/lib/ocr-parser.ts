@@ -172,6 +172,25 @@ const ALIASES: Array<[string, string, number?]> = [
   ["carregador smg", "carregador medio calibre"],
   ["carregador de rifle", "carregador alto calibre"],
   ["carregador de pistola", "carregador baixo calibre"],
+  // Munições renomeadas no jogo para calibres específicos. O normalizeLine
+  // troca "." e "," por espaço, por isso "5.56"->"5 56" e "0.45"->"0 45";
+  // cobrimos as variantes com e sem separador para o OCR não falhar.
+  // Mapeamento: 5.56 e 0.45 = alto calibre (rifle); 9mm = médio; Cartuchos 12 = baixo.
+  ["balas 5.56", "balas alto"],
+  ["balas 556", "balas alto"],
+  ["bala 5.56", "balas alto"],
+  ["balas 5,56", "balas alto"],
+  ["balas 0.45", "balas alto"],
+  ["bala 0.45", "balas alto"],
+  ["balas 045", "balas alto"],
+  ["balas 45", "balas alto"],
+  ["balas 9mm", "balas medio"],
+  ["bala 9mm", "balas medio"],
+  ["balas 9 mm", "balas medio"],
+  ["cartuchos 12", "balas baixo"],
+  ["cartucho 12", "balas baixo"],
+  ["cartuchos 12 gauge", "balas baixo"],
+  ["cartucho 12 gauge", "balas baixo"],
   ["machine pistol", "arma medio calibre", 5],
   ["micro smg", "arma medio calibre", 10],
   ["assault smg", "arma medio calibre", 10],
