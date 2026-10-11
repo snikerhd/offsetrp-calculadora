@@ -7,7 +7,8 @@
 export let lastGeminiError = "";
 
 // Cascata de modelos (o Google descontinua nomes antigos para chaves novas).
-const MODELS = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"];
+// gemini-2.5-flash-lite está deprecated para chaves novas (404) — removido.
+const MODELS = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-flash-lite-latest"];
 
 // Escada de geração (alguns modelos rejeitam certos parâmetros).
 const GENERATION_CONFIGS: Record<string, unknown>[] = [
