@@ -14,13 +14,19 @@ export function normalizeText(text: string): string {
     .trim();
 }
 
-// Formata número para display com separador de milhares em ponto (ex.: 17.136.000)
+// Formata número para display (sem separador de milhares)
 export function fmt(n: number): string {
-  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return Math.round(n).toString();
 }
 
-// Formata número para display com separador de milhares em ponto (ex.: 17.136.000)
+// Formata número para display (sem separador de milhares)
 export function fmt2(n: number): string {
+  return Math.round(n).toString();
+}
+
+// Formata número COM separador de milhares em ponto (ex.: 17.136.000).
+// Usar só nos totais gerais, para leitura rápida do valor.
+export function fmtMilhares(n: number): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 

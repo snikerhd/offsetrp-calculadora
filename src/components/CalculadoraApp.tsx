@@ -9,7 +9,7 @@ import {
   ITENS_ILEGAIS, PRECOS_DROGAS, DROGAS_LIMITES,
 } from "@/lib/data";
 import {
-  normalizeText, fmt, fmt2, cap, calcSequestro, calcMunicao,
+  normalizeText, fmt, fmt2, fmtMilhares, cap, calcSequestro, calcMunicao,
   calcArmasGrandeQtde, calcItensIlegais, calcDroga,
   obterItemPorSinonimo, obterDrogaPorSinonimo, parseQuickInput, parseCrimesInput, getAllCrimesFlat,
 } from "@/lib/utils";
@@ -721,7 +721,7 @@ export default function CalculadoraApp() {
       msg += `--- MATÉRIA PRIMA --- Posse de Matéria Prima para Fins Ilegais\n` + r.materiaPrima.resultados.join("\n") + `\nTOTAL MATÉRIA PRIMA: ${fmt2(r.materiaPrima.total)} €\n\n`;
     }
     if (r.drogas.resultados.length || r.itens.resultados.length || r.municao.resultados.length || r.armas.resultados.length || r.dinheiro.resultados.length || r.sequestro.resultados.length || r.crimes.resultados.length || r.materiaPrima.resultados.length) {
-      msg += `TOTAL GERAL: ${fmt2(r.totalGeral)} €`;
+      msg += `TOTAL GERAL: ${fmtMilhares(r.totalGeral)} €`;
     } else {
       msg = "Nenhum item válido foi reconhecido.";
     }
