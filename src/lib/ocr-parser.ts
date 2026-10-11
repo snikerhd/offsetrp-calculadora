@@ -376,6 +376,10 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   const push = (qty: number, rawName: string, pos: number) => {
     const name = rawName.trim();
     if (!(qty > 0) || name.length === 0) return;
+    // Metadados da arma (ARMA/MUNIÇÃO/ACESSÓRIOS/WEAPON/AMMO) não são itens de
+    // inventário — vão para o weaponCapture. Só o nome EXACTO (ex.: "MUNIÇÃO: 30"
+    // → nome "MUNIÇÃO"), nunca itens que comecem igual (ex.: "Arma de Coleção").
+    if (/^(arma|weapon|muni[cç][aã]o|acess[oó]rios?|ammo)$/i.test(name)) return;
     const key = `${qty}:${normalizeLine(name)}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -1285,14 +1289,14 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
 
   const anyPairs = extractPairs(fixed).length > 0;
   if (!anyPairs) {
-    return { text: "", weights: [], weaponCapture: detectWeaponCapture(fixed), overallConfidence: 0 };
+    return { text: "", weights: [], weaponCapture: detectWeaponCapture(fixedFull), overallConfidence: 0 };
   }
 
   const body = parseInventoryBody(fixed, headerLines, undefined, scrambledText);
   const merged = flagSameWeightAmbiguity(mergeResults(body), scrambledText);
   const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
   const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
-  return { text, weights: merged, weaponCapture: detectWeaponCapture(fixed), overallConfidence: overall };
+  return { text, weights: merged, weaponCapture: detectWeaponCapture(fixedFull), overallConfidence: overall };
 }
 
 // Fluxo normal do inventário: pares "qty (peso)" casados com pistas de nome.
