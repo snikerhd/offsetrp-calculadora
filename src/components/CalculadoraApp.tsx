@@ -879,7 +879,6 @@ export default function CalculadoraApp() {
           }
         }
         if (ocrArmasGrandeLinhas.length) {
-          linhas.push("  Armas em Grande Quantidade:");
           for (const linha of ocrArmasGrandeLinhas) {
             linhas.push(`  ${linha}`);
           }
