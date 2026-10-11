@@ -417,6 +417,10 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   // Ex.: "Caixa Eletrónicos (x6): Electronics container" → qty 6, nome "Caixa Eletrónicos".
   const reE = /^([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*?)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
   while ((m = reE.exec(text))) push(Number(m[2]), m[1], m.index);
+  // Formato F: "Nome (English) (xN)" — AI Overview do Lens com subtítulo inglês.
+  // Ex.: "Pistol .50 (Desert Eagle) (x1)" → qty 1, nome "Pistol .50". Aceita bullet.
+  const reF = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9.' -]*?)\s*\([^)]+\)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
+  while ((m = reF.exec(text))) push(Number(m[2]), m[1], m.index);
   return out;
 }
 
@@ -1354,7 +1358,9 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   if (!wc || wc.ammo === 0) {
     let ammoFromWeapon = 0;
     for (const w of merged) {
-      if (WEAPON_ITEM_RE.test(w.item) && w.qty > 1) {
+      // Só colapsa quantidades ALTAS (>50) — munição lida por engano (ex.:
+      // "Machine Pistol (x75)"). Contagens normais de arsenal (x2, x6...) ficam.
+      if (WEAPON_ITEM_RE.test(w.item) && w.qty > 50) {
         ammoFromWeapon = Math.max(ammoFromWeapon, w.qty);
         w.qty = 1;
         w.kg = w.unitKg ?? 0;
