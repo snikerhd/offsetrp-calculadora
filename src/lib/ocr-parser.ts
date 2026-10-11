@@ -376,11 +376,11 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   const push = (qty: number, rawName: string, pos: number) => {
     const name = rawName.trim();
     if (!(qty > 0) || name.length === 0) return;
-    // Metadados da arma (ARMA/MUNIÇÃO/ACESSÓRIOS/WEAPON/AMMO) não são itens de
-    // inventário — vão para o weaponCapture. Aceita o nome exacto ("MUNIÇÃO") ou
-    // com descrição após dois-pontos ("ACESSÓRIOS: Drum Magazine"), mas NUNCA
-    // itens reais que só comecem igual (ex.: "Arma de Coleção").
-    if (/^(arma|weapon|muni[cç][aã]o|acess[oó]rios?|ammo)(\s*:.*)?$/i.test(name)) return;
+    // Metadados da arma (ARMA/MUNIÇÃO/MUNIÇÕES/ACESSÓRIOS/WEAPON/AMMO) não são
+    // itens de inventário — vão para o weaponCapture. Aceita o nome exacto ou
+    // com descrição após dois-pontos, no singular OU plural ("Munições: 75"),
+    // mas NUNCA itens reais que só comecem igual (ex.: "Arma de Coleção").
+    if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|acess[oó]rios?|ammo)(\s*:.*)?$/i.test(name)) return;
     const key = `${qty}:${normalizeLine(name)}`;
     if (seen.has(key)) return;
     seen.add(key);
