@@ -1089,7 +1089,11 @@ function countAccessories(fixed: string): number {
   return /CESS[OÓ]RIO/i.test(fixed) ? 1 : 0;
 }
 
+// TESTE: interruptor para desactivar a captura da arma. Meter `true` para re-activar.
+const WEAPON_CAPTURE_ENABLED = false;
+
 function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: WeaponCapture; weights: ItemMatch[] } | null {
+  if (!WEAPON_CAPTURE_ENABLED) return null;
   // Tolerante a letra cortada: "unição: 155" (= MUNIÇÃO)
   const ammo = Number(fixed.match(/(?:M)?UNI[CÇ][AÃ]O\s*:\s*(\d+)/i)?.[1] || 0);
   // A arma é identificada pelo NOME conhecido no texto (ex.: "Machine Pistol"
@@ -1124,6 +1128,7 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
 }
 
 function detectWeaponCapture(text: string): WeaponCapture | null {
+  if (!WEAPON_CAPTURE_ENABLED) return null;
   const armaMatch = (text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "").replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
   // "MUNIÇÃO:" ou "MUNIÇÕES:" (a IA do Lens usa o plural).
   // Soma TODAS as "MUNIÇÃO:/MUNIÇÕES: N" (arsenal com várias armas → munição total).
@@ -1367,7 +1372,7 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   // (ex.: o Gemini colou "Machine Pistol (x75)") — aí a arma fica 1x e o qty vira
   // munição. Se já há munição (arsenal), NÃO mexe na contagem das armas.
   let wc: WeaponCapture | null = detectWeaponCapture(fixedFull);
-  if (!wc || wc.ammo === 0) {
+  if (WEAPON_CAPTURE_ENABLED && (!wc || wc.ammo === 0)) {
     let ammoFromWeapon = 0;
     for (const w of merged) {
       // Só colapsa quantidades ALTAS (>50) — munição lida por engano (ex.:
@@ -1394,7 +1399,7 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   }
   // Munição do arsenal (armas com qty alto = munição lida por engano): soma ao
   // weaponCapture. Se não havia captura, cria uma a partir da arma predominante.
-  if (arsenalAmmo > 0) {
+  if (WEAPON_CAPTURE_ENABLED && arsenalAmmo > 0) {
     if (wc) wc.ammo = (wc.ammo || 0) + arsenalAmmo;
     else {
       const wItem = merged.find((w) => WEAPON_ITEM_RE.test(w.item));
