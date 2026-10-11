@@ -14,14 +14,14 @@ export function normalizeText(text: string): string {
     .trim();
 }
 
-// Formata número para display (sem casas decimais, sem separador de milhares)
+// Formata número para display com separador de milhares em ponto (ex.: 17.136.000)
 export function fmt(n: number): string {
-  return Math.round(n).toString();
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
-// Formata número para display (sem casas decimais, sem separador de milhares)
+// Formata número para display com separador de milhares em ponto (ex.: 17.136.000)
 export function fmt2(n: number): string {
-  return Math.round(n).toString();
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
 // Capitaliza primeira letra
