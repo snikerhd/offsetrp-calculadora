@@ -387,7 +387,28 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   const out: Array<{ qty: number; name: string; line: number }> = [];
   const seen = new Set<string>();
   const push = (qty: number, rawName: string, pos: number) => {
-    const name = rawName.trim();
+    let name = rawName.trim();
+    // Nome truncado pelo jogo (ex.: "Corrente de Ouro...") = forma longa truncada
+    // (no jogo, "Corrente de Ouro 10k" aparece abreviado como "Corrente de Ouro...").
+    // Se há reticências, resolve para o item do catálogo mais longo que começa
+    // com a base — evita confundir "Corrente de Ouro" (600) com "Corrente de
+    // Ouro 10k" (1200), que o jogo mostra truncado.
+    if (/\.{2,}|\u2026/.test(name)) {
+      const base = normalizeLine(name).replace(/\s+/g, " ").trim();
+      if (base.length >= 3) {
+        let bestDisplay: string | null = null;
+        let bestLen = base.length;
+        for (const def of ITEM_CATALOG) {
+          for (const cand of [normalizeLine(def.name), normalizeLine(def.displayName)]) {
+            if (cand.length > bestLen && cand.startsWith(base)) {
+              bestLen = cand.length;
+              bestDisplay = def.displayName;
+            }
+          }
+        }
+        if (bestDisplay) name = bestDisplay;
+      }
+    }
     if (!(qty > 0) || name.length === 0) return;
     // Metadados da arma (ARMA/MUNIÇÃO/MUNIÇÕES/ACESSÓRIOS/WEAPON/AMMO) não são
     // itens de inventário — vão para o weaponCapture. Aceita o nome exacto ou
