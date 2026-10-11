@@ -1072,9 +1072,10 @@ function findWeaponInText(fixed: string): WeaponCapture["weaponItem"] | null {
 }
 
 function countAccessories(fixed: string): number {
-  // Tolerante a letra cortada no início: "cessorios:" (= acessórios)
-  const explicit = Number(fixed.match(/(?:A)?CESS[OÓ]RIOS?\s*:\s*(\d+)/i)?.[1]);
-  if (explicit > 0) return explicit;
+  // "ACESSÓRIOS: N" explícito — devolve N mesmo que seja 0 (tolerante a letra
+  // cortada no início: "cessorios:"). Assim "ACESSÓRIOS: 0" → 0 (não 1).
+  const explicitMatch = fixed.match(/(?:A)?CESS[OÓ]RIOS?\s*:\s*(\d+)/i);
+  if (explicitMatch) return Number(explicitMatch[1]);
   // A lista pode continuar na linha seguinte quando a linha termina em vírgula
   // (ex.: "Rifle Scope,\nRifle Flashlight"). Captura todas as linhas de
   // continuação (linhas terminadas em ",\n") antes da última.
