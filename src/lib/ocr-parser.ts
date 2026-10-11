@@ -376,6 +376,10 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   // Ex.: "○ Caixa Eletrónicos (Electronics Box) – x6" → qty 6, nome "Caixa Eletrónicos".
   const reD = /(?:^|[○•●▪])\s*([^○•●▪\n()]+?)\s*\([^)]+\)\s*[–—-]\s*[xX×]?\s*(\d{1,7})/gm;
   while ((m = reD.exec(text))) push(Number(m[2]), m[1], m.index);
+  // Formato E: "Nome (xN): descrição" — extensão v3.0 (sem bullet).
+  // Ex.: "Caixa Eletrónicos (x6): Electronics container" → qty 6, nome "Caixa Eletrónicos".
+  const reE = /^([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*?)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
+  while ((m = reE.exec(text))) push(Number(m[2]), m[1], m.index);
   return out;
 }
 
