@@ -377,9 +377,10 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
     const name = rawName.trim();
     if (!(qty > 0) || name.length === 0) return;
     // Metadados da arma (ARMA/MUNIÇÃO/ACESSÓRIOS/WEAPON/AMMO) não são itens de
-    // inventário — vão para o weaponCapture. Só o nome EXACTO (ex.: "MUNIÇÃO: 30"
-    // → nome "MUNIÇÃO"), nunca itens que comecem igual (ex.: "Arma de Coleção").
-    if (/^(arma|weapon|muni[cç][aã]o|acess[oó]rios?|ammo)$/i.test(name)) return;
+    // inventário — vão para o weaponCapture. Aceita o nome exacto ("MUNIÇÃO") ou
+    // com descrição após dois-pontos ("ACESSÓRIOS: Drum Magazine"), mas NUNCA
+    // itens reais que só comecem igual (ex.: "Arma de Coleção").
+    if (/^(arma|weapon|muni[cç][aã]o|acess[oó]rios?|ammo)(\s*:.*)?$/i.test(name)) return;
     const key = `${qty}:${normalizeLine(name)}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -1103,15 +1104,41 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
 }
 
 function detectWeaponCapture(text: string): WeaponCapture | null {
-  const weapon = text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "";
-  const ammo = Number(text.match(/MUNI[CÇ][AÃ]O\s*:\s*(\d+)/i)?.[1] || 0);
-  if (!weapon && !ammo) return null;
-  let weaponItem: WeaponCapture["weaponItem"] = "arma baixo calibre";
-  if (/ALTO|COMBAT PDW|RIFLE|CARABIN|SNIPER|MACHINE PISTOL/i.test(weapon)) weaponItem = "arma alto calibre";
-  else if (/MEDIO|M[EÉ]DIO|SMG/i.test(weapon)) weaponItem = "arma medio calibre";
-  const ammoItem = weaponItem === "arma alto calibre" ? "balas alto" : weaponItem === "arma medio calibre" ? "balas medio" : "balas baixo";
+  const armaMatch = text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "";
+  // "MUNIÇÃO:" ou "MUNIÇÕES:" (a IA do Lens usa o plural).
+  const ammo = Number(text.match(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/i)?.[1] || 0);
   const accessoryCount = countAccessories(text);
+  // Só detecta se houver metadata explícita (ARMA:/MUNIÇÃO:/ACESSÓRIOS:) — evita
+  // falsos positivos em inventários que só têm um item-arma sem contexto.
+  if (!armaMatch && !ammo && !accessoryCount) return null;
+  const knownWeapon = findWeaponInText(text);
+  const weapon = armaMatch || (knownWeapon ? displayName(knownWeapon) : "");
+  const weaponItem = knownWeapon || (() => {
+    if (/ALTO|RIFLE|CARABIN|SNIPER|GUSENBERG|BULLPUP|FAMAS|SHOTGUN|SPAS|DRACO/i.test(weapon)) return "arma alto calibre" as const;
+    if (/MEDIO|M[EÉ]DIO|SMG|MACHINE|UZI|PDW|P90|TEC/i.test(weapon)) return "arma medio calibre" as const;
+    return "arma baixo calibre" as const;
+  })();
+  const ammoItem = weaponItem === "arma alto calibre" ? "balas alto" : weaponItem === "arma medio calibre" ? "balas medio" : "balas baixo";
   return { weapon, weaponItem, ammo, ammoItem, accessoryCount };
+}
+
+// A IA do Lens cola os metadados da arma na própria linha do item:
+//   "Machine Pistol (x1) — Munições: 75 | Acessórios: Drum Magazine (1)"
+// Separa em linhas próprias (MUNIÇÃO:/ACESSÓRIOS:) que o parser reconhece e
+// limpa o sufixo da linha do item — senão o "Munições: 75" vira "item fantasma".
+function normalizeWeaponMeta(text: string): string {
+  return text.replace(
+    /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,7})\s*(?:\|\s*([^\n]+))?$/gim,
+    (_m, item, ammo, acc) => {
+      let out = item.trim();
+      out += `\nMUNIÇÃO: ${ammo}`;
+      if (acc) {
+        const accClean = acc.replace(/^ACESS[OÓ]RIOS?\s*:\s*/i, "").trim();
+        if (accClean) out += `\nACESSÓRIOS: ${accClean}`;
+      }
+      return out;
+    }
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1119,6 +1146,7 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: boolean }): ParseResult {
   const includeWeapon = opts?.includeWeapon ?? false;
+  rawText = normalizeWeaponMeta(rawText);
   const usedRecover = new Set<string>();
   // O OCR do Gyazo repete o conteúdo duas vezes: primeiro a grelha embaralhada
   // (todas as quantidades num bloco, todos os nomes noutro), depois as linhas
