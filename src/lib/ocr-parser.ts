@@ -366,14 +366,16 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   const reA = /^(\d{1,7})\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*)$/gm;
   let m: RegExpExecArray | null;
   while ((m = reA.exec(text))) push(Number(m[1]), m[2], m.index);
-  // Formato B: "• Arma de Coleção (x64)" — separador "•" ou início de linha
-  // (cobre listas multi-linha e a lista colada numa só linha do chat).
-  const reB = /(?:^|[•])\s*([^•\n()]+?)\s*\(\s*[xX×]?\s*(\d{1,7})\s*\)/gm;
+  // Formato B: "• Arma de Coleção (x64)" — separador "•" ou "○" ou início de linha.
+  const reB = /(?:^|[•○●▪])\s*([^•○●▪\n()]+?)\s*\(\s*[xX×]?\s*(\d{1,7})\s*\)/gm;
   while ((m = reB.exec(text))) push(Number(m[2]), m[1], m.index);
   // Formato C: "• Nome: xN" — nome, dois-pontos, qty com "x" (sem parênteses).
-  // Ex.: "• Caixa Eletrónicos: x6" → qty 6, nome "Caixa Eletrónicos".
-  const reC = /(?:^|[•])\s*([^•\n:]+?):\s*[xX×]?\s*(\d{1,7})/gm;
+  const reC = /(?:^|[•○●▪])\s*([^•○●▪\n:]+?):\s*[xX×]?\s*(\d{1,7})/gm;
   while ((m = reC.exec(text))) push(Number(m[2]), m[1], m.index);
+  // Formato D: "○ Nome (English Name) – xN" — AI Overview do Google Lens.
+  // Ex.: "○ Caixa Eletrónicos (Electronics Box) – x6" → qty 6, nome "Caixa Eletrónicos".
+  const reD = /(?:^|[○•●▪])\s*([^○•●▪\n()]+?)\s*\([^)]+\)\s*[–—-]\s*[xX×]?\s*(\d{1,7})/gm;
+  while ((m = reD.exec(text))) push(Number(m[2]), m[1], m.index);
   return out;
 }
 
