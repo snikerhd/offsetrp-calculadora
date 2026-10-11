@@ -394,10 +394,11 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
     // com descrição após dois-pontos, no singular OU plural ("Munições: 75"),
     // mas NUNCA itens reais que só comecem igual (ex.: "Arma de Coleção").
     if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|acess[oó]rios?|ammo)(\s*:.*)?$/i.test(name)) return;
-    const key = `${qty}:${normalizeLine(name)}`;
-    // Dedup desactivado: no arsenal, armas/itens legítimos com o mesmo qty
-    // (ex.: 3× "Assault SMG (x1)") contam-se todos. A remoção não afecta os
-    // casos de teste (o mergeResults já funde por nome somando qty).
+    // Dedup por POSIÇÃO: o mesmo par não conta 2× na mesma linha (o Formato B e o
+    // E ambos casam "Nome (xN)"), mas linhas DIFERENTES com o mesmo item contam
+    // (ex.: 3× "Assault SMG (x1)" em linhas distintas = 3 armas).
+    const key = `${pos}:${normalizeLine(name)}`;
+    if (seen.has(key)) return;
     seen.add(key);
     out.push({ qty, name, line: lineOf(text, pos) });
   };
@@ -1154,13 +1155,16 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
 // limpa o sufixo da linha do item — senão o "Munições: 75" vira "item fantasma".
 function normalizeWeaponMeta(text: string): string {
   return text.replace(
-    /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,7})\s*(?:\|\s*([^\n]+))?$/gim,
-    (_m, item, ammo, acc) => {
+    /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,7})\s*(balas?\s+\w+\s+calibre)?.*$/gim,
+    (_m, item, ammo, balas) => {
       let out = item.trim();
-      out += `\nMUNIÇÃO: ${ammo}`;
-      if (acc) {
-        const accClean = acc.replace(/^ACESS[OÓ]RIOS?\s*:\s*/i, "").trim();
-        if (accClean) out += `\nACESSÓRIOS: ${accClean}`;
+      if (balas) {
+        // "Nome (x1) — Munição: 243 balas alto calibre" → "Nome (x1)\n243 balas alto"
+        // (a munição vira item "balas X" com a quantidade; o parser calcula por calibre).
+        const ammoName = balas.replace(/\s+calibre$/i, "").trim();
+        out += `\n${ammo} ${ammoName}`;
+      } else {
+        out += `\nMUNIÇÃO: ${ammo}`;
       }
       return out;
     }
