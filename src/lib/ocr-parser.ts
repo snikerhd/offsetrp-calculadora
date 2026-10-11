@@ -1226,12 +1226,21 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
 // texto original não tem pares "N (peso)" próprios — nunca duplica itens do
 // layout antigo. Lookup via PHRASE_BY_NORM (catálogo + aliases do parser).
 const qtyOnlySummary: string[] = [];
+let arsenalAmmo = 0;
 if (extractPairs(rawText).length < 2) {
   for (const p of extractQtyOnlyPairs(rawText)) {
     const def = PHRASE_BY_NORM.get(normalizeLine(p.name));
     const unitKg = def?.unitKg ?? 0;
-    const kg = Math.round(p.qty * unitKg * 1000) / 1000;
-    qtyOnlySummary.push(`${p.qty} (${kg}) ${p.name}`);
+    let qty = p.qty;
+    // Arsenal: arma com qty alto (>50) é a MUNIÇÃO lida por engano (cada arma é 1,
+    // ex.: "Tactical Carbine (x243)" = 1 arma com 243 balas). Conta 1 arma; a
+    // munição (qty) soma em arsenalAmmo para ir para o weaponCapture.
+    if (def && /^arma (baixo|medio|alto) calibre$/.test(def.item) && qty > 50) {
+      arsenalAmmo += qty;
+      qty = 1;
+    }
+    const kg = Math.round(qty * unitKg * 1000) / 1000;
+    qtyOnlySummary.push(`${qty} (${kg}) ${p.name}`);
   }
 }
 const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qtyOnlySummary];
@@ -1379,6 +1388,17 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
         ammoItem,
         accessoryCount: wc?.accessoryCount ?? 0,
       };
+    }
+  }
+  // Munição do arsenal (armas com qty alto = munição lida por engano): soma ao
+  // weaponCapture. Se não havia captura, cria uma a partir da arma predominante.
+  if (arsenalAmmo > 0) {
+    if (wc) wc.ammo = (wc.ammo || 0) + arsenalAmmo;
+    else {
+      const wItem = merged.find((w) => WEAPON_ITEM_RE.test(w.item));
+      const wItemName = wItem?.item ?? "arma baixo calibre";
+      const ammoItem = wItemName === "arma alto calibre" ? "balas alto" : wItemName === "arma medio calibre" ? "balas medio" : "balas baixo";
+      wc = { weapon: wItem ? displayName(wItem.item) : "Arma", weaponItem: wItemName as WeaponCapture["weaponItem"], ammo: arsenalAmmo, ammoItem, accessoryCount: 0 };
     }
   }
   const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
