@@ -8,7 +8,7 @@ export let lastGeminiError = "";
 
 // Cascata de modelos (o Google descontinua nomes antigos para chaves novas).
 // gemini-2.5-flash-lite está deprecated para chaves novas (404) — removido.
-const MODELS = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-flash-lite-latest"];
+const MODELS = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
 
 // Escada de geração (alguns modelos rejeitam certos parâmetros).
 const GENERATION_CONFIGS: Record<string, unknown>[] = [
@@ -182,9 +182,11 @@ export async function geminiOcr(base64Data: string, timeoutMs = 15_000): Promise
         );
         if (!res.ok) {
           const detail = await res.text().catch(() => "");
-          // Chave/quota: 401/403 = chave inválida (sai já). 429 = quota global esgotada (não adianta retry).
+          // 401/403 = chave inválida (sai já). 429 = rate limit do free tier, que
+          // é POR-MODELO (ex.: gemini-3.8-flash esgotado mas gemini-flash-lite-
+          // latest ainda tem quota) — por isso NÃO desiste, tenta o próximo modelo.
           if (res.status === 401 || res.status === 403) { lastGeminiError = `chave rejeitada (HTTP ${res.status})`; return ""; }
-          if (res.status === 429) { lastGeminiError = "quota gratuita esgotada (HTTP 429)"; return ""; }
+          if (res.status === 429) { lastGeminiError = `rate-limited (HTTP 429) em ${model}`; break; }
           if (res.status === 404) { lastError = `${model} indisponível`; break; } // próximo modelo
           lastError = `HTTP ${res.status}: ${detail.slice(0, 120)}`;
           continue; // próxima configuração

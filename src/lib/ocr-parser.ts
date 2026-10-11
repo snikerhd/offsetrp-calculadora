@@ -1104,7 +1104,7 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
 }
 
 function detectWeaponCapture(text: string): WeaponCapture | null {
-  const armaMatch = text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "";
+  const armaMatch = (text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "").replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
   // "MUNIÇÃO:" ou "MUNIÇÕES:" (a IA do Lens usa o plural).
   const ammo = Number(text.match(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/i)?.[1] || 0);
   const accessoryCount = countAccessories(text);
