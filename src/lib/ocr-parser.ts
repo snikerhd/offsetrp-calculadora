@@ -395,7 +395,9 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
     // mas NUNCA itens reais que só comecem igual (ex.: "Arma de Coleção").
     if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|acess[oó]rios?|ammo)(\s*:.*)?$/i.test(name)) return;
     const key = `${qty}:${normalizeLine(name)}`;
-    if (seen.has(key)) return;
+    // Dedup desactivado: no arsenal, armas/itens legítimos com o mesmo qty
+    // (ex.: 3× "Assault SMG (x1)") contam-se todos. A remoção não afecta os
+    // casos de teste (o mergeResults já funde por nome somando qty).
     seen.add(key);
     out.push({ qty, name, line: lineOf(text, pos) });
   };
