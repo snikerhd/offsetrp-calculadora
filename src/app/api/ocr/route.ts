@@ -112,35 +112,32 @@ export async function POST(req: NextRequest) {
       base64Data = Buffer.from(await r.arrayBuffer()).toString("base64"); mimeType = r.headers.get("content-type") || "image/png";
     } else return NextResponse.json({ error: "imageUrl ou imageBase64 necessário" }, { status: 400 });
     const preview = `data:${mimeType};base64,${base64Data}`;
-    // Cadeia de OCR enxuta: Google Lens (primário, grátis) → Gemini vision
-    // (secundário, com GEMINI_API_KEY). Portão de tempo global: nenhum motor
-    // corre sem tempo para o seu timeout + folga — o pedido nunca dá 504.
+    // Cadeia: com GEMINI_API_KEY o Gemini vision é o PRIMÁRIO (lê a grelha com
+    // precisão e devolve • Nome (xN)). Sem chave, cai no Google Lens (grátis).
+    // O Lens do novo layout devolve lixo que "parseia" (ex.: C4 8888x), por
+    // isso NÃO pode ranquear acima do Gemini quando há chave.
     let ocrText = "";
     let lensTried = false;
     let geminiTried = false;
-    // "Utilizável" = há texto E o parser consegue extrair itens dele. O Lens do
-    // novo layout devolve só nomes (badges "x64" sem parênteses não formam
-    // pares), por isso o critério de sucesso passa a ser o parse, não o tamanho.
+    // "Utilizável" = há texto E o parser consegue extrair itens dele.
     const parsedCount = (t: string): number => {
       try { return parseInventoryOCR(mergeCaixaMultiline(t)).weights.length; } catch { return 0; }
     };
     const ocrUsable = (): boolean => ocrText.length >= 3 && parsedCount(ocrText) > 0;
-    // Motor PRIMÁRIO: Google Lens via API do Chromium (chrome-lens-ocr) —
-    // grátis, sem chave, sem conta. (~3s na imagem de referência).
-    if (left() > 12_000) {
-      lensTried = true;
-      ocrText = await lensOcr(base64Data, 15_000);
-      if (ocrText.length >= 3) console.log("OCR: sucesso via Google Lens (primário)");
-    }
-    // Motor SECUNDÁRIO (com chave): Gemini vision — só se os anteriores falharem.
-    // Studio) — lê a grelha como o Lens manual e devolve itens estruturados,
-    // convertidos em "• Nome (xN)" para o parser qty-only. Só substitui o
-    // texto do Lens se o resultado do Gemini parsear (nunca perde texto bom).
-    if (!ocrUsable() && geminiConfigured() && left() > 14_000) {
+    // Motor PRIMÁRIO (com chave): Gemini vision — leitura inteligente da grelha.
+    if (geminiConfigured() && left() > 20_000) {
       geminiTried = true;
-      const g = await geminiOcr(base64Data, Math.min(18_000, Math.max(8_000, left() - 12_000)));
+      const g = await geminiOcr(base64Data, Math.min(25_000, Math.max(15_000, left() - 15_000)));
       if (parsedCount(g) > 0) ocrText = g;
-      if (ocrUsable()) console.log("OCR: sucesso via Gemini vision (secundário com chave)");
+      if (ocrUsable()) console.log("OCR: sucesso via Gemini vision (primário com chave)");
+    }
+    // Motor SECUNDÁRIO / fallback (grátis): Google Lens — só se o Gemini não
+    // estiver configurado ou não tiver produzido itens utilizáveis.
+    if (!ocrUsable() && left() > 12_000) {
+      lensTried = true;
+      const l = await lensOcr(base64Data, 15_000);
+      if (parsedCount(l) > 0) ocrText = l;
+      if (ocrUsable()) console.log("OCR: sucesso via Google Lens (fallback grátis)");
     }
     lastRunTrace = `lens=${lensTried ? "tentado" : "saltado"} gemini=${geminiTried ? `tentado(${lastGeminiError || "ok"})` : geminiConfigured() ? "saltado" : "sem-chave"} @${((Date.now() - requestStartedAt) / 1000).toFixed(1)}s`;
     console.log(`OCR trace: ${lastRunTrace}`);
