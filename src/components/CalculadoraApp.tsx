@@ -760,15 +760,25 @@ export default function CalculadoraApp() {
     setRelImagens(prev => prev.filter((_, i) => i !== index));
   };
 
-  // No RELATÓRIO, coimas de armas só contam em GRANDE QUANTIDADE
-  // (baixo ≥5, médio ≥4, alto ≥3). Armas avulsas (ex.: 1x médio calibre)
-  // não entram nas Coimas Extras. Nas Coimas Rápidas mantém-se tudo.
+  // No RELATÓRIO, armas só contam quando há pelo menos uma em GRANDE QUANTIDADE
+  // (alto ≥3, médio ≥4, baixo ≥5). Nesse caso lista TODAS as armas — inclusive
+  // as de calibre que não atingiram grande quantidade (ex.: 1 baixo, 3 médio).
+  // Sem grande quantidade, armas singulares NÃO entram no relatório (a coima
+  // vai no CAD resumido); só a munição conta.
+  const CALIBRE_NOME: Record<string, string> = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
   const ocrArmasGrande = (ocrParsed: ReturnType<typeof parseQuickInput> | null): { linhas: string[]; total: number } => {
-    const linhas = (ocrParsed?.armas.resultados || []).filter((l) => l.includes("GRANDE QUANTIDADE"));
-    const total = linhas.reduce((s, l) => {
-      const m = l.match(/(\d[\d.]*)\s*€\s*$/);
-      return s + (m ? parseInt(m[1].replace(/\./g, ""), 10) : 0);
-    }, 0);
+    const resultados = ocrParsed?.armas.resultados || [];
+    const temGrande = resultados.some((l) => l.includes("GRANDE QUANTIDADE"));
+    if (!temGrande) return { linhas: [], total: 0 };
+    const total = ocrParsed?.armas.total || 0;
+    const linhas: string[] = [`Posse de Armas em Grande Quantidade: ${fmt2(total)} €`];
+    for (const l of resultados) {
+      const g = l.match(/^\s*\d+\+ Armas (Baixo|M[eé]dio|Alto) Calibre \((\d+)x\).*GRANDE QUANTIDADE: ([\d.]+)/);
+      if (g) { linhas.push(`Arma ${g[1]} Calibre: ${g[2]} Uni. = ${g[3]} €`); continue; }
+      const u = l.match(/^\s*(\d+)x Arma (baixo|medio|alto) calibre\s+x ([\d.]+) = ([\d.]+)/);
+      if (u) { linhas.push(`Arma ${CALIBRE_NOME[u[2]]} Calibre: ${u[1]} Uni. x ${u[3]} € = ${u[4]} €`); continue; }
+      linhas.push(l.trim());
+    }
     return { linhas, total };
   };
 
@@ -871,7 +881,7 @@ export default function CalculadoraApp() {
         if (ocrArmasGrandeLinhas.length) {
           linhas.push("  Armas em Grande Quantidade:");
           for (const linha of ocrArmasGrandeLinhas) {
-            linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
+            linhas.push(`  ${linha}`);
           }
         }
         if (ocrParsed?.municao.resultados.length) {
