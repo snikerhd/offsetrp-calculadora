@@ -195,6 +195,11 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "agua", displayName: "Água", unitKg: 0.5, category: "outro", illegal: false },
   { name: "medwchi mochi", displayName: "Medwchi Mochi", unitKg: 0.2, category: "outro", illegal: false },
   { name: "monoshu", displayName: "Monoshu", unitKg: 0.2, category: "outro", illegal: false },
+  // Variantes legíveis do jogo/Lens (o catálogo acima guardava as formas garbled
+  // do OCR). Ambos resolvem para o mesmo item legal — reconhecimento em qualquer
+  // path (lookup directo, matchNameToItem, qty-only) sem cair "não identificado".
+  { name: "meowchi mochi", displayName: "Meowchi Mochi", unitKg: 0.2, category: "outro", illegal: false },
+  { name: "momoshu", displayName: "Momoshu", unitKg: 0.2, category: "outro", illegal: false },
   { name: "gingerkitty cookie", displayName: "GingerKitty Cookie", unitKg: 0.2, category: "outro", illegal: false },
   { name: "sushi", displayName: "Sushi", unitKg: 0.2, category: "outro", illegal: false },
   { name: "herbal tea", displayName: "Herbal Tea", unitKg: 0.2, category: "outro", illegal: false },

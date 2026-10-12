@@ -1285,8 +1285,13 @@ if (extractPairs(rawText).length < 2) {
   // "Acessórios: 3" + "SMG Scope (x1)" contariam 4 em vez de 3).
   const hasAccessoryCount = qtyPairs.some((p) => /^acess[oó]rios?$/i.test(p.name.trim()));
   for (const p of qtyPairs) {
-    let def = PHRASE_BY_NORM.get(normalizeLine(p.name));
-    let name = p.name;
+    // Corrige typos de OCR no nome ANTES do lookup (ex.: "Meowchi Mochi" →
+    // "MEDWCHI MOCHI", "Momoshu" → "MONOSHU"). Sem isto, itens do catálogo
+    // com nome garbled pelo OCR caíam como "item não identificado" no caminho
+    // bullet (qty-only), pois esse caminho ainda não tinha passado por fixOcrTypos.
+    const fixedName = fixOcrTypos(p.name);
+    let def = PHRASE_BY_NORM.get(normalizeLine(fixedName));
+    let name = fixedName;
     // Acessório de arma (conhecido ou desconhecido) → agrupa em "Acessórios
     // para armas". Conhecidos vêm do catálogo (categoria "acessorio"); os
     // desconhecidos (scope, suppressor, extended clip, flashlight, grip, drum,
