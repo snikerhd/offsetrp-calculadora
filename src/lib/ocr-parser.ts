@@ -1202,8 +1202,17 @@ function normalizeWeaponMeta(text: string): string {
         // Sem calibre explícito: determina pelo nome da arma.
         const weaponName = item.replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
         const caliber = WEAPON_CALIBER[normalizeLine(weaponName)];
-        if (caliber) out += `\n${ammo} balas ${caliber}`;
-        else out += `\nMUNIÇÃO: ${ammo}`;
+        if (caliber) {
+          out += `\n${ammo} balas ${caliber}`;
+        } else if (/pistol|revolver|glock|beretta|taurus|desert eagle|smg|submetralhadora|mp5|uzi|tec|micro|pdw|p90|rifle|espingarda|sniper|draco|gusenberg|famas|shotgun|spas|carbine|bullpup|vintage|\bsns\b|assault|compact|military|tactical|marksman|machine|combat|\bmg\b|\bak\b|ar15/i.test(weaponName)) {
+          // Arma sem calibre no mapa: ainda é munição.
+          out += `\nMUNIÇÃO: ${ammo}`;
+        } else {
+          // Item NÃO é arma (ex.: "Petrol Can — Munição: 922"): o número depois
+          // de "Munição:" não é munição — descartá-lo (evita fantoche "922 balas",
+          // multa falsa enorme). Mantém o item contável como (x1).
+          out = `${weaponName} (x1)`;
+        }
       }
       return out;
     }
