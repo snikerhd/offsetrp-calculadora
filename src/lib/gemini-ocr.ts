@@ -45,6 +45,7 @@ Formato exacto:
 - "name": texto literal do jogo em PORTUGUÊS, sem traduzir, sem inglês, sem corrigir a grafia.
 - "qty": o número de unidades visível no item (ex.: x64 → 64). Se não houver, usa 1.
 - Para ARMAS com munição visível (ex.: "Munição: 243" ao lado da arma): o "qty" da arma é 1, e adiciona um item separado com nome EXACTO "balas alto calibre" (arma Classe 3/rifle), "balas medio calibre" (Classe 2/SMG) ou "balas baixo calibre" (Classe 1/pistola), com "qty" = o número da munição. Exemplo: { "name": "balas alto calibre", "qty": 243 }.
+- Onde a imagem tem uma secção ACESSÓRIOS (por baixo do nome/peso da arma), conta os acessórios listados e adiciona um item separado { "name": "Acessórios", "qty": <número de acessórios> }. Exemplo: { "name": "Acessórios", "qty": 3 }.
 - Lista TODOS os itens visíveis, por ordem de leitura. Máximo 80.
 - Se a imagem NÃO for um inventário de itens, devolve { "items": [] } e nada mais.`;
 
