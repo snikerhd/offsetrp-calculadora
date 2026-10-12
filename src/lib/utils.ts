@@ -420,7 +420,6 @@ const SYNONYMS_ITENS: Record<string, string> = {
   "smg flashlight": "Acessórios para armas",
   "rifle flashlight": "Acessórios para armas",
   "pistol flashlight": "Acessórios para armas",
-  "flashlight": "Acessórios para armas",
   "smg grip": "Acessórios para armas",
   "rifle grip": "Acessórios para armas",
   "grip": "Acessórios para armas",
