@@ -1276,7 +1276,19 @@ let ammoAlto = 0, ammoMedio = 0, ammoBaixo = 0;
 const qtyOnlyMap = new Map<string, { name: string; qty: number }>();
 if (extractPairs(rawText).length < 2) {
   for (const p of extractQtyOnlyPairs(rawText)) {
-    const def = PHRASE_BY_NORM.get(normalizeLine(p.name));
+    let def = PHRASE_BY_NORM.get(normalizeLine(p.name));
+    let name = p.name;
+    // Acessório de arma (conhecido ou desconhecido) → agrupa em "Acessórios
+    // para armas". Conhecidos vêm do catálogo (categoria "acessorio"); os
+    // desconhecidos (scope, suppressor, extended clip, flashlight, grip, drum,
+    // laser, sight...) entram por fallback de palavra-chave. Evita que acessórios
+    // novos do jogo fiquem "item não identificado" e soma tudo numa linha.
+    const cat = def ? ITEM_BY_NAME.get(def.item)?.category : undefined;
+    const isAccessoryWord = !def && /suppressor|supressor|silencer|scope|sight|laser|holographic|extended clip|flashlight|grip|drum/i.test(name);
+    if ((def && def.item !== "acessorios para armas" && cat === "acessorio") || isAccessoryWord) {
+      def = PHRASE_BY_NORM.get("acessorios para armas");
+      name = "Acessórios para Armas";
+    }
     const unitKg = def?.unitKg ?? 0;
     let qty = p.qty;
     // Arsenal: arma com qty alto (>50) é a MUNIÇÃO lida por engano (cada arma é 1).
@@ -1289,10 +1301,10 @@ if (extractPairs(rawText).length < 2) {
     }
     // Soma por nome: 2× "Tactical Carbine (x1)" → 1 entrada "2 (kg) Tactical Carbine"
     // (evita que o parseSintese dedupique linhas idênticas e sub-conta).
-    const key = normalizeLine(p.name);
+    const key = normalizeLine(name);
     const prev = qtyOnlyMap.get(key);
     if (prev) prev.qty += qty;
-    else qtyOnlyMap.set(key, { name: p.name, qty });
+    else qtyOnlyMap.set(key, { name, qty });
   }
 }
 for (const { name, qty } of qtyOnlyMap.values()) {
