@@ -1289,7 +1289,28 @@ const qtyOnlySummary: string[] = [];
 let ammoAlto = 0, ammoMedio = 0, ammoBaixo = 0;
 const qtyOnlyMap = new Map<string, { name: string; qty: number }>();
 if (extractPairs(rawText).length < 2) {
-  const qtyPairs = extractQtyOnlyPairs(rawText);
+  const qtyPairsRaw = extractQtyOnlyPairs(rawText);
+  // Munição fantoche: o Gemini por vezes lê o número de um item NÃO-arma
+  // (ex.: Petrol Can "922") como "balas X calibre" numa linha separada, logo a
+  // seguir ao item. Se um "balas X calibre (xN)" vem imediatamente depois de um
+  // item NÃO-arma com qty 1, o N é a QUANTIDADE desse item — funde nela e
+  // descarta a munição fantoche (evita multa falsa enorme, ex.: 922 balas).
+  const qtyPairs: Array<{ qty: number; name: string; line: number }> = [];
+  const isBalasName = (n: string) => /^balas?\s+(baixo|m[eé]dio|alto)(\s+calibre)?$/.test(normalizeLine(n));
+  const isWeaponOrAmmo = (n: string) => {
+    const norm = normalizeLine(fixOcrTypos(n));
+    let d = PHRASE_BY_NORM.get(norm);
+    if (!d) { const b = norm.replace(/\s+mk\s*(?:2|ii|3|iii)\s*$/i, "").trim(); if (b && b !== norm) d = PHRASE_BY_NORM.get(b); }
+    return d ? /^arma (baixo|medio|alto) calibre$/.test(d.item) || /^balas /.test(d.item) : false;
+  };
+  for (const p of qtyPairsRaw) {
+    const prev = qtyPairs[qtyPairs.length - 1];
+    if (isBalasName(p.name) && prev && prev.qty === 1 && !isWeaponOrAmmo(prev.name)) {
+      prev.qty = p.qty; // o N pertence ao item anterior (ex.: Petrol Can x922)
+      continue; // descarta a munição fantoche
+    }
+    qtyPairs.push({ ...p });
+  }
   // "Acessórios: x" explícito (contagem pedida ao Lens) é a fonte da verdade.
   // Se existir, ignora os acessórios individuais para não duplicar (ex.:
   // "Acessórios: 3" + "SMG Scope (x1)" contariam 4 em vez de 3).
