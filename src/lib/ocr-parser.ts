@@ -220,6 +220,7 @@ const ALIASES: Array<[string, string, number?]> = [
   ["pistol", "arma baixo calibre", 5],
   ["compact rifle", "arma alto calibre", 15],
   ["assault rifle", "arma alto calibre", 15],
+  ["carbine rifle", "arma alto calibre", 15],
   ["bullpup", "arma alto calibre", 15],
   ["gusenberg", "arma alto calibre", 15],
   ["famas", "arma alto calibre", 15],
@@ -1183,7 +1184,7 @@ const WEAPON_CALIBER: Record<string, string> = {
   "tactical carbine": "alto", "bullpup rifle mk2": "alto", "bullpup mk2": "alto",
   "bullpup rifle": "alto", "advanced rifle": "alto", "military rifle": "alto",
   "tactical rifle": "alto", "rifle mk2": "alto", "double barrel": "alto",
-  "assault rifle": "alto", "compact rifle": "alto", "gusenberg": "alto",
+  "assault rifle": "alto", "assault rifle mk2": "alto", "carbine rifle": "alto", "compact rifle": "alto", "gusenberg": "alto",
   "shotgun": "alto", "spas": "alto", "draco": "alto", "famas": "alto",
   "assault smg": "medio", "machine pistol": "medio", "micro smg": "medio",
   "combat pdw": "medio", "smg": "medio", "p90": "medio", "tec9": "medio",
@@ -1300,6 +1301,14 @@ if (extractPairs(rawText).length < 2) {
     // bullet (qty-only), pois esse caminho ainda não tinha passado por fixOcrTypos.
     const fixedName = fixOcrTypos(p.name);
     let def = PHRASE_BY_NORM.get(normalizeLine(fixedName));
+    // Variantes "MK2"/"MK II" de armas (ex.: "Assault Rifle MK2") não estão no
+    // mapa exacto. Se o lookup falhar, tenta sem o sufixo: "assault rifle mk2"
+    // → "assault rifle" (arma alto calibre). Cobre todas as variantes MK2.
+    if (!def) {
+      const norm = normalizeLine(fixedName);
+      const base = norm.replace(/\s+mk\s*(?:2|ii|3|iii)\s*$/i, "").trim();
+      if (base && base !== norm) def = PHRASE_BY_NORM.get(base);
+    }
     let name = fixedName;
     // Acessório de arma (conhecido ou desconhecido) → agrupa em "Acessórios
     // para armas". Conhecidos vêm do catálogo (categoria "acessorio"); os
@@ -1332,7 +1341,14 @@ if (extractPairs(rawText).length < 2) {
   }
 }
 for (const { name, qty } of qtyOnlyMap.values()) {
-  const def = PHRASE_BY_NORM.get(normalizeLine(name));
+  const norm = normalizeLine(name);
+  let def = PHRASE_BY_NORM.get(norm);
+  // Fallback MK2 (ex.: "Assault Rifle MK2" → "assault rifle") — igual ao loop
+  // qty-only acima; sem isto o peso fica 0 e o match por peso falha.
+  if (!def) {
+    const base = norm.replace(/\s+mk\s*(?:2|ii|3|iii)\s*$/i, "").trim();
+    if (base && base !== norm) def = PHRASE_BY_NORM.get(base);
+  }
   const unitKg = def?.unitKg ?? 0;
   const kg = Math.round(qty * unitKg * 1000) / 1000;
   qtyOnlySummary.push(`${qty} (${kg}) ${name}`);
