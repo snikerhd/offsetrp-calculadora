@@ -1290,24 +1290,38 @@ let ammoAlto = 0, ammoMedio = 0, ammoBaixo = 0;
 const qtyOnlyMap = new Map<string, { name: string; qty: number }>();
 if (extractPairs(rawText).length < 2) {
   const qtyPairsRaw = extractQtyOnlyPairs(rawText);
-  // Munição fantoche: o Gemini por vezes lê o número de um item NÃO-arma
-  // (ex.: Petrol Can "922") como "balas X calibre" numa linha separada, logo a
-  // seguir ao item. Se um "balas X calibre (xN)" vem imediatamente depois de um
-  // item NÃO-arma com qty 1, o N é a QUANTIDADE desse item — funde nela e
-  // descarta a munição fantoche (evita multa falsa enorme, ex.: 922 balas).
+  // Pré-processamento de munição:
+  // (a) Munição fantoche — o Gemini lê o número de um item NÃO-arma (ex.: Petrol
+  //     Can "922") como "balas X calibre" numa linha separada. Se vem logo após um
+  //     item não-arma com qty 1, o N é a QUANTIDADE desse item — funde e descarta.
+  // (b) Calibre errado — o Gemini às vezes erra o calibre da munição (ex.: Machine
+  //     Pistol é MÉDIO mas veio "balas baixo calibre"). Se a munição vem logo após
+  //     uma ARMA, re-deriva o calibre da ARMA (fonte da verdade), não do rótulo.
   const qtyPairs: Array<{ qty: number; name: string; line: number }> = [];
   const isBalasName = (n: string) => /^balas?\s+(baixo|m[eé]dio|alto)(\s+calibre)?$/.test(normalizeLine(n));
+  const mk2less = (n: string) => normalizeLine(fixOcrTypos(n)).replace(/\s+mk\s*(?:2|ii|3|iii)\s*$/i, "").trim();
+  const phraseOf = (n: string) => PHRASE_BY_NORM.get(normalizeLine(fixOcrTypos(n))) ?? PHRASE_BY_NORM.get(mk2less(n));
   const isWeaponOrAmmo = (n: string) => {
-    const norm = normalizeLine(fixOcrTypos(n));
-    let d = PHRASE_BY_NORM.get(norm);
-    if (!d) { const b = norm.replace(/\s+mk\s*(?:2|ii|3|iii)\s*$/i, "").trim(); if (b && b !== norm) d = PHRASE_BY_NORM.get(b); }
+    const d = phraseOf(n);
     return d ? /^arma (baixo|medio|alto) calibre$/.test(d.item) || /^balas /.test(d.item) : false;
+  };
+  const weaponCaliber = (n: string): string | null => {
+    const norm = normalizeLine(fixOcrTypos(n));
+    const c = WEAPON_CALIBER[norm] ?? WEAPON_CALIBER[mk2less(n)];
+    if (c) return c;
+    const d = phraseOf(n);
+    if (d) { const m = d.item.match(/^arma (baixo|medio|alto) calibre$/); if (m) return m[1]; }
+    return null;
   };
   for (const p of qtyPairsRaw) {
     const prev = qtyPairs[qtyPairs.length - 1];
-    if (isBalasName(p.name) && prev && prev.qty === 1 && !isWeaponOrAmmo(prev.name)) {
-      prev.qty = p.qty; // o N pertence ao item anterior (ex.: Petrol Can x922)
-      continue; // descarta a munição fantoche
+    if (isBalasName(p.name) && prev) {
+      if (prev.qty === 1 && !isWeaponOrAmmo(prev.name)) {
+        prev.qty = p.qty; // (a) fantoche: N é a quantidade do item não-arma
+        continue;
+      }
+      const cal = weaponCaliber(prev.name); // (b) re-deriva o calibre da arma
+      if (cal) p.name = `balas ${cal} calibre`;
     }
     qtyPairs.push({ ...p });
   }
