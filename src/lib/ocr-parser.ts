@@ -159,6 +159,7 @@ function recoverCorruptedQty(text: string, used: Set<string>): string {
 // Pistas de nomes: geradas a partir do catálogo + aliases + fragmentos
 // ─────────────────────────────────────────────────────────────────────────────
 const ALIASES: Array<[string, string, number?]> = [
+  ["acessorios", "acessorios para armas", 0.1],
   ["porte de arma", "porte de arma branca"],
   ["strawberry shortcake", "strawberry shortcake"],
   ["strawberry", "strawberry shortcake"],
@@ -414,7 +415,10 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
     // itens de inventário — vão para o weaponCapture. Aceita o nome exacto ou
     // com descrição após dois-pontos, no singular OU plural ("Munições: 75"),
     // mas NUNCA itens reais que só comecem igual (ex.: "Arma de Coleção").
-    if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|acess[oó]rios?|ammo)(\s*:.*)?$/i.test(name)) return;
+    // "acessórios" NÃO é filtrado aqui: "Acessórios: x" (contagem do popup/query
+    // do Lens) é um item real ("acessorios para armas"). Só arma/weapon/munição/
+    // ammo ficam de fora (são metadata da arma, não itens de inventário).
+    if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|ammo)(\s*:.*)?$/i.test(name)) return;
     // Dedup por POSIÇÃO: o mesmo par não conta 2× na mesma linha (o Formato B e o
     // E ambos casam "Nome (xN)"), mas linhas DIFERENTES com o mesmo item contam
     // (ex.: 3× "Assault SMG (x1)" em linhas distintas = 3 armas).
@@ -1275,17 +1279,23 @@ const qtyOnlySummary: string[] = [];
 let ammoAlto = 0, ammoMedio = 0, ammoBaixo = 0;
 const qtyOnlyMap = new Map<string, { name: string; qty: number }>();
 if (extractPairs(rawText).length < 2) {
-  for (const p of extractQtyOnlyPairs(rawText)) {
+  const qtyPairs = extractQtyOnlyPairs(rawText);
+  // "Acessórios: x" explícito (contagem pedida ao Lens) é a fonte da verdade.
+  // Se existir, ignora os acessórios individuais para não duplicar (ex.:
+  // "Acessórios: 3" + "SMG Scope (x1)" contariam 4 em vez de 3).
+  const hasAccessoryCount = qtyPairs.some((p) => /^acess[oó]rios?$/i.test(p.name.trim()));
+  for (const p of qtyPairs) {
     let def = PHRASE_BY_NORM.get(normalizeLine(p.name));
     let name = p.name;
     // Acessório de arma (conhecido ou desconhecido) → agrupa em "Acessórios
     // para armas". Conhecidos vêm do catálogo (categoria "acessorio"); os
     // desconhecidos (scope, suppressor, extended clip, flashlight, grip, drum,
-    // laser, sight...) entram por fallback de palavra-chave. Evita que acessórios
-    // novos do jogo fiquem "item não identificado" e soma tudo numa linha.
+    // laser, sight...) entram por fallback de palavra-chave.
     const cat = def ? ITEM_BY_NAME.get(def.item)?.category : undefined;
     const isAccessoryWord = !def && /suppressor|supressor|silencer|scope|sight|laser|holographic|extended clip|flashlight|grip|drum/i.test(name);
-    if ((def && def.item !== "acessorios para armas" && cat === "acessorio") || isAccessoryWord) {
+    const isIndividualAccessory = (def && def.item !== "acessorios para armas" && cat === "acessorio") || isAccessoryWord;
+    if (hasAccessoryCount && isIndividualAccessory) continue; // evita dupla-contagem
+    if (isIndividualAccessory) {
       def = PHRASE_BY_NORM.get("acessorios para armas");
       name = "Acessórios para Armas";
     }
