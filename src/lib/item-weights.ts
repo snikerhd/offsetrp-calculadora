@@ -179,6 +179,9 @@ export const ITEM_CATALOG: ItemDef[] = [
   // Motor de Indução — item pedido (faltava no catálogo, caía "não identificado").
   // ATENÇÃO: peso/ilegalidade são palpite (confirmar com dados do jogo).
   { name: "motor inducao", displayName: "Motor Indução", unitKg: 5, category: "outro", illegal: false },
+  // Vidro — item pedido (faltava no catálogo, caía "não identificado").
+  // ATENÇÃO: peso/ilegalidade são palpite (confirmar com dados do jogo).
+  { name: "vidro", displayName: "Vidro", unitKg: 0.2, category: "outro", illegal: false },
   { name: "restos eletronicos", displayName: "Restos Eletrónicos", unitKg: 0.5, category: "outro", illegal: false },
   { name: "dinheiro", displayName: "Dinheiro", unitKg: 0.00001, category: "outro", illegal: false },
   { name: "saco plastico", displayName: "Saco Plástico", unitKg: 0.1, category: "outro", illegal: false },
