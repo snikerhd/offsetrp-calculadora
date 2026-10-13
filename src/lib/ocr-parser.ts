@@ -1117,12 +1117,15 @@ function countAccessories(fixed: string): number {
 }
 
 // TESTE: interruptor para desactivar a captura da arma. Meter `true` para re-activar.
-const WEAPON_CAPTURE_ENABLED = false;
+const WEAPON_CAPTURE_ENABLED = true;
 
 function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: WeaponCapture; weights: ItemMatch[] } | null {
   if (!WEAPON_CAPTURE_ENABLED) return null;
   // Tolerante a letra cortada: "unição: 155" (= MUNIÇÃO)
-  const ammo = Number(fixed.match(/(?:M)?UNI[CÇ][AÃ]O\s*:\s*(\d+)/i)?.[1] || 0);
+  let ammo = Number(fixed.match(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/i)?.[1] || 0);
+  // O normalizeWeaponMeta já converteu "Nome (x1) — Munição: N" em "N balas X
+  // calibre" ANTES do popup. Se não achou "MUNIÇÃO:", detecta do formato convertido.
+  if (!ammo) { const m = fixed.match(/(\d+)\s+balas\s+(?:baixo|m[eé]dio|alto)/i); if (m) ammo = Number(m[1]); }
   // A arma é identificada pelo NOME conhecido no texto (ex.: "Machine Pistol"
   // -> arma medio calibre), não pela primeira linha (que é lixo do OCR).
   const knownWeapon = findWeaponInText(fixed);
@@ -1244,7 +1247,7 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
   // com o mesmo peso unitário (ex.: Folha de Tabaco ↔ Sumo Laranja, 0,2 kg).
   // Tolerante a letras cortadas pelo OCR/QR: "umero de Serie" (= número),
   // "unição" (= munição), "cessorios" (= acessórios).
-  const hasSerie = /(?:num[ée]?ro|umero)\s+de\s+s[ée]rie/i.test(rawText);
+  const hasSerie = /(?:num[ée]?ro|umero)\s+de\s+s[ée]rie|\bs[ée]rie\b|\bserial\b/i.test(rawText);
   const summaryLines = rawText
         .split("\n")
         .map((l) => l.trim())
@@ -1452,7 +1455,7 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
       : "";
   }
 
-  if (/(?:num[ée]?ro|umero)\s+de\s+s[ée]rie/i.test(fixedFull)) {
+  if (/(?:num[ée]?ro|umero)\s+de\s+s[ée]rie|\bs[ée]rie\b|\bserial\b/i.test(fixedFull)) {
     const popup = parseWeaponPopup(fixedFull, includeWeapon);
     if (popup) {
       if (!includeWeapon) {
@@ -1471,13 +1474,17 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
       const bodyText = usingSummary
         ? fixed
         : fixedFull
-            .replace(/((?:num[ée]?ro|umero)\s+de\s+s[ée]rie\s*:\s*)[^\n]*/gi, "$1")
+            .replace(/((?:(?:num[ée]?ro|umero)\s+de\s+)?s[ée]rie\s*:\s*)[^\n]*/gi, "$1")
             .replace(/((?:A)?CESS[OÓ]RIOS?\s*:\s*)[^\n]*/gi, "$1");
       const body = parseInventoryBody(bodyText, headerLines, undefined, scrambledText);
       // A arma entra pelo corpo (peso real do par); popup só acrescenta arma se
       // o corpo não a tiver (mantendo o comportamento antigo de dedupe).
       const popupWeights = popup.weights.filter((w) => w.item !== popup.capture.weaponItem);
-      const mergedRaw = [...body, ...popupWeights];
+      // O popup já trouxe munição + acessórios da arma inspeccionada; removê-los
+      // do corpo evita duplicação (o normalizeWeaponMeta convertera "— Munição: N"
+      // em "N balas X" dentro do corpo, e "Acessórios: x" também entra lá).
+      const bodySemMunicao = body.filter((w) => !/^balas (baixo|medio|alto)$/.test(w.item) && w.item !== "acessorios para armas");
+      const mergedRaw = [...bodySemMunicao, ...popupWeights];
       if (includeWeapon && !mergedRaw.some((w) => w.item === popup.capture.weaponItem)) {
         const def = ITEM_BY_NAME.get(popup.capture.weaponItem);
         mergedRaw.push({ item: popup.capture.weaponItem, qty: 1, kg: def?.unitKg ?? 0, unitKg: def?.unitKg ?? 0, confidence: 95, confidenceLevel: "high", matchReason: "Arma inspecionada (número de série)" });
