@@ -419,7 +419,7 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
     // "acessórios" NÃO é filtrado aqui: "Acessórios: x" (contagem do popup/query
     // do Lens) é um item real ("acessorios para armas"). Só arma/weapon/munição/
     // ammo ficam de fora (são metadata da arma, não itens de inventário).
-    if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|ammo)(\s*:.*)?$/i.test(name)) return;
+    if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|ammo|s[ée]rie|serial|n[úu]mero)(\s*:.*)?$/i.test(name)) return;
     // Dedup por POSIÇÃO: o mesmo par não conta 2× na mesma linha (o Formato B e o
     // E ambos casam "Nome (xN)"), mas linhas DIFERENTES com o mesmo item contam
     // (ex.: 3× "Assault SMG (x1)" em linhas distintas = 3 armas).
