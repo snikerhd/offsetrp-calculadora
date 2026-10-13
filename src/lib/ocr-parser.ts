@@ -1125,7 +1125,13 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
   let ammo = Number(fixed.match(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/i)?.[1] || 0);
   // O normalizeWeaponMeta já converteu "Nome (x1) — Munição: N" em "N balas X
   // calibre" ANTES do popup. Se não achou "MUNIÇÃO:", detecta do formato convertido.
-  if (!ammo) { const m = fixed.match(/(\d+)\s+balas\s+(?:baixo|m[eé]dio|alto)/i); if (m) ammo = Number(m[1]); }
+  if (!ammo) {
+    // Formatos possíveis: "11 balas baixo" (resumo), "balas baixo calibre (x11)"
+    // (bullet do Gemini), "MUNIÇÃO: 11" (já coberto acima).
+    let m = fixed.match(/(\d+)\s+balas\s+(?:baixo|m[eé]dio|alto)/i);
+    if (!m) m = fixed.match(/balas\s+(?:baixo|m[eé]dio|alto)\s*(?:calibre)?\s*\(\s*[xX×]?\s*(\d+)/i);
+    if (m) ammo = Number(m[1]);
+  }
   // A arma é identificada pelo NOME conhecido no texto (ex.: "Machine Pistol"
   // -> arma medio calibre), não pela primeira linha (que é lixo do OCR).
   const knownWeapon = findWeaponInText(fixed);
