@@ -47,6 +47,7 @@ Formato exacto:
 - Para ARMAS com munição visível (ex.: "Munição: 243" ou "210 ¡¡¡" ao lado da arma): o "qty" da arma é 1, e adiciona um item separado com nome EXACTO "balas alto calibre" (arma Classe 3/rifle), "balas medio calibre" (Classe 2/SMG) ou "balas baixo calibre" (Classe 1/pistola), com "qty" = o número da munição. Exemplo: { "name": "balas alto calibre", "qty": 243 }.
 - REGRA CRUCIAL — munição SÓ vem de ARMAS: o número que aparece ao lado de um item que NÃO é arma (Petrol Can, Bifana, MedicKit, Telemóvel, comida, etc.) é a QUANTIDADE desse item, NUNCA munição. Escreve-o como "Nome (xN)". Ex.: se o Petrol Can mostra "922", devolve { "name": "Petrol Can", "qty": 922 } e NUNCA "balas". Petrol Can, comida e objectos NUNCA têm munição.
 - SÓ se a imagem tiver uma secção ACESSÓRIOS visível com acessórios REAIS e nomeados listados (por baixo do nome/peso da arma), adiciona um item separado { "name": "Acessórios", "qty": <número de acessórios> }. Se NÃO houver secção ACESSÓRIOS, ou se ela estiver vazia / só tiver o cabeçalho sem acessórios listados, NÃO adiciones o item Acessórios. NUNCA inventes acessórios que não estejas a ver listados na imagem.
+- Se a imagem é um PAINEL DE DETALHE de uma arma (tem SÉRIE / número de série, MUNIÇÕES e ACESSÓRIOS por baixo do nome da arma), adiciona TAMBÉM um item { "name": "SÉRIE", "qty": 1 } para o parser identificar o popup da arma.
 - Lista TODOS os itens visíveis, por ordem de leitura. Máximo 80.
 - Se a imagem NÃO for um inventário de itens, devolve { "items": [] } e nada mais.`;
 
