@@ -176,22 +176,23 @@ const ALIASES: Array<[string, string, number?]> = [
   // Munições renomeadas no jogo para calibres específicos. Têm nome de "Balas"
   // mas são CARREGADORES (magazines, 0,2 kg) — mapeiam para carregador X calibre.
   // O normalizeLine troca "." e "," por espaço ("5.56"->"5 56", "0.45"->"0 45"),
-  // por isso cobrimos as variantes. 5.56 e 0.45 = alto; 9mm = médio; 12 = baixo.
+  // por isso cobrimos as variantes. Calibres (confirmados no jogo):
+  //   9mm = BAIXO, .45 = MÉDIO, 5.56 = ALTO, cartuchos 12 = ALTO.
   ["balas 5.56", "carregador alto calibre"],
   ["balas 556", "carregador alto calibre"],
   ["bala 5.56", "carregador alto calibre"],
   ["balas 5,56", "carregador alto calibre"],
-  ["balas 0.45", "carregador alto calibre"],
-  ["bala 0.45", "carregador alto calibre"],
-  ["balas 045", "carregador alto calibre"],
-  ["balas 45", "carregador alto calibre"],
-  ["balas 9mm", "carregador medio calibre"],
-  ["bala 9mm", "carregador medio calibre"],
-  ["balas 9 mm", "carregador medio calibre"],
-  ["cartuchos 12", "carregador baixo calibre"],
-  ["cartucho 12", "carregador baixo calibre"],
-  ["cartuchos 12 gauge", "carregador baixo calibre"],
-  ["cartucho 12 gauge", "carregador baixo calibre"],
+  ["balas 0.45", "carregador medio calibre"],
+  ["bala 0.45", "carregador medio calibre"],
+  ["balas 045", "carregador medio calibre"],
+  ["balas 45", "carregador medio calibre"],
+  ["balas 9mm", "carregador baixo calibre"],
+  ["bala 9mm", "carregador baixo calibre"],
+  ["balas 9 mm", "carregador baixo calibre"],
+  ["cartuchos 12", "carregador alto calibre"],
+  ["cartucho 12", "carregador alto calibre"],
+  ["cartuchos 12 gauge", "carregador alto calibre"],
+  ["cartucho 12 gauge", "carregador alto calibre"],
   // Arsenal de armas (nomes completos do jogo). CLASSE 1=baixo, 2=médio, 3=alto.
   ["tactical carbine", "arma alto calibre", 15],
   ["bullpup rifle mk2", "arma alto calibre", 15],
@@ -1565,6 +1566,28 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
 // Fluxo normal do inventário: pares "qty (peso)" casados com pistas de nome.
 // excludeItems: itens a ignorar (ex.: a arma já contada pelo popup).
 const WEAPON_ITEM_RE = /^arma (baixo|medio|alto) calibre$/;
+
+// Extrai um nome legível da linha de um par órfão (sem match no catálogo):
+// remove o par "N (kg)", o bullet/separador e números soltos, e devolve o
+// texto restante SE parecer um nome (>= 3 letras, maioria alfabética). Usado
+// para PRESERVAR o nome de itens novos lidos do OCR em vez de os mostrar como
+// "item nao identificado" — o utilizador vê o nome real e pode catalogá-lo.
+function extractOrphanName(fixed: string, line: number): string | null {
+  const raw = fixed.split("\n")[line] ?? "";
+  const cleaned = raw
+    .replace(/\d{1,7}\s*\(\s*[\d.,]+\s*\)/g, " ") // remove o par "N (kg)"
+    .replace(/^[\s•○●▪\-–—*·]+/, " ") // remove bullet/separador do início
+    .replace(/\d+(?:[.,]\d+)?\s*kg\b/gi, " ") // remove "X kg" solto
+    .replace(/\d+/g, " ") // remove números restantes
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length < 3) return null;
+  // Tem de ser predominantemente letras (um nome), não símbolos/números.
+  const letters = (cleaned.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
+  if (letters < cleaned.length * 0.6) return null;
+  return cleaned;
+}
+
 function parseInventoryBody(fixed: string, headerLines: Set<number>, excludeItems?: Set<string> | RegExp, scrambledText = false): ItemMatch[] {
   const isExcluded = (item: string) =>
     excludeItems instanceof RegExp ? excludeItems.test(item) : excludeItems?.has(item) ?? false;
@@ -1579,7 +1602,24 @@ function parseInventoryBody(fixed: string, headerLines: Set<number>, excludeItem
     if (h) out.push(matchForPair(p, h));
   }
   for (const p of leftover) {
-    out.push(fallbackForPair(p, false, undefined));
+    // Preserva o nome real lido do OCR para itens ainda não catalogados, em
+    // vez de os esconder como "item nao identificado". Confiança baixa (não
+    // inventa peso/coima) mas o nome fica visível para revisão/catalogação.
+    const orphanName = extractOrphanName(fixed, p.line);
+    if (orphanName) {
+      const unit = Math.round((p.kg / p.qty) * 1000) / 1000;
+      out.push({
+        item: orphanName.toLowerCase(),
+        qty: p.qty,
+        kg: p.kg,
+        unitKg: unit,
+        confidence: 40,
+        confidenceLevel: "low",
+        matchReason: "Item não catalogado — nome lido do OCR",
+      });
+    } else {
+      out.push(fallbackForPair(p, false, undefined));
+    }
   }
   // Exclusão aplicada também ao resultado final: o fallback adivinha pelo peso
   // e pode re-introduzir itens excluídos (ex.: a arma já contada pelo popup).
