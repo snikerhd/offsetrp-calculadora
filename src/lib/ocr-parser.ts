@@ -26,9 +26,6 @@ export interface ParseResult {
 type Hint = { item: string; pos: number; line: number; unitKg: number; frag: boolean; span: number; timer?: boolean };
 type Pair = { qty: number; kg: number; pos: number; line: number };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Correção de typos comuns de OCR (nomes de itens do jogo)
-// ─────────────────────────────────────────────────────────────────────────────
 const TYPO_RULES: Array<[RegExp, string]> = [
   [/\bLOCKPECK\b/gi, "LOCKPICK"],
   [/\bLOCKPICK\s+AVANCAD[AO]\b/gi, "LOCKPICK AVANCADA"],
@@ -93,13 +90,10 @@ function normalizeLine(text: string): string {
     .trim();
 }
 
-// Junta um par partido em duas linhas: "1\n(1.0)" → "1 (1.0)".
 function mergeSplitPairs(text: string): string {
   return text.replace(/(\d{1,7})\s*\n\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g, "$1 ($2)");
 }
 
-// Recupera fragmentos "N0-D)" -> "N (0.D) NOME": o OCR corrompe o par
-// "7 (0.7)" como "70-7)" ("(" vira "0-").
 function recoverFragmentQty(text: string, used: Set<string>): string {
   const lower = text.toLowerCase();
   return text.replace(
@@ -118,7 +112,6 @@ function recoverFragmentQty(text: string, used: Set<string>): string {
   );
 }
 
-// Recupera pares com o qty corrompido pelo OCR.
 function recoverCorruptedQty(text: string, used: Set<string>): string {
   const lower = text.toLowerCase();
   return text.replace(
@@ -140,9 +133,6 @@ function recoverCorruptedQty(text: string, used: Set<string>): string {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Pistas de nomes: geradas a partir do catálogo + aliases + fragmentos
-// ─────────────────────────────────────────────────────────────────────────────
 const ALIASES: Array<[string, string, number?]> = [
   ["acessorios", "acessorios para armas", 0.1],
   ["porte de arma", "porte de arma branca"],
@@ -223,7 +213,6 @@ const ALIASES: Array<[string, string, number?]> = [
   ["oil petroleo", "petroleo"],
   ["oil", "petroleo"],
   ["oilp", "petroleo"],
-  // Aliases para o formato do AI Overview
   ["petrol can", "petroleo"],
   ["petrolcan", "petroleo"],
   ["petrol", "petroleo"],
@@ -366,7 +355,6 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
     if (!(qty > 0) || name.length === 0) return;
     if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|ammo|s[ée]rie|serial|n[úu]mero)(\s*:.*)?$/i.test(name)) return;
     
-    // Filtro para ignorar configurações do jogo que o AI Overview às vezes inclui
     if (/^(loot\s*table|better\s*loot|config)/i.test(name)) return;
 
     const key = `${pos}:${normalizeLine(name)}`;
@@ -394,7 +382,6 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   const reF = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9.' -]*?)\s*\([^)]+\)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
   while ((m = reF.exec(text))) push(Number(m[2]), m[1], m.index);
 
-  // Formato G: "Nome - Quantidade" (saída do AI Overview)
   const reG = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _.,'&()\/.\-]*?)\s+[-–—]\s*(\d{1,7})\s*$/gm;
   while ((m = reG.exec(text))) push(Number(m[2]), m[1], m.index);
 
@@ -958,7 +945,6 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
     if (!m) m = fixed.match(/balas\s+(?:baixo|m[eé]dio|alto)\s*(?:calibre)?\s*\(\s*[xX×]?\s*(\d+)/i);
     if (m) ammo = Number(m[1]);
   }
-  // NOVO: Fallback para o formato "Machine Pistol - 117"
   if (!ammo) {
     const lineMatch = fixed.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*?)\s*[-–—]\s*(\d{1,7})\s*$/m);
     if (lineMatch) {
@@ -1000,7 +986,6 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
   const armaMatch = (text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "").replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
   let ammo = [...text.matchAll(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/gi)].reduce((s, m) => s + Number(m[1]), 0);
 
-  // NOVO: Fallback para "N balas"
   if (ammo === 0) {
     let totalBalas = 0;
     for (const m of text.matchAll(/(\d+)\s+balas\s+(?:baixo|m[eé]dio|alto)/gi)) totalBalas += Number(m[1]);
@@ -1008,7 +993,6 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
     ammo = totalBalas;
   }
 
-  // NOVO: Fallback para "Machine Pistol - 117"
   if (ammo === 0) {
     const lineRegex = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*?)\s*[-–—]\s*(\d{1,7})\s*$/gm;
     for (const m of text.matchAll(lineRegex)) {
@@ -1157,12 +1141,16 @@ if (extractPairs(rawText).length < 2) {
     }
     const unitKg = def?.unitKg ?? 0;
     let qty = p.qty;
-    if (def && /^arma (baixo|medio|alto) calibre$/.test(def.item) && qty > 50) {
+    
+    // [FIX] Remove o "> 50". Agora, se for uma arma, a quantidade é SEMPRE a munição.
+    // A arma conta sempre como 1 unidade.
+    if (def && /^arma (baixo|medio|alto) calibre$/.test(def.item) && qty > 0) {
       if (def.item === "arma alto calibre") ammoAlto += qty;
       else if (def.item === "arma medio calibre") ammoMedio += qty;
       else ammoBaixo += qty;
       qty = 1;
     }
+
     const key = normalizeLine(name);
     const prev = qtyOnlyMap.get(key);
     if (prev) prev.qty += qty;
@@ -1282,7 +1270,8 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   if (WEAPON_CAPTURE_ENABLED && (!wc || wc.ammo === 0)) {
     let ammoFromWeapon = 0;
     for (const w of merged) {
-      if (WEAPON_ITEM_RE.test(w.item) && w.qty > 50) {
+      // [FIX] Removido o "> 50" também aqui, por segurança
+      if (WEAPON_ITEM_RE.test(w.item) && w.qty > 1) {
         ammoFromWeapon = Math.max(ammoFromWeapon, w.qty);
         w.qty = 1;
         w.kg = w.unitKg ?? 0;
