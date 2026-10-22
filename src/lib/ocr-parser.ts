@@ -223,7 +223,7 @@ const ALIASES: Array<[string, string, number?]> = [
   ["oil petroleo", "petroleo"],
   ["oil", "petroleo"],
   ["oilp", "petroleo"],
-  // [NOVO] Aliases para o formato do AI Overview
+  // Aliases para o formato do AI Overview
   ["petrol can", "petroleo"],
   ["petrolcan", "petroleo"],
   ["petrol", "petroleo"],
@@ -366,7 +366,7 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
     if (!(qty > 0) || name.length === 0) return;
     if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|ammo|s[ée]rie|serial|n[úu]mero)(\s*:.*)?$/i.test(name)) return;
     
-    // [NOVO] Filtro para ignorar configurações do jogo que o AI Overview às vezes inclui
+    // Filtro para ignorar configurações do jogo que o AI Overview às vezes inclui
     if (/^(loot\s*table|better\s*loot|config)/i.test(name)) return;
 
     const key = `${pos}:${normalizeLine(name)}`;
@@ -394,7 +394,7 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
   const reF = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9.' -]*?)\s*\([^)]+\)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
   while ((m = reF.exec(text))) push(Number(m[2]), m[1], m.index);
 
-  // [NOVO] Formato G: "Nome - Quantidade" (saída do AI Overview)
+  // Formato G: "Nome - Quantidade" (saída do AI Overview)
   const reG = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _.,'&()\/.\-]*?)\s+[-–—]\s*(\d{1,7})\s*$/gm;
   while ((m = reG.exec(text))) push(Number(m[2]), m[1], m.index);
 
@@ -958,6 +958,16 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
     if (!m) m = fixed.match(/balas\s+(?:baixo|m[eé]dio|alto)\s*(?:calibre)?\s*\(\s*[xX×]?\s*(\d+)/i);
     if (m) ammo = Number(m[1]);
   }
+  // NOVO: Fallback para o formato "Machine Pistol - 117"
+  if (!ammo) {
+    const lineMatch = fixed.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*?)\s*[-–—]\s*(\d{1,7})\s*$/m);
+    if (lineMatch) {
+      const weaponName = lineMatch[1].trim();
+      if (findWeaponInText(weaponName)) {
+        ammo = Number(lineMatch[2]);
+      }
+    }
+  }
   const knownWeapon = findWeaponInText(fixed);
   const weapon = knownWeapon ? displayName(knownWeapon) : (fixed.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || fixed.split("\n")[0]?.trim() || "");
   const accessoryCount = countAccessories(fixed);
@@ -988,7 +998,26 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
 function detectWeaponCapture(text: string): WeaponCapture | null {
   if (!WEAPON_CAPTURE_ENABLED) return null;
   const armaMatch = (text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "").replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
-  const ammo = [...text.matchAll(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/gi)].reduce((s, m) => s + Number(m[1]), 0);
+  let ammo = [...text.matchAll(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/gi)].reduce((s, m) => s + Number(m[1]), 0);
+
+  // NOVO: Fallback para "N balas"
+  if (ammo === 0) {
+    let totalBalas = 0;
+    for (const m of text.matchAll(/(\d+)\s+balas\s+(?:baixo|m[eé]dio|alto)/gi)) totalBalas += Number(m[1]);
+    for (const m of text.matchAll(/balas\s+(?:baixo|m[eé]dio|alto)\s*(?:calibre)?\s*\(\s*[xX×]?\s*(\d+)/gi)) totalBalas += Number(m[1]);
+    ammo = totalBalas;
+  }
+
+  // NOVO: Fallback para "Machine Pistol - 117"
+  if (ammo === 0) {
+    const lineRegex = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*?)\s*[-–—]\s*(\d{1,7})\s*$/gm;
+    for (const m of text.matchAll(lineRegex)) {
+      if (findWeaponInText(m[1].trim())) {
+        ammo += Number(m[2]);
+      }
+    }
+  }
+
   const accessoryCount = countAccessories(text);
   if (!armaMatch && !ammo && !accessoryCount) return null;
   const knownWeapon = findWeaponInText(text);
