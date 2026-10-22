@@ -9,6 +9,15 @@ import { CRIMES_CATALOGO } from "@/lib/data";
 // Aplicada apenas no modo Coimas Rápidas — nunca no OCR dos Relatórios.
 const CRIME_POSSE_MUNICAO = CRIMES_CATALOGO.find((c) => c.nome === "Posse de Munição");
 
+const DEFAULT_QUERY = `Analisa a imagem deste inventário e extrai todos os itens num formato de lista simples ("Nome: Quantidade"), seguindo rigorosamente estas regras de formatação:
+
+1. Itens normais: Mostra o nome do item e a quantidade (ex: "Bifana: x3").
+2. Armas: Mostra o nome da arma, o número de munições e a quantidade de acessórios acoplados (ex: "Machine Pistol: 117 munições | 1 acessório"). Se houver acessórios, coloca apenas a quantidade numérica deles.
+3. Petrol Can (Galão de Combustível): Ignora qualquer número grande que apareça no topo do ícone. A quantidade deve ser sempre fixada em "x1".
+4. Caixas vazias: Não listes os espaços vazios do inventário.
+
+Mantém a resposta curta, direta e apenas com a lista formatada.`;
+
 interface OcrBlockProps {
   inputCls: string;
   fillBtnTheme: string;
@@ -208,6 +217,52 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
     [handleResult, runServerOcr]
   );
 
+  const handleLensClick = useCallback(async () => {
+    const imageUrl = ocrUrl.trim();
+    if (!imageUrl) {
+      alert("Cola primeiro o link da imagem.");
+      return;
+    }
+
+    // Verifica se a extensão LensExtractor está instalada (site-inject.js mete este atributo)
+    const isExtensionInstalled = document.documentElement.getAttribute("data-offset-ext") === "1";
+
+    if (isExtensionInstalled) {
+      // Envia a mensagem para a extensão fazer o trabalho todo
+      window.postMessage(
+        {
+          type: "OFFSET_LENS_EXTRACT",
+          url: imageUrl,
+          query: DEFAULT_QUERY,
+        },
+        window.location.origin
+      );
+      setOcrStatus("⏳ Extensão detetada! A abrir o Lens automaticamente...");
+      return;
+    }
+
+    // Fallback manual (sem extensão)
+    try {
+      await navigator.clipboard.writeText(DEFAULT_QUERY);
+    } catch (e) {
+      console.warn("Clipboard indisponível:", e);
+    }
+
+    const lensUrl =
+      "https://lens.google.com/uploadbyurl?hl=pt-PT" +
+      "&url=" + encodeURIComponent(imageUrl) +
+      "&q=" + encodeURIComponent(DEFAULT_QUERY);
+    window.open(lensUrl, "_blank");
+
+    alert(
+      "Abrimos o Google Lens com a imagem.\n\n" +
+      "A query já está na área de transferência.\n" +
+      "1. No Lens, prime Ctrl+V e Enter.\n" +
+      "2. Copia o resultado e cola em «Ou cola o texto».\n\n" +
+      "💡 Dica: instala a extensão LensExtractor para isto ser automático."
+    );
+  }, [ocrUrl]);
+
   return (
     <div className={`bg-slate-900/60 backdrop-blur-md rounded-xl p-5 border border-white/5 ${neonShadow}`}>
       <h2 className="text-sm uppercase font-extrabold tracking-wider text-gray-300 mb-3 flex items-center gap-2">
@@ -234,15 +289,14 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
             <button onClick={handleOcrUrl} disabled={ocrProcessing || !ocrUrl.trim()} className={`px-4 py-2 rounded text-xs font-bold uppercase ${fillBtnTheme} cursor-pointer disabled:opacity-50`}>
               {ocrProcessing ? "..." : "Analisar"}
             </button>
-            <a
-              href={`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(ocrUrl.trim())}`}
-              target="_blank"
-              rel="noreferrer"
-              title="Abre a imagem no Google Lens para veres o AI Overview manualmente, se necessário"
-              className={`flex items-center px-3 py-2 rounded text-xs font-bold uppercase whitespace-nowrap opacity-80 hover:opacity-100 ${fillBtnTheme} ${!ocrUrl.trim() ? "pointer-events-none opacity-40" : ""}`}
+            <button
+              onClick={handleLensClick}
+              disabled={ocrProcessing || !ocrUrl.trim()}
+              title="Abre a imagem no Google Lens para veres o AI Overview (usa a extensão se estiver instalada)"
+              className={`flex items-center px-3 py-2 rounded text-xs font-bold uppercase whitespace-nowrap opacity-80 hover:opacity-100 ${fillBtnTheme} ${!ocrUrl.trim() ? "pointer-events-none opacity-40" : "cursor-pointer"}`}
             >
               Lens
-            </a>
+            </button>
           </div>
         </div>
 
