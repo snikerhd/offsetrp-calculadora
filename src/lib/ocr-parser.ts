@@ -67,19 +67,10 @@ const TYPO_RULES: Array<[RegExp, string]> = [
   [/\b1BK\b/gi, "10K"],
   [/\b1OK\b/gi, "10K"],
   [/\b0\.B\b/gi, "0.8"],
-  // W→H confundido pelo OCR (como HESA→MESA)
   [/\bHISKY\b/gi, "WHISKY"],
-  // Primeira letra cortada pelo OCR
   [/\bONTRABANDO\b/gi, "CONTRABANDO"],
   [/\bISKY\b/gi, "WHISKY"],
-  // Nomes de caixa partidos em duas linhas (CAIXA/CONTRABANDO/etc.) são fundidos
-  // no pré-processamento do route (mergeCaixaMultiline), numa única passagem sem
-  // re-casamento. Manter regras multi-linha aqui faria o parser re-fundir em
-  // cadeia (efeito "CAIXA CAIXA ELETRONICOS"). Aqui só a correção simples.
   [/\bCAXA\b/gi, "CAIXA"],
-  // Fogo de Artifício: F→H (W→H pattern) e "de" omitido.
-  // [\s\S]*? não serve (engole linhas); usa [\wÀ-ÿ]* para apanhar acentos
-  // (\w não inclui Í/Ç/etc. e o regex cortava em "ARTIF", deixando "ÍCIO" órfão).
   [/\bHOGO\s+ARTIF[\wÀ-ÿ]*/gi, "FOGO DE ARTIFICIO"],
   [/\bFOGO\s+ARTIF[\wÀ-ÿ]*/gi, "FOGO DE ARTIFICIO"],
   [/\bFOGOS\s+ARTIF[\wÀ-ÿ]*/gi, "FOGO DE ARTIFICIO"],
@@ -108,9 +99,7 @@ function mergeSplitPairs(text: string): string {
 }
 
 // Recupera fragmentos "N0-D)" -> "N (0.D) NOME": o OCR corrompe o par
-// "7 (0.7)" como "70-7)" ("(" vira "0-"). O peso total / qty dá o peso
-// unitário, que identifica o item no catálogo (nome presente no texto,
-// excluindo os já recuperados pela regra da letra).
+// "7 (0.7)" como "70-7)" ("(" vira "0-").
 function recoverFragmentQty(text: string, used: Set<string>): string {
   const lower = text.toLowerCase();
   return text.replace(
@@ -122,18 +111,14 @@ function recoverFragmentQty(text: string, used: Set<string>): string {
       const cands = ITEM_CATALOG.filter(
         (c) => Math.abs(c.unitKg - unit) < 0.001 && lower.includes(c.name) && !used.has(c.name)
       );
-      if (cands.length !== 1) return m; // ambíguo ou sem candidato: deixa como está
+      if (cands.length !== 1) return m;
       used.add(cands[0].name);
       return `${qty} (${total}) ${cands[0].name}`;
     }
   );
 }
 
-// Recupera pares com o qty corrompido pelo OCR: o peso "(0.1)" fica com a
-// INICIAL do nome no lugar do número e o qty cai para a linha seguinte:
-//   "Meteor Street, A(0.1)\n1"  ->  "1 (0.1) algemas"
-// A letra inicial + o peso unitário identificam o item no catálogo (apenas
-// itens ilegais cujo nome aparece no texto) — evita adivinhar.
+// Recupera pares com o qty corrompido pelo OCR.
 function recoverCorruptedQty(text: string, used: Set<string>): string {
   const lower = text.toLowerCase();
   return text.replace(
@@ -148,7 +133,7 @@ function recoverCorruptedQty(text: string, used: Set<string>): string {
           lower.includes(d.name) &&
           !used.has(d.name)
       );
-      if (cands.length !== 1) return m; // ambíguo ou sem candidato: deixa como está
+      if (cands.length !== 1) return m;
       used.add(cands[0].name);
       return `${qty} (${peso}) ${cands[0].name}`;
     }
@@ -173,11 +158,6 @@ const ALIASES: Array<[string, string, number?]> = [
   ["carregador smg", "carregador medio calibre"],
   ["carregador de rifle", "carregador alto calibre"],
   ["carregador de pistola", "carregador baixo calibre"],
-  // Munições renomeadas no jogo para calibres específicos. Têm nome de "Balas"
-  // mas são CARREGADORES (magazines, 0,2 kg) — mapeiam para carregador X calibre.
-  // O normalizeLine troca "." e "," por espaço ("5.56"->"5 56", "0.45"->"0 45"),
-  // por isso cobrimos as variantes. Calibres (confirmados no jogo):
-  //   9mm = BAIXO, .45 = MÉDIO, 5.56 = ALTO, cartuchos 12 = ALTO.
   ["balas 5.56", "carregador alto calibre"],
   ["balas 556", "carregador alto calibre"],
   ["bala 5.56", "carregador alto calibre"],
@@ -193,7 +173,6 @@ const ALIASES: Array<[string, string, number?]> = [
   ["cartucho 12", "carregador alto calibre"],
   ["cartuchos 12 gauge", "carregador alto calibre"],
   ["cartucho 12 gauge", "carregador alto calibre"],
-  // Arsenal de armas (nomes completos do jogo). CLASSE 1=baixo, 2=médio, 3=alto.
   ["tactical carbine", "arma alto calibre", 15],
   ["bullpup rifle mk2", "arma alto calibre", 15],
   ["bullpup mk2", "arma alto calibre", 15],
@@ -239,16 +218,16 @@ const ALIASES: Array<[string, string, number?]> = [
   ["resto eletronico", "eletronicos"],
   ["candy cane", "candy cane"],
   ["candy", "candy cane"],
-  // "ÁGUA" cortada pelo OCR aparece como "ÁGI"
   ["agi", "agua"],
-  // Subtítulo inglês do jogo sob o ícone do Petróleo. O OCR costuma colar o
-  // subtítulo ao nome ("OILPETRÓLEO") e como as pistas usam \b...\b, sem o
-  // espaço o "petroleo" isolado nunca é detetado — o par do Petróleo rouba
-  // então a pista de outro item com o mesmo peso (ex. Estimulante, 0.2 kg).
   ["oilpetroleo", "petroleo"],
   ["oil petroleo", "petroleo"],
   ["oil", "petroleo"],
   ["oilp", "petroleo"],
+  // [NOVO] Aliases para o formato do AI Overview
+  ["petrol can", "petroleo"],
+  ["petrolcan", "petroleo"],
+  ["petrol", "petroleo"],
+  ["relogio ouro", "relogio de ouro"],
   ["medickit", "medickits"],
   ["medickits", "medickits"],
   ["barra de ouro", "barras ouro"],
@@ -259,9 +238,6 @@ const ALIASES: Array<[string, string, number?]> = [
   ["minerio", "minerios"],
   ["pepita", "pepitas"],
   ["safira", "safiras"],
-  // Fogo de Artifício: o OCR costuma omitir o "de" ("FOGO ARTIFÍCIO") ou
-  // separar as palavras em linhas diferentes. Sem estes aliases o item
-  // aparece como "item nao identificado".
   ["fogo artificio", "fogo de artificio"],
   ["fogo de artificio", "fogo de artificio"],
   ["fogos artificio", "fogo de artificio"],
@@ -271,15 +247,11 @@ const ALIASES: Array<[string, string, number?]> = [
   ["firework", "fogo de artificio"],
 ];
 
-// Fragmentos: sufixo de um nome partido pelo OCR (ex.: FORTALECIDO de
-// COLETE FORTALECIDO). Se o prefixo já foi lido, o fragmento funde-se nele.
 const FRAGMENTS: Array<[string, string, string | null]> = [
   ["fortalecido", "colete fortalecido", "colete"],
   ["avancada", "lockpick avancada", "lockpick"],
   ["processado", "cristal processado", "cristal"],
   ["cidadao", "cartao de cidadao", "cartao"],
-  // "CARTÃO DE" numa linha e "CIDADÃO" noutra: a primeira metade sozinha não
-  // deve virar um Cartão normal
   ["cartao de", "cartao de cidadao", null],
   ["conducao", "carta de conducao", "carta"],
   ["laranja", "sumo laranja", "sumo"],
@@ -287,11 +259,7 @@ const FRAGMENTS: Array<[string, string, string | null]> = [
   ["maracuja", "sumo maracuja", "sumo"],
   ["secagem", "suporte de secagem", null],
   ["estatal", "ouro estatal", null],
-  // "STRAWBELLY" numa linha e "SHORTCAKE" noutra: o nome partido não deve
-  // criar duas pistas do mesmo item (o fragmento funde-se na pista strawberry)
   ["shortcake", "strawberry shortcake", "strawberry shortcake"],
-  // GINGERKITTY ... COOKIE partido (MOMOSHU pode ficar no meio): o fragmento
-  // COOKIE mapeia para gingerkitty cookie sem precisar de prefixo separado.
   ["gingerkitty", "gingerkitty cookie", null],
   ["cookie", "gingerkitty cookie", null],
   ["10k", "corrente 10k", null],
@@ -310,10 +278,6 @@ interface PhrasePattern {
 }
 
 const BARE_NAME_DENY = new Set(["branca"]);
-
-// Lookup normalizado → { item, unitKg } para o modo sem peso (qty-only):
-// cobre nomes do catálogo, displayNames e aliases ("barra de ouro" →
-// "barras ouro") com a MESMA primeira-entrada-ganha do PHRASES.
 const PHRASE_BY_NORM = new Map<string, { item: string; unitKg: number }>();
 
 function buildPhrases(): PhrasePattern[] {
@@ -348,10 +312,6 @@ function lineOf(text: string, pos: number): number {
   return line;
 }
 
-// Correção de desvio decimal do OCR: no FiveM nenhum item pesa mais de 30 kg
-// por unidade, por isso "1 (150)" é tipicamente "1 (15.0)" com o ponto perdido.
-// Se dividir o peso por 10 (ou 100) der um valor compatível com um peso
-// unitário do catálogo, corrige o par.
 function fixUnitWeightOverflow(pairs: Pair[]): Pair[] {
   const validUnits = ITEM_CATALOG.map(d => d.unitKg).filter(u => u > 0);
   return pairs.map(p => {
@@ -382,20 +342,11 @@ function extractPairs(text: string): Pair[] {
   return fixUnitWeightOverflow(out);
 }
 
-// Pares de quantidade sem peso (qty-only) — dois formatos suportados:
-//   A) linha própria "64 Arma de Coleção" (qty primeiro);
-//   B) Google Lens "• Arma de Coleção (x64)" (nome primeiro, qty com "x").
-// O peso unitário vem do catálogo/aliases e o total = qty * unitKg.
 function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; line: number }> {
   const out: Array<{ qty: number; name: string; line: number }> = [];
   const seen = new Set<string>();
   const push = (qty: number, rawName: string, pos: number) => {
     let name = rawName.trim();
-    // Nome truncado pelo jogo (ex.: "Corrente de Ouro...") = forma longa truncada
-    // (no jogo, "Corrente de Ouro 10k" aparece abreviado como "Corrente de Ouro...").
-    // Se há reticências, resolve para o item do catálogo mais longo que começa
-    // com a base — evita confundir "Corrente de Ouro" (600) com "Corrente de
-    // Ouro 10k" (1200), que o jogo mostra truncado.
     if (/\.{2,}|\u2026/.test(name)) {
       const base = normalizeLine(name).replace(/\s+/g, " ").trim();
       if (base.length >= 3) {
@@ -413,56 +364,48 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
       }
     }
     if (!(qty > 0) || name.length === 0) return;
-    // Metadados da arma (ARMA/MUNIÇÃO/MUNIÇÕES/ACESSÓRIOS/WEAPON/AMMO) não são
-    // itens de inventário — vão para o weaponCapture. Aceita o nome exacto ou
-    // com descrição após dois-pontos, no singular OU plural ("Munições: 75"),
-    // mas NUNCA itens reais que só comecem igual (ex.: "Arma de Coleção").
-    // "acessórios" NÃO é filtrado aqui: "Acessórios: x" (contagem do popup/query
-    // do Lens) é um item real ("acessorios para armas"). Só arma/weapon/munição/
-    // ammo ficam de fora (são metadata da arma, não itens de inventário).
     if (/^(arma|weapon|muni[cç][aã]?[oõ]?e?s?|ammo|s[ée]rie|serial|n[úu]mero)(\s*:.*)?$/i.test(name)) return;
-    // Dedup por POSIÇÃO: o mesmo par não conta 2× na mesma linha (o Formato B e o
-    // E ambos casam "Nome (xN)"), mas linhas DIFERENTES com o mesmo item contam
-    // (ex.: 3× "Assault SMG (x1)" em linhas distintas = 3 armas).
+    
+    // [NOVO] Filtro para ignorar configurações do jogo que o AI Overview às vezes inclui
+    if (/^(loot\s*table|better\s*loot|config)/i.test(name)) return;
+
     const key = `${pos}:${normalizeLine(name)}`;
     if (seen.has(key)) return;
     seen.add(key);
     out.push({ qty, name, line: lineOf(text, pos) });
   };
-  // Formato A: "64 Arma de Coleção" (linha própria, sem peso).
+  
   const reA = /^(\d{1,7})\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*)$/gm;
   let m: RegExpExecArray | null;
   while ((m = reA.exec(text))) push(Number(m[1]), m[2], m.index);
-  // Formato B: "• Arma de Coleção (x64)" — separador "•" ou "○" ou início de linha.
+  
   const reB = /(?:^|[•○●▪])\s*([^•○●▪\n()]+?)\s*\(\s*[xX×]?\s*(\d{1,7})\s*\)/gm;
   while ((m = reB.exec(text))) push(Number(m[2]), m[1], m.index);
-  // Formato C: "• Nome: xN" — nome, dois-pontos, qty com "x" (sem parênteses).
+  
   const reC = /(?:^|[•○●▪])\s*([^•○●▪\n:]+?):\s*[xX×]?\s*(\d{1,7})/gm;
   while ((m = reC.exec(text))) push(Number(m[2]), m[1], m.index);
-  // Formato D: "○ Nome (English Name) – xN" — AI Overview do Google Lens.
-  // Ex.: "○ Caixa Eletrónicos (Electronics Box) – x6" → qty 6, nome "Caixa Eletrónicos".
+  
   const reD = /(?:^|[○•●▪])\s*([^○•●▪\n()]+?)\s*\([^)]+\)\s*[–—-]\s*[xX×]?\s*(\d{1,7})/gm;
   while ((m = reD.exec(text))) push(Number(m[2]), m[1], m.index);
-  // Formato E: "Nome (xN): descrição" — extensão v3.0 (sem bullet).
-  // Ex.: "Caixa Eletrónicos (x6): Electronics container" → qty 6, nome "Caixa Eletrónicos".
+  
   const reE = /^([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*?)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
   while ((m = reE.exec(text))) push(Number(m[2]), m[1], m.index);
-  // Formato F: "Nome (English) (xN)" — AI Overview do Lens com subtítulo inglês.
-  // Ex.: "Pistol .50 (Desert Eagle) (x1)" → qty 1, nome "Pistol .50". Aceita bullet.
+  
   const reF = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9.' -]*?)\s*\([^)]+\)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
   while ((m = reF.exec(text))) push(Number(m[2]), m[1], m.index);
+
+  // [NOVO] Formato G: "Nome - Quantidade" (saída do AI Overview)
+  const reG = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _.,'&()\/.\-]*?)\s+[-–—]\s*(\d{1,7})\s*$/gm;
+  while ((m = reG.exec(text))) push(Number(m[2]), m[1], m.index);
+
   return out;
 }
 
-// Procura as frases em cada linha; devolve pistas com posição/linha.
 function collectHints(fixed: string): Hint[] {
   const lines = fixed.split("\n");
   const out: Hint[] = [];
   for (let li = 0; li < lines.length; li++) {
     const raw = lines[li];
-    // "SNS PISTOL HK2" / "REVOLVER MK2": o sufixo é um modificador do nome da
-    // arma (seguido de espaço), não uma arma própria. "HK2" isolado (separado
-    // por tab) é uma arma real e mantém-se. O placeholder preserva o tamanho.
     const rawSafe = raw.replace(/(\w) +(hk2|mk2)\b/gi, "$1 xxx");
     const norm = normalizeLine(rawSafe);
     if (!norm) continue;
@@ -473,8 +416,6 @@ function collectHints(fixed: string): Hint[] {
         out.push({ item: p.item, pos: m.index, line: li, unitKg: p.unitKg, frag: p.frag, span: m[0].length });
       }
     }
-    // Temporizador de C4 armado ("1:23" com hora de 1 dígito). Não apanha
-    // horas de 2 dígitos como "17:23". Só é usado no passe global (célula órfã).
     const timerRe = /\b([1-9]):(\d{2})\b/g;
     let tm: RegExpExecArray | null;
     while ((tm = timerRe.exec(rawSafe))) {
@@ -484,9 +425,6 @@ function collectHints(fixed: string): Hint[] {
   return out;
 }
 
-// Remove pistas curtas totalmente cobertas por outra frase mais longa na mesma
-// linha (ex.: "diamante"/"anel" dentro de "ANEL DE DIAMANTE", "plastico"
-// dentro de "SACO PLASTICO"). A pista longa mantém-se.
 function removeCoveredHints(hints: Hint[]): Hint[] {
   const byLine = new Map<number, Hint[]>();
   for (const h of hints) {
@@ -514,7 +452,6 @@ function fragmentPrefix(item: string): string | null {
   return FRAGMENTS.find(([, i]) => i === item)?.[2] ?? null;
 }
 
-// Funde fragmentos com o prefixo já lido e descarta pistas falsas.
 function mergeFragments(hints: Hint[]): Hint[] {
   const removed = new Set<Hint>();
   for (const f of hints) {
@@ -539,8 +476,6 @@ function mergeFragments(hints: Hint[]): Hint[] {
     }
   }
 
-  // Remove fragmentos que não fundiram e que "vivem dentro" de uma pista completa
-  // (ex.: "smg" dentro de "assault smg").
   const clean: Hint[] = [];
   const full = hints.filter((h) => !h.frag && !removed.has(h));
   for (const h of hints) {
@@ -563,9 +498,6 @@ function mergeFragments(hints: Hint[]): Hint[] {
   return dedup;
 }
 
-// Deteta o cabeçalho das Coimas Rápidas (item confiscado + breakdown de peso).
-// Ex.: "Estimulante / ilegal / Peso reconhecido: 52.4 kg = 262 × 0.2 kg /
-// 262 0.2 kg 52,4 kg / 85%". Os nomes aí não pertencem à grelha do inventário.
 function detectHeaderLines(lines: string[]): Set<number> {
   const set = new Set<number>();
   let firstPair = -1;
@@ -587,9 +519,6 @@ function detectHeaderLines(lines: string[]): Set<number> {
   return set;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Confiança e correspondência
-// ─────────────────────────────────────────────────────────────────────────────
 function weightClose(a: number, b: number): boolean {
   if (a === 0) return b === 0;
   if (b === 0) return false;
@@ -641,10 +570,6 @@ function fallbackForPair(p: Pair, unidentified: boolean, groupItems?: Set<string
         };
       }
     }
-    // Só usa nomes visíveis na própria captura (groupItems). Adivinhar só pelo
-    // peso é perigoso: com tantos itens a partilhar pesos no catálogo, inventa
-    // itens ilegais à toa (ex. Águia de Bronze para um par 2.0 kg sem nome).
-    // Sem nome, fica "não identificado" — mais honesto e sem falsos positivos.
   }
   return {
     item: `item nao identificado (${Math.round(u * 100) / 100} kg/un)`,
@@ -657,21 +582,6 @@ function fallbackForPair(p: Pair, unidentified: boolean, groupItems?: Set<string
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Atribuição global par↔nome
-// ─────────────────────────────────────────────────────────────────────────────
-// O OCR não lê a grelha do inventário sempre pela mesma ordem: às vezes os
-// nomes vêm depois dos números, às vezes antes (ex.: "SMG / CARREGADOR DE" no
-// topo do par "1 (0.2)"). Em vez de casamento sequencial por grupos, cada par
-// "qty (kg)" é atribuído a uma pista de nome compatível pelo peso, minimizando
-// custo global:
-//   - distância em linhas entre par e pista;
-//   - desvio do peso unitário;
-//   - cruzamentos (pares em ordem devem preferir pistas em ordem);
-//   - duplicar o mesmo item em duas pistas custa extra;
-//   - ficar sem pista custa ainda mais.
-// Empates resolvem-se pela ordem do texto (sequência de pistas lexicograficamente
-// menor, indexada por ordem original dos pares).
 function assignPairsToHints(
   pairs: Pair[],
   hints: Hint[],
@@ -680,12 +590,6 @@ function assignPairsToHints(
   const matchOf = new Map<Pair, Hint>();
   const usedHint = new Array<boolean>(hints.length).fill(false);
 
-  // ── Fase 1: casamento por blocos ──
-  // A grelha do jogo desenha cada linha visual como "N quantidades" seguidas
-  // de "N nomes" (ou o inverso, conforme o OCR). Linhas consecutivas formam um
-  // bloco e o i-º par do bloco casa com a i-ª pista compatível — muito mais
-  // fiável do que a distância bruta quando os nomes ficam entre duas linhas
-  // de quantidades.
   interface Block {
     items: number[];
     start: number;
@@ -696,9 +600,6 @@ function assignPairsToHints(
     let cur: Block | null = null;
     for (let i = 0; i < pairs.length; i++) {
       const ln = pairs[i].line;
-      // Blocos = linhas visuais consecutivas: pares na mesma linha ficam no mesmo
-      // bloco e linhas seguidas continuam o bloco (antes ln === cur.end + 1 separava
-      // pares da mesma linha e colava linhas diferentes, trocando itens entre eles).
       if (cur && ln <= cur.end + 1) {
         cur.items.push(i);
         cur.end = ln;
@@ -713,7 +614,6 @@ function assignPairsToHints(
     let cur: Block | null = null;
     for (let i = 0; i < hints.length; i++) {
       const ln = hints[i].line;
-      // Mesma regra dos nomes: pistas na mesma linha partilham o mesmo bloco.
       if (cur && ln <= cur.end + 1) {
         cur.items.push(i);
         cur.end = ln;
@@ -724,31 +624,18 @@ function assignPairsToHints(
     }
   }
 
-  // Casamento ordenado dentro de um bloco: maximiza atribuições, depois
-  // minimiza custo (distância de linhas + desvio de peso). NÃO-CRUZADO: o par
-  // seguinte só pode usar pistas depois da pista do par anterior (a grelha lê-
-  // se da esquerda para a direita) — evita que dois pares roubem pistas
-  // duplicadas do mesmo nome deixando outro nome órfão.
   const blockMatch = (
     pIdx: number[],
     hIdx: number[]
   ): { score: number; map: Array<[number, number]> } => {
     const n = pIdx.length;
-    // Inicializa com o fallback "tudo por atribuir" para podar cedo, e limita
-    // os nós explorados (a árvore pode explodir quando há muitas pistas com o
-    // mesmo peso — ex. grelhas de armas do OCR).
     let bestScore = n * 1000;
     let bestMap: Array<[number, number]> = [];
     let nodes = 0;
     const MAX_NODES = 150_000;
     const curMap = new Map<number, number>();
-    // No modo embaralhado (bloco único), a distância relevante é a POSIÇÃO na
-    // ordem de leitura — o i-º par casa com o i-º nome — e não a distância de
-    // linhas (quantidades e nomes vivem em linhas diferentes).
     const pRank = new Map<number, number>(pIdx.map((pi, i) => [pi, i]));
     const hRank = new Map<number, number>(hIdx.map((hi, i) => [hi, i]));
-    // Reutilizar o mesmo item para 2+ pares é suspeito no modo embaralhado
-    // (normalmente indica nome duplicado pelo OCR a absorver pares alheios).
     const itemUse = new Map<string, number>();
     const dfs = (k: number, lastHi: number, assigned: number, cost: number) => {
       if (++nodes > MAX_NODES || cost > bestScore) return;
@@ -762,9 +649,6 @@ function assignPairsToHints(
       }
       const pi = pIdx[k];
       const u = pairs[pi].kg / pairs[pi].qty;
-      // No modo embaralhado (bloco único) os cruzamentos são permitidos: os
-      // nomes e os pares entrelaçam-se no texto OCR e a ordem estrita produz
-      // trocas em cadeia. O custo de distância posicional decide sozinho.
       for (const hi of hIdx) {
         if ((!forceSingleBlock && hi <= lastHi) || usedHint[hi] || !weightClose(u, hints[hi].unitKg)) continue;
         const d = forceSingleBlock
@@ -802,11 +686,6 @@ function assignPairsToHints(
     }
   }
 
-  // Texto embaralhado (quantidades num bloco, nomes noutro): a ordem de leitura
-  // do OCR preserva a correspondência posicional — o i-º par de qty/peso casa
-  // com o i-º nome. Tratamos TODOS os pares e pistas como um único bloco e o
-  // casamento não-cruzado + custo (distância de linhas + desvio de peso) faz
-  // essa correspondência posicional, sem partir em blocos por linha.
   if (forceSingleBlock && !matchOf.size) {
     const res = blockMatch(pairs.map((_, i) => i), hints.map((_, i) => i));
     for (const [pi, hi] of res.map) {
@@ -815,7 +694,6 @@ function assignPairsToHints(
     }
   }
 
-  // ── Fase 2: otimizador global para os que sobraram ──
   const restPairs = pairs.filter((p) => !matchOf.has(p));
   if (restPairs.length === 0) return { matchOf, leftover: [] };
   const restHints = hints.filter((_, i) => !usedHint[i]);
@@ -828,7 +706,6 @@ function assignPairsToHints(
     }
     return arr;
   });
-  // Pares com menos candidatos primeiro: podam a árvore mais cedo.
   const order = restPairs
     .map((_, i) => i)
     .sort((a, b) => cand[a].length - cand[b].length || a - b);
@@ -837,8 +714,6 @@ function assignPairsToHints(
   const DUP_PENALTY = 8;
   const CROSS_PENALTY = 12;
 
-  // Fallback inicial: tudo por atribuir. Poda cedo ramos caros e evita que a
-  // árvore expluda quando muitas pistas partilham o mesmo peso (grelhas).
   let bestScore = restPairs.length * UNASSIGNED_PENALTY;
   let nodes = 0;
   const MAX_NODES = 150_000;
@@ -848,8 +723,6 @@ function assignPairsToHints(
   const cur = new Array<number>(restPairs.length).fill(-1);
   let bestSeq: number[] | null = null;
 
-  // Penaliza atribuições que "cruzam" com pares já atribuídos: se o par A está
-  // acima do par B, A deve preferir pistas acima das de B.
   const crossCost = (pi: number, hi: number): number => {
     let c = 0;
     for (let pj = 0; pj < restPairs.length; pj++) {
@@ -885,8 +758,6 @@ function assignPairsToHints(
     const pi = order[k];
     const p = restPairs[pi];
     const u = p.kg / p.qty;
-    // nota: restHints já exclui as pistas usadas na fase 1, por isso não há
-    // verificação de usedHint aqui (os índices são de restHints).
     for (const hi of cand[pi]) {
       const h = restHints[hi];
       const dev = Math.abs(u - h.unitKg) / (h.unitKg || 1);
@@ -899,9 +770,6 @@ function assignPairsToHints(
       itemCount.set(h.item, dup);
       cur[pi] = -1;
     }
-    // Saltar um par custa UNASSIGNED_PENALTY, mas essa penalizacao ja entra no
-    // score final ((n - assigned) * UNASSIGNED_PENALTY + cost): soma-la aqui
-    // contava-a duas vezes e a Fase 2 devolvia tudo como leftover.
     dfs(k + 1, assigned, cost);
   };
 
@@ -914,11 +782,6 @@ function assignPairsToHints(
     else leftover.push(restPairs[pi]);
   }
 
-  // ── Fase 3: transferência para pistas órfãs ──
-  // Se uma pista visível no texto ficou SEM par, mas outro item recebeu 2+ pares
-  // de peso compatível (típico quando o OCR duplica um nome, ex. "RELÓGIO OURO"
-  // ×2, e o item "gordo" absorve o par do vizinho), o par com pior proximidade
-  // de linha passa do item "gordo" para a pista órfã.
   if (matchOf.size) {
     const pairsByItem = new Map<string, Array<{ p: Pair; h: Hint }>>();
     const usedHintObjs = new Set<Hint>();
@@ -930,25 +793,20 @@ function assignPairsToHints(
     }
     for (const orphan of hints) {
       if (orphan.timer || usedHintObjs.has(orphan)) continue;
-      // Procura um item "gordo" (2+ pares) com peso compatível com a órfã.
       for (const [item, arr] of pairsByItem) {
         if (item === orphan.item || arr.length < 2) continue;
         const compat = arr.filter((e) => weightClose(e.p.kg / e.p.qty, orphan.unitKg));
         if (!compat.length) continue;
-        // Par com pior proximidade de linha ao item doador — o mais provável
-        // de pertencer ao item órfão.
         let worst = compat[0];
         for (const e of compat) {
           if (Math.abs(e.p.line - orphan.line) < Math.abs(worst.p.line - orphan.line)) continue;
           if (Math.abs(e.h.line - e.p.line) <= Math.abs(worst.h.line - worst.p.line)) continue;
           worst = e;
         }
-        // Só transfere se a órfã estiver mais perto do par do que a pista do doador.
         if (Math.abs(orphan.line - worst.p.line) >= Math.abs(worst.h.line - worst.p.line)) continue;
         matchOf.delete(worst.p);
         matchOf.set(worst.p, orphan);
         usedHintObjs.add(orphan);
-        // atualiza o mapa do doador
         const rest = (pairsByItem.get(item) ?? []).filter((e) => e.p !== worst.p);
         pairsByItem.set(item, rest);
         pairsByItem.set(orphan.item, [...(pairsByItem.get(orphan.item) ?? []), { p: worst.p, h: orphan }]);
@@ -972,8 +830,6 @@ function mergeResults(items: ItemMatch[]): ItemMatch[] {
     prev.unitKg = prev.qty > 0 ? Math.round((prev.kg / prev.qty) * 1000) / 1000 : prev.unitKg;
     prev.confidence = Math.max(prev.confidence, w.confidence);
     prev.confidenceLevel = level(prev.confidence);
-    // Duas pilhas do mesmo item fundidas: o "Peso perfeito" tem de descrever o
-    // total (ex.: "6.5 kg = 65 × 0.1 kg"), não só a primeira pilha.
     if (prev.matchReason.startsWith("Peso perfeito") && w.matchReason.startsWith("Peso perfeito")) {
       const def = ITEM_BY_NAME.get(w.item);
       prev.matchReason = `Peso perfeito: ${prev.kg} kg = ${prev.qty} × ${def?.unitKg ?? prev.unitKg} kg (2 pilhas no inventário)`;
@@ -982,13 +838,8 @@ function mergeResults(items: ItemMatch[]): ItemMatch[] {
   return Array.from(map.values());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Síntese do jogo: "N× Item — X,kg" (autoritativa quando presente)
-// ─────────────────────────────────────────────────────────────────────────────
 function matchNameToItem(name: string, u: number): string | null {
   if (!name || name.length < 3) return null;
-  // Nome exato do catálogo: aceita mesmo se o peso divergir (o jogo pode ter
-  // pesos diferentes dos registados; o nome na síntese é explícito).
   for (const def of ITEM_CATALOG) {
     if (name === normalizeLine(def.name) || name === normalizeLine(def.displayName)) return def.name;
   }
@@ -1036,10 +887,6 @@ function sinteseMatch(rawName: string | null, qty: number, kg: number, u: number
 
 function parseSintese(text: string): ItemMatch[] | null {
   const items: ItemMatch[] = [];
-  // Formato verboso do jogo (autoritativo):
-  // "NOME — Quantidade: N — Peso de cada: W kg — Peso total: T kg"
-  // O OCR pode trocar o travessão por hífen/en-dash, por isso aceita qualquer
-  // variante de traço como separador.
   const verboseRe =
     /([^\n—–―-]{3,80}?)\s*[—–―-]\s*Quantidade\s*:\s*(\d[\d\s]*)\s*[—–―-]\s*Peso\s+de\s+cada\s*:\s*(\d+(?:[.,]\d+)?)\s*kg\s*[—–―-]\s*Peso\s+total\s*:\s*(\d+(?:[.,]\d+)?)\s*kg/gi;
   for (const line of text.split("\n")) {
@@ -1055,11 +902,6 @@ function parseSintese(text: string): ItemMatch[] | null {
       items.push(sinteseMatch(normalizeLine(m[1]), qty, kg, unit > 0 ? unit : kg / qty));
     }
     if (hitVerbose) continue;
-    // Painel de pesos do inventario (autoritativo): "Cristal: 190 -> 19,0 kg".
-    // Traz quantidade + peso total por item e sobrevive ao OCR mesmo quando os
-    // pares "qty (peso)" da grelha se perdem ou trocam (ex.: Cristal vs Bandagem,
-    // ambos 0,1 kg/un). Setas/separadores em escape unicode porque o OCR alterna
-    // entre seta, "->", ">" e o travesao no lugar da seta.
     const panelRe =
       /([^\n:]{3,80}?)\s*:\s*(\d[\d\s]*)\s*(?:[\u2192\u279C\u279E\u27A4\u21D2]|=>|-{1,2}>|[\u203A\u00BB]|>|[\u2014\u2013-])\s*(\d+(?:[.,]\d+)?)\s*kg/gi;
     while ((m = panelRe.exec(line))) {
@@ -1080,12 +922,6 @@ function parseSintese(text: string): ItemMatch[] | null {
   return identified.length >= 2 ? items : null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Popup de arma
-// ─────────────────────────────────────────────────────────────────────────────
-// Identifica a arma pelo NOME conhecido no texto (aliases do catálogo que
-// mapeiam para "arma X calibre"). Escolhe o match mais específico (nome mais
-// comprido) para "Machine Pistol" ganhar sobre o genérico "Pistol".
 function findWeaponInText(fixed: string): WeaponCapture["weaponItem"] | null {
   const norm = normalizeLine(fixed);
   const weaponAliases = ALIASES.filter(([, item]) => /^arma (baixo|medio|alto) calibre$/.test(item));
@@ -1102,13 +938,8 @@ function findWeaponInText(fixed: string): WeaponCapture["weaponItem"] | null {
 }
 
 function countAccessories(fixed: string): number {
-  // "ACESSÓRIOS: N" explícito — devolve N mesmo que seja 0 (tolerante a letra
-  // cortada no início: "cessorios:"). Assim "ACESSÓRIOS: 0" → 0 (não 1).
   const explicitMatch = fixed.match(/(?:A)?CESS[OÓ]RIOS?\s*[:(\s]*[xX×]?\s*(\d+)/i);
   if (explicitMatch) return Number(explicitMatch[1]);
-  // A lista pode continuar na linha seguinte quando a linha termina em vírgula
-  // (ex.: "Rifle Scope,\nRifle Flashlight"). Captura todas as linhas de
-  // continuação (linhas terminadas em ",\n") antes da última.
   const list = fixed.match(/(?:A)?CESS[OÓ]RIOS?\s*:\s*((?:[^\n]+,\s*\n)*[^\n]+)/i)?.[1]?.trim();
   if (list) {
     const parts = list.split(/,| e | and |&/i).map(s => s.trim()).filter(s => s && !/^\d+$/.test(s) && s.length > 1);
@@ -1117,24 +948,16 @@ function countAccessories(fixed: string): number {
   return /CESS[OÓ]RIO/i.test(fixed) ? 1 : 0;
 }
 
-// TESTE: interruptor para desactivar a captura da arma. Meter `true` para re-activar.
 const WEAPON_CAPTURE_ENABLED = true;
 
 function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: WeaponCapture; weights: ItemMatch[] } | null {
   if (!WEAPON_CAPTURE_ENABLED) return null;
-  // Tolerante a letra cortada: "unição: 155" (= MUNIÇÃO)
   let ammo = Number(fixed.match(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/i)?.[1] || 0);
-  // O normalizeWeaponMeta já converteu "Nome (x1) — Munição: N" em "N balas X
-  // calibre" ANTES do popup. Se não achou "MUNIÇÃO:", detecta do formato convertido.
   if (!ammo) {
-    // Formatos possíveis: "11 balas baixo" (resumo), "balas baixo calibre (x11)"
-    // (bullet do Gemini), "MUNIÇÃO: 11" (já coberto acima).
     let m = fixed.match(/(\d+)\s+balas\s+(?:baixo|m[eé]dio|alto)/i);
     if (!m) m = fixed.match(/balas\s+(?:baixo|m[eé]dio|alto)\s*(?:calibre)?\s*\(\s*[xX×]?\s*(\d+)/i);
     if (m) ammo = Number(m[1]);
   }
-  // A arma é identificada pelo NOME conhecido no texto (ex.: "Machine Pistol"
-  // -> arma medio calibre), não pela primeira linha (que é lixo do OCR).
   const knownWeapon = findWeaponInText(fixed);
   const weapon = knownWeapon ? displayName(knownWeapon) : (fixed.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || fixed.split("\n")[0]?.trim() || "");
   const accessoryCount = countAccessories(fixed);
@@ -1155,8 +978,6 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
   if (accessoryCount > 0) {
     weights.push({ item: "acessorios para armas", qty: accessoryCount, kg: 0, unitKg: 0.1, confidence: 95, confidenceLevel: "high", matchReason: `Acessórios: ${accessoryCount}` });
   }
-  // Modo Coimas Rápidas: incluir a ARMA em si (1x) — o inventário também a
-  // mostra, mas o popup garante a deduplicação (só entra aqui, uma vez).
   if (includeWeapon) {
     const def = ITEM_BY_NAME.get(weaponItem);
     weights.push({ item: weaponItem, qty: 1, kg: def?.unitKg ?? 0, unitKg: def?.unitKg ?? 0, confidence: 95, confidenceLevel: "high", matchReason: "Arma inspecionada (número de série)" });
@@ -1167,12 +988,8 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
 function detectWeaponCapture(text: string): WeaponCapture | null {
   if (!WEAPON_CAPTURE_ENABLED) return null;
   const armaMatch = (text.match(/(?:ARMA|WEAPON)\s*:\s*([^\n]+)/i)?.[1]?.trim() || "").replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
-  // "MUNIÇÃO:" ou "MUNIÇÕES:" (a IA do Lens usa o plural).
-  // Soma TODAS as "MUNIÇÃO:/MUNIÇÕES: N" (arsenal com várias armas → munição total).
   const ammo = [...text.matchAll(/MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d+)/gi)].reduce((s, m) => s + Number(m[1]), 0);
   const accessoryCount = countAccessories(text);
-  // Só detecta se houver metadata explícita (ARMA:/MUNIÇÃO:/ACESSÓRIOS:) — evita
-  // falsos positivos em inventários que só têm um item-arma sem contexto.
   if (!armaMatch && !ammo && !accessoryCount) return null;
   const knownWeapon = findWeaponInText(text);
   const weapon = armaMatch || (knownWeapon ? displayName(knownWeapon) : "");
@@ -1185,11 +1002,6 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
   return { weapon, weaponItem, ammo, ammoItem, accessoryCount };
 }
 
-// A IA do Lens cola os metadados da arma na própria linha do item:
-//   "Machine Pistol (x1) — Munições: 75 | Acessórios: Drum Magazine (1)"
-// Separa em linhas próprias (MUNIÇÃO:/ACESSÓRIOS:) que o parser reconhece e
-// limpa o sufixo da linha do item — senão o "Munições: 75" vira "item fantasma".
-// Mapa arma → calibre da munição (classe 3=alto, 2=médio, 1=baixo).
 const WEAPON_CALIBER: Record<string, string> = {
   "tactical carbine": "alto", "bullpup rifle mk2": "alto", "bullpup mk2": "alto",
   "bullpup rifle": "alto", "advanced rifle": "alto", "military rifle": "alto",
@@ -1201,6 +1013,7 @@ const WEAPON_CALIBER: Record<string, string> = {
   "pistol 50": "baixo", "sns": "baixo", "vintage": "baixo", "revolver": "baixo",
   "ap pistol": "baixo", "pistol": "baixo",
 };
+
 function normalizeWeaponMeta(text: string): string {
   return text.replace(
     /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,7})[ ]*(balas?\s+\w+\s+calibre)?.*$/gim,
@@ -1210,18 +1023,13 @@ function normalizeWeaponMeta(text: string): string {
         const ammoName = balas.replace(/\s+calibre$/i, "").trim();
         out += `\n${ammo} ${ammoName}`;
       } else {
-        // Sem calibre explícito: determina pelo nome da arma.
         const weaponName = item.replace(/\s*\(x\s*\d+\)\s*$/i, "").trim();
         const caliber = WEAPON_CALIBER[normalizeLine(weaponName)];
         if (caliber) {
           out += `\n${ammo} balas ${caliber}`;
         } else if (/pistol|revolver|glock|beretta|taurus|desert eagle|smg|submetralhadora|mp5|uzi|tec|micro|pdw|p90|rifle|espingarda|sniper|draco|gusenberg|famas|shotgun|spas|carbine|bullpup|vintage|\bsns\b|assault|compact|military|tactical|marksman|machine|combat|\bmg\b|\bak\b|ar15/i.test(weaponName)) {
-          // Arma sem calibre no mapa: ainda é munição.
           out += `\nMUNIÇÃO: ${ammo}`;
         } else {
-          // Item NÃO é arma (ex.: "Petrol Can — Munição: 922"): o número depois
-          // de "Munição:" não é munição — descartá-lo (evita fantoche "922 balas",
-          // multa falsa enorme). Mantém o item contável como (x1).
           out = `${weaponName} (x1)`;
         }
       }
@@ -1230,42 +1038,23 @@ function normalizeWeaponMeta(text: string): string {
   );
 }
 
-// Arsenal de armas: "Tactical Carbine (Munição: 243)" → "Tactical Carbine (x1)"
-// + "MUNIÇÃO: 243" (a arma conta-se por calibre; a munição soma no weaponCapture).
-// "Pistol .50 (Munição: ícone cheio/sem indicação)" → só "Pistol .50 (x1)".
 function normalizeWeaponAmmo(text: string): string {
   return text
     .replace(/^([^\n(]+?)\s*\(\s*MUNI[CÇ][AÃ]O\s*:\s*(\d{1,7})\s*\)\s*$/gim, (_m, name, ammo) => `${name.trim()} (x1)\nMUNIÇÃO: ${ammo}`)
     .replace(/^([^\n(]+?)\s*\(\s*MUNI[CÇ][AÃ]O\s*:[^)]*\)\s*$/gim, (_m, name) => `${name.trim()} (x1)`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Parser principal
-// ─────────────────────────────────────────────────────────────────────────────
 export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: boolean }): ParseResult {
   const includeWeapon = opts?.includeWeapon ?? false;
   rawText = normalizeWeaponAmmo(normalizeWeaponMeta(rawText));
   const usedRecover = new Set<string>();
-  // O OCR do Gyazo repete o conteúdo duas vezes: primeiro a grelha embaralhada
-  // (todas as quantidades num bloco, todos os nomes noutro), depois as linhas
-  // estruturadas "N (peso)  Nome  peso-unit" — que já emparelham qty↔nome
-  // corretamente. Se existirem linhas estruturadas suficientes, usamos SÓ elas:
-  // evita que o atribuidor consuma pistas do bloco embaralhado e troque itens
-  // com o mesmo peso unitário (ex.: Folha de Tabaco ↔ Sumo Laranja, 0,2 kg).
-  // Tolerante a letras cortadas pelo OCR/QR: "umero de Serie" (= número),
-  // "unição" (= munição), "cessorios" (= acessórios).
-  const hasSerie = /(?:num[ée]?ro|umero)\s+de\s+s[ée]rie|\bs[ée]rie\b|\bserial\b/i.test(rawText);
   const summaryLines = rawText
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => /^\d{1,7}\s*\(\s*\d+(?:[.,]\d+)?\s*\)\s+\S/i.test(l) && /\d+(?:[.,]\d+)?\s*kg/i.test(l));
-  // Resumo estruturado do Gyazo no formato "852× Folha Tabaco — 170,4 kg":
-  // convertemos para o formato de par "852 (170.4) folha tabaco" para o
-  // pipeline emparelhar qty↔nome diretamente (100% fiável).
   const xSummaryLines = rawText
         .split("\n")
         .flatMap((l) => {
-          // Uma linha do paste pode conter vários itens colados ("1× Telemóvel — 0,7 kg 852× Folha Tabaco — …").
           const re = /\b(\d{1,7})\s*[x×]\s+([A-Za-zÀ-ÿ][^—–-]*?)\s*[—–-]\s*([\d.,]+)\s*kg\b/gi;
           const out: string[] = [];
           for (const m of l.matchAll(re)) {
@@ -1274,15 +1063,9 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
           }
           return out;
         });
-  // Resumo no formato "🔫 Combat PDW	1	10,0 kg	10,0 kg" (nome, qtd, total, unitário):
-  // convertemos para "1 (10.0) combat pdw". Exige DOIS valores kg (total + unitário)
-  // para não confundir com texto normal.
   const tabSummaryLines = rawText
         .split("\n")
         .flatMap((l) => {
-          // Nome = sequência de letras imediatamente antes da quantidade (emojis
-          // e tabs separam-nos do lixo OCR). Exige DOIS valores kg (total +
-          // unitário) para não confundir com texto normal.
           const re = /([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' ]*)\s+(\d{1,7})\s+([\d.,]+)\s*kg\s+([\d.,]+)\s*kg/gi;
           const out: string[] = [];
           for (const m of l.matchAll(re)) {
@@ -1292,21 +1075,11 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
           }
           return out;
         });
-  // Pares qty-only ("64 Arma" / "• Arma (x64)") só entram no resumo quando o
-// texto original não tem pares "N (peso)" próprios — nunca duplica itens do
-// layout antigo. Lookup via PHRASE_BY_NORM (catálogo + aliases do parser).
 const qtyOnlySummary: string[] = [];
 let ammoAlto = 0, ammoMedio = 0, ammoBaixo = 0;
 const qtyOnlyMap = new Map<string, { name: string; qty: number }>();
 if (extractPairs(rawText).length < 2) {
   const qtyPairsRaw = extractQtyOnlyPairs(rawText);
-  // Pré-processamento de munição:
-  // (a) Munição fantoche — o Gemini lê o número de um item NÃO-arma (ex.: Petrol
-  //     Can "922") como "balas X calibre" numa linha separada. Se vem logo após um
-  //     item não-arma com qty 1, o N é a QUANTIDADE desse item — funde e descarta.
-  // (b) Calibre errado — o Gemini às vezes erra o calibre da munição (ex.: Machine
-  //     Pistol é MÉDIO mas veio "balas baixo calibre"). Se a munição vem logo após
-  //     uma ARMA, re-deriva o calibre da ARMA (fonte da verdade), não do rótulo.
   const qtyPairs: Array<{ qty: number; name: string; line: number }> = [];
   const isBalasName = (n: string) => /^balas?\s+(baixo|m[eé]dio|alto)(\s+calibre)?$/.test(normalizeLine(n));
   const mk2less = (n: string) => normalizeLine(fixOcrTypos(n)).replace(/\s+mk\s*(?:2|ii|3|iii)\s*$/i, "").trim();
@@ -1327,58 +1100,40 @@ if (extractPairs(rawText).length < 2) {
     const prev = qtyPairs[qtyPairs.length - 1];
     if (isBalasName(p.name) && prev) {
       if (prev.qty === 1 && !isWeaponOrAmmo(prev.name)) {
-        prev.qty = p.qty; // (a) fantoche: N é a quantidade do item não-arma
+        prev.qty = p.qty;
         continue;
       }
-      const cal = weaponCaliber(prev.name); // (b) re-deriva o calibre da arma
+      const cal = weaponCaliber(prev.name);
       if (cal) p.name = `balas ${cal} calibre`;
     }
     qtyPairs.push({ ...p });
   }
-  // "Acessórios: x" explícito (contagem pedida ao Lens) é a fonte da verdade.
-  // Se existir, ignora os acessórios individuais para não duplicar (ex.:
-  // "Acessórios: 3" + "SMG Scope (x1)" contariam 4 em vez de 3).
   const hasAccessoryCount = qtyPairs.some((p) => /^acess[oó]rios?$/i.test(p.name.trim()));
   for (const p of qtyPairs) {
-    // Corrige typos de OCR no nome ANTES do lookup (ex.: "Meowchi Mochi" →
-    // "MEDWCHI MOCHI", "Momoshu" → "MONOSHU"). Sem isto, itens do catálogo
-    // com nome garbled pelo OCR caíam como "item não identificado" no caminho
-    // bullet (qty-only), pois esse caminho ainda não tinha passado por fixOcrTypos.
     const fixedName = fixOcrTypos(p.name);
     let def = PHRASE_BY_NORM.get(normalizeLine(fixedName));
-    // Variantes "MK2"/"MK II" de armas (ex.: "Assault Rifle MK2") não estão no
-    // mapa exacto. Se o lookup falhar, tenta sem o sufixo: "assault rifle mk2"
-    // → "assault rifle" (arma alto calibre). Cobre todas as variantes MK2.
     if (!def) {
       const norm = normalizeLine(fixedName);
       const base = norm.replace(/\s+mk\s*(?:2|ii|3|iii)\s*$/i, "").trim();
       if (base && base !== norm) def = PHRASE_BY_NORM.get(base);
     }
     let name = fixedName;
-    // Acessório de arma (conhecido ou desconhecido) → agrupa em "Acessórios
-    // para armas". Conhecidos vêm do catálogo (categoria "acessorio"); os
-    // desconhecidos (scope, suppressor, extended clip, flashlight, grip, drum,
-    // laser, sight...) entram por fallback de palavra-chave.
     const cat = def ? ITEM_BY_NAME.get(def.item)?.category : undefined;
     const isAccessoryWord = !def && /suppressor|supressor|silencer|scope|sight|laser|holographic|extended clip|flashlight|grip|drum/i.test(name);
     const isIndividualAccessory = (def && def.item !== "acessorios para armas" && cat === "acessorio") || isAccessoryWord;
-    if (hasAccessoryCount && isIndividualAccessory) continue; // evita dupla-contagem
+    if (hasAccessoryCount && isIndividualAccessory) continue;
     if (isIndividualAccessory) {
       def = PHRASE_BY_NORM.get("acessorios para armas");
       name = "Acessórios para Armas";
     }
     const unitKg = def?.unitKg ?? 0;
     let qty = p.qty;
-    // Arsenal: arma com qty alto (>50) é a MUNIÇÃO lida por engano (cada arma é 1).
-    // Conta 1 arma; a munição vai para o calibre da arma (classe 3=alto, 2=médio, 1=baixo).
     if (def && /^arma (baixo|medio|alto) calibre$/.test(def.item) && qty > 50) {
       if (def.item === "arma alto calibre") ammoAlto += qty;
       else if (def.item === "arma medio calibre") ammoMedio += qty;
       else ammoBaixo += qty;
       qty = 1;
     }
-    // Soma por nome: 2× "Tactical Carbine (x1)" → 1 entrada "2 (kg) Tactical Carbine"
-    // (evita que o parseSintese dedupique linhas idênticas e sub-conta).
     const key = normalizeLine(name);
     const prev = qtyOnlyMap.get(key);
     if (prev) prev.qty += qty;
@@ -1388,8 +1143,6 @@ if (extractPairs(rawText).length < 2) {
 for (const { name, qty } of qtyOnlyMap.values()) {
   const norm = normalizeLine(name);
   let def = PHRASE_BY_NORM.get(norm);
-  // Fallback MK2 (ex.: "Assault Rifle MK2" → "assault rifle") — igual ao loop
-  // qty-only acima; sem isto o peso fica 0 e o match por peso falha.
   if (!def) {
     const base = norm.replace(/\s+mk\s*(?:2|ii|3|iii)\s*$/i, "").trim();
     if (base && base !== norm) def = PHRASE_BY_NORM.get(base);
@@ -1399,8 +1152,6 @@ for (const { name, qty } of qtyOnlyMap.values()) {
   qtyOnlySummary.push(`${qty} (${kg}) ${name}`);
 }
 const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qtyOnlySummary];
-  // Com qty-only sintetizado, o resumo é obrigatório: o gatilho de contagem
-  // de linhas não dispara em listas curtas (ex.: Lens numa só linha).
   const sourceText =
     allSummary.length >= 2 &&
     (allSummary.length * 3 <= rawText.split("\n").length + 4 || qtyOnlySummary.length >= 2)
@@ -1409,16 +1160,11 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   const fixed = fixOcrTypos(
     mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(sourceText, usedRecover), usedRecover))
   );
-  // fixedFull = rawText inteiro, para o popup de arma (nº de série/munição/
-  // acessórios) continuar detetável mesmo quando sourceText usa só o resumo.
   const fixedFull = fixOcrTypos(
     mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(rawText, usedRecover), usedRecover))
   );
   const headerLines = detectHeaderLines(fixed.split("\n"));
 
-  // Texto "embaralhado" = a maioria dos pares qty(peso) não tem nome na mesma
-  // linha (o OCR leu quantidades e nomes em blocos separados). Nesse caso,
-  // itens com peso unitário igual podem ter sido trocados entre si.
   const allPairs = extractPairs(fixed);
   const structuredPairLines = allPairs.filter((p) => {
     const l = fixed.split("\n")[p.line] ?? "";
@@ -1427,9 +1173,6 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   }).length;
   const scrambledText = allPairs.length > 0 && structuredPairLines / allPairs.length < 0.5;
 
-  // No texto embaralhado, itens diferentes com o MESMO peso unitário (ex.:
-  // Estimulante e Sumo Ananás, ambos 0,2 kg) podem ser trocados entre si.
-  // Marcamos com confiança reduzida e um aviso no texto, em vez de mostrar 95%.
   function flagSameWeightAmbiguity(merged: ItemMatch[], enabled: boolean): ItemMatch[] {
     if (!enabled) return merged;
     const byUnit = new Map<number, Set<string>>();
@@ -1466,17 +1209,10 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
     const popup = parseWeaponPopup(fixedFull, includeWeapon);
     if (popup) {
       if (!includeWeapon) {
-        // Modo Relatórios (comportamento original): só balas + acessórios do
-        // popup — o resto do inventário e a arma não entram.
         const text = popup.weights.map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
         const overall = popup.weights.length ? popup.weights.reduce((s, w) => s + w.confidence, 0) / popup.weights.length : 0;
         return { text, weights: popup.weights, weaponCapture: popup.capture, overallConfidence: overall };
       }
-      // Modo Coimas Rápidas: popup (balas + acessórios) + o resto do inventário
-      // (incluindo a arma, com o peso real). Se existir resumo estruturado, o
-      // corpo vem dele (fiável); senão, do texto completo MAS removendo a linha
-      // de acessórios (senão "SMG Flashlight"/"Scope" viram hints fantasma que
-      // roubam pares) e a linha do nº de série.
       const usingSummary = allSummary.length >= 2;
       const bodyText = usingSummary
         ? fixed
@@ -1484,12 +1220,7 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
             .replace(/((?:(?:num[ée]?ro|umero)\s+de\s+)?s[ée]rie\s*:\s*)[^\n]*/gi, "$1")
             .replace(/((?:A)?CESS[OÓ]RIOS?\s*:\s*)[^\n]*/gi, "$1");
       const body = parseInventoryBody(bodyText, headerLines, undefined, scrambledText);
-      // A arma entra pelo corpo (peso real do par); popup só acrescenta arma se
-      // o corpo não a tiver (mantendo o comportamento antigo de dedupe).
       const popupWeights = popup.weights.filter((w) => w.item !== popup.capture.weaponItem);
-      // O popup já trouxe munição + acessórios da arma inspeccionada; removê-los
-      // do corpo evita duplicação (o normalizeWeaponMeta convertera "— Munição: N"
-      // em "N balas X" dentro do corpo, e "Acessórios: x" também entra lá).
       const bodySemMunicao = body.filter((w) => !/^balas (baixo|medio|alto)$/.test(w.item) && w.item !== "acessorios para armas");
       const mergedRaw = [...bodySemMunicao, ...popupWeights];
       if (includeWeapon && !mergedRaw.some((w) => w.item === popup.capture.weaponItem)) {
@@ -1518,17 +1249,10 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
 
   const body = parseInventoryBody(fixed, headerLines, undefined, scrambledText);
   const merged = flagSameWeightAmbiguity(mergeResults(body), scrambledText);
-  // Arsenal: as armas contam-se por calibre (várias linhas "(Munição: N)" viram
-  // "x1" cada uma) e a munição soma no weaponCapture. Só quando NÃO há munição
-  // capturada é que um qty>1 numa "arma X calibre" é a munição lida por engano
-  // (ex.: o Gemini colou "Machine Pistol (x75)") — aí a arma fica 1x e o qty vira
-  // munição. Se já há munição (arsenal), NÃO mexe na contagem das armas.
   let wc: WeaponCapture | null = detectWeaponCapture(fixedFull);
   if (WEAPON_CAPTURE_ENABLED && (!wc || wc.ammo === 0)) {
     let ammoFromWeapon = 0;
     for (const w of merged) {
-      // Só colapsa quantidades ALTAS (>50) — munição lida por engano (ex.:
-      // "Machine Pistol (x75)"). Contagens normais de arsenal (x2, x6...) ficam.
       if (WEAPON_ITEM_RE.test(w.item) && w.qty > 50) {
         ammoFromWeapon = Math.max(ammoFromWeapon, w.qty);
         w.qty = 1;
@@ -1549,8 +1273,6 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
       };
     }
   }
-  // Munição do arsenal por calibre (classe 3=alto, 2=médio, 1=baixo): adiciona
-  // como itens "balas X calibre" para a coima calcular o preço por calibre.
   for (const [item, qty] of [["balas alto", ammoAlto], ["balas medio", ammoMedio], ["balas baixo", ammoBaixo]] as Array<[string, number]>) {
     if (qty > 0) {
       const def = ITEM_BY_NAME.get(item);
@@ -1563,26 +1285,18 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   return { text, weights: merged, weaponCapture: wc, overallConfidence: overall };
 }
 
-// Fluxo normal do inventário: pares "qty (peso)" casados com pistas de nome.
-// excludeItems: itens a ignorar (ex.: a arma já contada pelo popup).
 const WEAPON_ITEM_RE = /^arma (baixo|medio|alto) calibre$/;
 
-// Extrai um nome legível da linha de um par órfão (sem match no catálogo):
-// remove o par "N (kg)", o bullet/separador e números soltos, e devolve o
-// texto restante SE parecer um nome (>= 3 letras, maioria alfabética). Usado
-// para PRESERVAR o nome de itens novos lidos do OCR em vez de os mostrar como
-// "item nao identificado" — o utilizador vê o nome real e pode catalogá-lo.
 function extractOrphanName(fixed: string, line: number): string | null {
   const raw = fixed.split("\n")[line] ?? "";
   const cleaned = raw
-    .replace(/\d{1,7}\s*\(\s*[\d.,]+\s*\)/g, " ") // remove o par "N (kg)"
-    .replace(/^[\s•○●▪\-–—*·]+/, " ") // remove bullet/separador do início
-    .replace(/\d+(?:[.,]\d+)?\s*kg\b/gi, " ") // remove "X kg" solto
-    .replace(/\d+/g, " ") // remove números restantes
+    .replace(/\d{1,7}\s*\(\s*[\d.,]+\s*\)/g, " ")
+    .replace(/^[\s•○●▪\-–—*·]+/, " ")
+    .replace(/\d+(?:[.,]\d+)?\s*kg\b/gi, " ")
+    .replace(/\d+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (cleaned.length < 3) return null;
-  // Tem de ser predominantemente letras (um nome), não símbolos/números.
   const letters = (cleaned.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
   if (letters < cleaned.length * 0.6) return null;
   return cleaned;
@@ -1602,9 +1316,6 @@ function parseInventoryBody(fixed: string, headerLines: Set<number>, excludeItem
     if (h) out.push(matchForPair(p, h));
   }
   for (const p of leftover) {
-    // Preserva o nome real lido do OCR para itens ainda não catalogados, em
-    // vez de os esconder como "item nao identificado". Confiança baixa (não
-    // inventa peso/coima) mas o nome fica visível para revisão/catalogação.
     const orphanName = extractOrphanName(fixed, p.line);
     if (orphanName) {
       const unit = Math.round((p.kg / p.qty) * 1000) / 1000;
@@ -1621,8 +1332,6 @@ function parseInventoryBody(fixed: string, headerLines: Set<number>, excludeItem
       out.push(fallbackForPair(p, false, undefined));
     }
   }
-  // Exclusão aplicada também ao resultado final: o fallback adivinha pelo peso
-  // e pode re-introduzir itens excluídos (ex.: a arma já contada pelo popup).
   if (excludeItems) return out.filter((w) => !isExcluded(w.item));
   return out;
 }
