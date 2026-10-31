@@ -91,7 +91,7 @@ function normalizeLine(text: string): string {
 }
 
 function mergeSplitPairs(text: string): string {
-  return text.replace(/(\d{1,7})\s*\n\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g, "$1 ($2)");
+  return text.replace(/(\d{1,15})\s*\n\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g, "$1 ($2)");
 }
 
 function recoverFragmentQty(text: string, used: Set<string>): string {
@@ -115,7 +115,7 @@ function recoverFragmentQty(text: string, used: Set<string>): string {
 function recoverCorruptedQty(text: string, used: Set<string>): string {
   const lower = text.toLowerCase();
   return text.replace(
-    /\b([A-Za-z])\s*\(\s*(\d+(?:\.\d+)?)\s*\)\s*\n\s*(\d{1,7})\b/g,
+    /\b([A-Za-z])\s*\(\s*(\d+(?:\.\d+)?)\s*\)\s*\n\s*(\d{1,15})\b/g,
     (m: string, letter: string, peso: string, qty: string) => {
       const u = Number(peso);
       const cands = ITEM_CATALOG.filter(
@@ -319,7 +319,7 @@ function fixUnitWeightOverflow(pairs: Pair[]): Pair[] {
 
 function extractPairs(text: string): Pair[] {
   const out: Pair[] = [];
-  const re = /(\d{1,7})\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g;
+  const re = /(\d{1,15})\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const qty = Number(m[1]);
@@ -363,26 +363,26 @@ function extractQtyOnlyPairs(text: string): Array<{ qty: number; name: string; l
     out.push({ qty, name, line: lineOf(text, pos) });
   };
   
-  const reA = /^(\d{1,7})\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*)$/gm;
+  const reA = /^(\d{1,15})\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*)$/gm;
   let m: RegExpExecArray | null;
   while ((m = reA.exec(text))) push(Number(m[1]), m[2], m.index);
   
-  const reB = /(?:^|[•○●▪])\s*([^•○●▪\n()]+?)\s*\(\s*[xX×]?\s*(\d{1,7})\s*\)/gm;
+  const reB = /(?:^|[•○●▪])\s*([^•○●▪\n()]+?)\s*\(\s*[xX×]?\s*(\d{1,15})\s*\)/gm;
   while ((m = reB.exec(text))) push(Number(m[2]), m[1], m.index);
   
-  const reC = /(?:^|[•○●▪])\s*([^•○●▪\n:]+?):\s*[xX×]?\s*(\d{1,7})/gm;
+  const reC = /(?:^|[•○●▪])\s*([^•○●▪\n:]+?):\s*[xX×]?\s*(\d{1,15})/gm;
   while ((m = reC.exec(text))) push(Number(m[2]), m[1], m.index);
   
-  const reD = /(?:^|[○•●▪])\s*([^○•●▪\n()]+?)\s*\([^)]+\)\s*[–—-]\s*[xX×]?\s*(\d{1,7})/gm;
+  const reD = /(?:^|[○•●▪])\s*([^○•●▪\n()]+?)\s*\([^)]+\)\s*[–—-]\s*[xX×]?\s*(\d{1,15})/gm;
   while ((m = reD.exec(text))) push(Number(m[2]), m[1], m.index);
   
-  const reE = /^([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*?)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
+  const reE = /^([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9' -]*?)\s*\(\s*[xX×]\s*(\d{1,15})\s*\)/gm;
   while ((m = reE.exec(text))) push(Number(m[2]), m[1], m.index);
   
-  const reF = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9.' -]*?)\s*\([^)]+\)\s*\(\s*[xX×]\s*(\d{1,6})\s*\)/gm;
+  const reF = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9.' -]*?)\s*\([^)]+\)\s*\(\s*[xX×]\s*(\d{1,15})\s*\)/gm;
   while ((m = reF.exec(text))) push(Number(m[2]), m[1], m.index);
 
-  const reG = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _.,'&()\/.\-]*?)\s+[-–—]\s*(\d{1,7})\s*$/gm;
+  const reG = /(?:^|[•○●▪])\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 _.,'&()\/.\-]*?)\s+[-–—]\s*(\d{1,15})\s*$/gm;
   while ((m = reG.exec(text))) push(Number(m[2]), m[1], m.index);
 
   return out;
@@ -946,7 +946,7 @@ function parseWeaponPopup(fixed: string, includeWeapon = false): { capture: Weap
     if (m) ammo = Number(m[1]);
   }
   if (!ammo) {
-    const lineMatch = fixed.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*?)\s*[-–—]\s*(\d{1,7})\s*$/m);
+    const lineMatch = fixed.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*?)\s*[-–—]\s*(\d{1,15})\s*$/m);
     if (lineMatch) {
       const weaponName = lineMatch[1].trim();
       if (findWeaponInText(weaponName)) {
@@ -994,7 +994,7 @@ function detectWeaponCapture(text: string): WeaponCapture | null {
   }
 
   if (ammo === 0) {
-    const lineRegex = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*?)\s*[-–—]\s*(\d{1,7})\s*$/gm;
+    const lineRegex = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*?)\s*[-–—]\s*(\d{1,15})\s*$/gm;
     for (const m of text.matchAll(lineRegex)) {
       if (findWeaponInText(m[1].trim())) {
         ammo += Number(m[2]);
@@ -1029,7 +1029,7 @@ const WEAPON_CALIBER: Record<string, string> = {
 
 function normalizeWeaponMeta(text: string): string {
   return text.replace(
-    /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,7})[ ]*(balas?\s+\w+\s+calibre)?.*$/gim,
+    /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,15})[ ]*(balas?\s+\w+\s+calibre)?.*$/gim,
     (_m, item, ammo, balas) => {
       let out = item.trim();
       if (balas) {
@@ -1053,7 +1053,7 @@ function normalizeWeaponMeta(text: string): string {
 
 function normalizeWeaponAmmo(text: string): string {
   return text
-    .replace(/^([^\n(]+?)\s*\(\s*MUNI[CÇ][AÃ]O\s*:\s*(\d{1,7})\s*\)\s*$/gim, (_m, name, ammo) => `${name.trim()} (x1)\nMUNIÇÃO: ${ammo}`)
+    .replace(/^([^\n(]+?)\s*\(\s*MUNI[CÇ][AÃ]O\s*:\s*(\d{1,15})\s*\)\s*$/gim, (_m, name, ammo) => `${name.trim()} (x1)\nMUNIÇÃO: ${ammo}`)
     .replace(/^([^\n(]+?)\s*\(\s*MUNI[CÇ][AÃ]O\s*:[^)]*\)\s*$/gim, (_m, name) => `${name.trim()} (x1)`);
 }
 
@@ -1064,11 +1064,11 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
   const summaryLines = rawText
         .split("\n")
         .map((l) => l.trim())
-        .filter((l) => /^\d{1,7}\s*\(\s*\d+(?:[.,]\d+)?\s*\)\s+\S/i.test(l) && /\d+(?:[.,]\d+)?\s*kg/i.test(l));
+        .filter((l) => /^\d{1,15}\s*\(\s*\d+(?:[.,]\d+)?\s*\)\s+\S/i.test(l) && /\d+(?:[.,]\d+)?\s*kg/i.test(l));
   const xSummaryLines = rawText
         .split("\n")
         .flatMap((l) => {
-          const re = /\b(\d{1,7})\s*[x×]\s+([A-Za-zÀ-ÿ][^—–-]*?)\s*[—–-]\s*([\d.,]+)\s*kg\b/gi;
+          const re = /\b(\d{1,15})\s*[x×]\s+([A-Za-zÀ-ÿ][^—–-]*?)\s*[—–-]\s*([\d.,]+)\s*kg\b/gi;
           const out: string[] = [];
           for (const m of l.matchAll(re)) {
             const kg = m[3].replace(",", ".");
@@ -1079,7 +1079,7 @@ export function parseInventoryOCR(rawText: string, opts?: { includeWeapon?: bool
   const tabSummaryLines = rawText
         .split("\n")
         .flatMap((l) => {
-          const re = /([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' ]*)\s+(\d{1,7})\s+([\d.,]+)\s*kg\s+([\d.,]+)\s*kg/gi;
+          const re = /([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' ]*)\s+(\d{1,15})\s+([\d.,]+)\s*kg\s+([\d.,]+)\s*kg/gi;
           const out: string[] = [];
           for (const m of l.matchAll(re)) {
             const name = m[1].trim();
@@ -1185,7 +1185,7 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   const allPairs = extractPairs(fixed);
   const structuredPairLines = allPairs.filter((p) => {
     const l = fixed.split("\n")[p.line] ?? "";
-    const withoutPair = l.replace(/\d{1,7}\s*\(\s*[\d.,]+\s*\)/g, "").replace(/[\d.,:\s]/g, "");
+    const withoutPair = l.replace(/\d{1,15}\s*\(\s*[\d.,]+\s*\)/g, "").replace(/[\d.,:\s]/g, "");
     return /[a-zA-Z\u00C0-\u00FF]/.test(withoutPair);
   }).length;
   const scrambledText = allPairs.length > 0 && structuredPairLines / allPairs.length < 0.5;
@@ -1308,7 +1308,7 @@ const WEAPON_ITEM_RE = /^arma (baixo|medio|alto) calibre$/;
 function extractOrphanName(fixed: string, line: number): string | null {
   const raw = fixed.split("\n")[line] ?? "";
   const cleaned = raw
-    .replace(/\d{1,7}\s*\(\s*[\d.,]+\s*\)/g, " ")
+    .replace(/\d{1,15}\s*\(\s*[\d.,]+\s*\)/g, " ")
     .replace(/^[\s•○●▪\-–—*·]+/, " ")
     .replace(/\d+(?:[.,]\d+)?\s*kg\b/gi, " ")
     .replace(/\d+/g, " ")

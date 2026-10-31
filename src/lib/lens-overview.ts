@@ -60,7 +60,7 @@ export async function fetchLensOverviewText(imageUrl: string): Promise<string> {
     const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
     const inventoryLines = lines.filter((line) =>
       line.length < 180 &&
-      /(?:\bx\s*\d{1,7}\b|\b\d{1,7}\s*x\b|:\s*x?\s*\d{1,7}\b|\bquantity\b|\bquantidade\b)/i.test(line) &&
+      /(?:\bx\s*\d{1,15}\b|\b\d{1,15}\s*x\b|:\s*x?\s*\d{1,15}\b|\bquantity\b|\bquantidade\b)/i.test(line) &&
       !/google|privacy|terms|feedback|sign in|pesquisa/i.test(line)
     );
     return inventoryLines.length >= 2 ? inventoryLines.join("\n") : "";

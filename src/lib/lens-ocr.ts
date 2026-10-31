@@ -25,7 +25,7 @@ export async function lensOcr(base64Data: string, timeoutMs = 15_000): Promise<s
     // Detecta ambos os formatos de badge de quantidade:
 //   - Formato antigo: "64 (1.0)"  →  qty badge com peso
 //   - Formato novo:   "(x64)"     →  qty badge sem peso (xN)
-const isQtyBadge = (t: string) => /^\d{1,7}\s*\(/.test(t.trim()) || /^\(x\d{1,7}\)$/i.test(t.trim());
+const isQtyBadge = (t: string) => /^\d{1,15}\s*\(/.test(t.trim()) || /^\(x\d{1,15}\)$/i.test(t.trim());
     const isNoise = (t: string) => /^\d{1,2}:\d{2}$/.test(t.trim()) || t.trim() === "+";
     // Agrupar por coluna → linhas (y), juntando segmentos da mesma linha.
     const columns: Array<Array<{ y: number; x: number; text: string }>> = [[], [], [], [], []];
