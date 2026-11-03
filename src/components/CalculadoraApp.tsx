@@ -6,7 +6,7 @@ import {
   Pencil, Link
 } from "lucide-react";
 import {
-  ITENS_ILEGAIS, PRECOS_DROGAS, DROGAS_LIMITES,
+  ITENS_ILEGAIS, PRECOS_DROGAS,
 } from "@/lib/data";
 import {
   normalizeText, fmt, fmt2, fmtMilhares, cap, calcSequestro, calcMunicao,
@@ -675,13 +675,7 @@ export default function CalculadoraApp() {
     let msg = `> ${texto}\n`;
 
     if (r.drogas.resultados.length) {
-      const grande = r.drogas.resultados.some((l) => {
-        const m = l.trim().match(/^(\d+)x\s+(.+?)\s+x\s/);
-        if (!m) return false;
-        const limite = DROGAS_LIMITES[m[2]] ?? 20;
-        return parseInt(m[1], 10) > limite;
-      });
-      const crimeDrogas = grande ? "Posse de Droga em Grande Quantidade" : "Posse de Droga";
+      const crimeDrogas = r.drogas.grande ? "Posse de Droga em Grande Quantidade" : "Posse de Droga";
       msg += `--- DROGAS --- ${crimeDrogas}\n` + r.drogas.resultados.join("\n") + `\nTOTAL DROGAS: ${fmt2(r.drogas.subtotal)} €\n\n`;
     }
     if (r.itens.resultados.length) {
@@ -856,11 +850,12 @@ export default function CalculadoraApp() {
       const ocrTexto = relOcrPorCC[cc];
       const ocrParsed = ocrTexto ? parseQuickInput(ocrTexto) : null;
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
-      const ocrDrogasExtra = ocrParsed?.drogas.subtotal || 0;
       const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
       const { linhas: ocrArmasGrandeLinhas, total: ocrArmasExtra } = ocrArmasGrande(ocrParsed);
-      const ocrExtraTotal = ocrItensExtra + ocrDrogasExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
+      // Drogas NÃO entram nas Coimas Extras: a coima é a base de "Posse de
+      // Droga" (22 500 €) e vai no CAD, tal como as armas singulares.
+      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       if (extraEntries.length || ocrExtraTotal > 0 || sequestroMultaRel > 0) {
         for (const entry of extraEntries) {
@@ -869,12 +864,6 @@ export default function CalculadoraApp() {
         if (ocrParsed?.itens.resultados.length) {
           linhas.push("  Itens Ilegais:");
           for (const linha of ocrParsed.itens.resultados) {
-            linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
-          }
-        }
-        if (ocrParsed?.drogas.resultados.length) {
-          linhas.push("  Drogas:");
-          for (const linha of ocrParsed.drogas.resultados) {
             linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ").replace(/ = /, " € = ").replace(/(\d+)$/, "$1 €")}`);
           }
         }
@@ -926,11 +915,11 @@ export default function CalculadoraApp() {
       const ocrTexto = relOcrPorCC[cc] || "";
       const ocrParsed = ocrTexto ? parseQuickInput(ocrTexto) : null;
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
-      const ocrDrogasExtra = ocrParsed?.drogas.subtotal || 0;
       const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
       const { total: ocrArmasExtra } = ocrArmasGrande(ocrParsed);
-      const ocrExtraTotal = ocrItensExtra + ocrDrogasExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
+      // Drogas ficam de fora do relatório: a base de "Posse de Droga" vai no CAD.
+      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       const totalExtras = extraEntries.reduce((s, e) => s + e.valor, 0) + ocrExtraTotal;
       const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + totalExtras + sequestroMultaRel;
@@ -1500,7 +1489,7 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                   if (parsed.armas.resultados.length) detected.push(...parsed.armas.resultados.map(x => x.trim()));
                   if (parsed.municao.resultados.length) detected.push(...parsed.municao.resultados.map(x => x.trim()));
                   if (parsed.dinheiro.resultados.length) detected.push(...parsed.dinheiro.resultados.map(x => x.trim()));
-                  const ocrExtraTotalPreview = parsed.itens.subtotal + parsed.drogas.subtotal + parsed.municao.total + parsed.dinheiro.total + ocrArmasGrande(parsed).total;
+                  const ocrExtraTotalPreview = parsed.itens.subtotal + parsed.municao.total + parsed.dinheiro.total + ocrArmasGrande(parsed).total;
                   if (detected.length) {
                     showAlert(`CC ${cc}: detetado(s) ${detected.join("; ")} → total ${fmt2(ocrExtraTotalPreview)} €.`);
                   } else {

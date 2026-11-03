@@ -4,6 +4,11 @@ import { ITEM_BY_NAME } from "@/lib/item-weights";
 // Alias for backwards compatibility
 export type CrimeData = Crime;
 
+// Coima base de "Posse de Droga" (22 500 €). A quantidade só muda a moldura
+// (Posse de Droga vs. Grande Quantidade), nunca multiplica o preço de rua.
+const COIMA_BASE_DROGA =
+  CRIMES_CATALOGO.find((c) => c.nome === "Posse de Droga")?.multa ?? 22500;
+
 // Normaliza texto para pesquisa
 export function normalizeText(text: string): string {
   return text
@@ -660,6 +665,7 @@ interface ParseResult {
   drogas: {
     resultados: string[];
     subtotal: number;
+    grande: boolean;
   };
   itens: {
     resultados: string[];
@@ -710,7 +716,7 @@ const MUN_ALTO = ["balas alto", "balas de alto", "556", "762", "balas rifle"];
 export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }): ParseResult {
   const posseMunicao = opts?.posseMunicao ?? false;
   const result: ParseResult = {
-    drogas: { resultados: [], subtotal: 0 },
+    drogas: { resultados: [], subtotal: 0, grande: false },
     itens: { resultados: [], subtotal: 0 },
     municao: { resultados: [], base: 0, total: 0 },
     armas: { resultados: [], total: 0, meses: 0 },
@@ -733,6 +739,7 @@ export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }
   let ocrArmasBaixo = 0;
   let ocrArmasMedio = 0;
   let ocrArmasAlto = 0;
+  let drogaValor = 0;
 
   for (const parte of partes) {
     // Aceita "45 macos", "1x relogio ouro" e "1 x relogio ouro"
@@ -849,9 +856,11 @@ export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }
     const droga = nome.startsWith("caixa ") ? null : obterDrogaPorSinonimo(originalNome);
     if (droga) {
       const preco = PRECOS_DROGAS[droga];
-      const subtotal = qtd * preco;
-      result.drogas.resultados.push(`  ${qtd}x ${droga} x ${fmt(preco)} = ${fmt(subtotal)}`);
-      result.drogas.subtotal += subtotal;
+      if (qtd > (DROGAS_LIMITES[droga] ?? 20)) result.drogas.grande = true;
+      drogaValor += qtd * preco;
+      // A quantidade aparece, mas a coima é a base de "Posse de Droga" —
+      // nunca qtd × preço (ex.: 9 pacotes = 22 500 €, não 4 500 €).
+      result.drogas.resultados.push(`  ${qtd}x ${droga}`);
       continue;
     }
 
@@ -1087,6 +1096,13 @@ export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }
     result.municao.total += baseMun;
   }
 
+  // Coima de drogas: a base de "Posse de Droga" (22 500 €) aplica-se uma única
+  // vez por CC. Só quando alguma quantidade passa do limite é que a moldura
+  // muda para "Grande Quantidade" (tabela específica = valor das drogas).
+  if (result.drogas.resultados.length) {
+    result.drogas.subtotal = result.drogas.grande ? drogaValor : COIMA_BASE_DROGA;
+  }
+
   // Calcular totals - só adicionar base se houver itens nessa categoria
   const totalDrogas = result.drogas.subtotal > 0 ? result.drogas.subtotal : 0;
   const totalItens = result.itens.subtotal > 0 ? 30000 + result.itens.subtotal : 0;
@@ -1133,13 +1149,7 @@ export function gerarCoimasCatalogo(r: ParseResult): string[] {
   }
 
   if (r.drogas.resultados.length) {
-    const grande = r.drogas.resultados.some((l) => {
-      const m = l.trim().match(/^(\d+)x\s+(.+?)\s+x\s/);
-      if (!m) return false;
-      const limite = DROGAS_LIMITES[m[2]] ?? 20;
-      return parseInt(m[1], 10) > limite;
-    });
-    linhas.push(grande
+    linhas.push(r.drogas.grande
       ? `--- DROGAS --- ${crime("Posse de Droga em Grande Quantidade")}`
       : `--- DROGAS --- ${crime("Posse de Droga")}`);
     for (const l of r.drogas.resultados) linhas.push(l.trim());
