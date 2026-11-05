@@ -1480,10 +1480,13 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                     return;
                   }
                   const parsed = parseQuickInput(txt);
-                  setRelOcrPorCC(prev => ({
-                    ...prev,
-                    [cc]: prev[cc] ? `${prev[cc]}, ${txt}` : txt,
-                  }));
+                  setRelOcrPorCC(prev => {
+                    const atual = prev[cc] || "";
+                    // A extensão pode entregar o mesmo texto duas vezes — não
+                    // voltar a acrescentar o que já está no fim.
+                    if (atual === txt || atual.endsWith(", " + txt)) return prev;
+                    return { ...prev, [cc]: atual ? `${atual}, ${txt}` : txt };
+                  });
                   const detected: string[] = [];
                   if (parsed.itens.resultados.length) detected.push(...parsed.itens.resultados.map(x => x.trim()));
                   if (parsed.armas.resultados.length) detected.push(...parsed.armas.resultados.map(x => x.trim()));

@@ -50,6 +50,9 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
   const [ocrOverallConfidence, setOcrOverallConfidence] = useState<number | null>(null);
   const [ocrWeapon, setOcrWeapon] = useState<{ weaponItem: string; ammo: number; ammoItem: string; accessoryCount: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // A extensão pode entregar o mesmo texto duas vezes (mensagem + fallback de
+  // storage). Guarda o último resultado para não processar/duplicar de novo.
+  const lastResultRef = useRef<{ text: string; at: number }>({ text: "", at: 0 });
 
   const ocrTotalQty = ocrWeights.reduce((sum, w) => sum + w.qty, 0);
   const ocrTotalKg = ocrWeights.reduce((sum, w) => sum + (w.kg > 0 ? w.kg : 0), 0);
@@ -131,6 +134,13 @@ export default function OcrBlock({ inputCls, fillBtnTheme, neonShadow, accentCol
         .replace(/,\s*,/g, ",").replace(/^[\s,]+|[\s,]+$/g, "").trim();
 
       if (cleaned.length > 0) {
+        const now = Date.now();
+        if (cleaned === lastResultRef.current.text && now - lastResultRef.current.at < 3000) {
+          setOcrStatus("✅ Itens detetados! (entrega duplicada ignorada)");
+          setOcrProcessing(false);
+          return;
+        }
+        lastResultRef.current = { text: cleaned, at: now };
         onResult(cleaned);
         setOcrStatus(data.error ? `⚠️ ${data.error}` : "✅ Itens detetados! Verifica o campo abaixo e clica Calcular.");
       } else {
