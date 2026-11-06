@@ -1027,6 +1027,46 @@ const WEAPON_CALIBER: Record<string, string> = {
   "ap pistol": "baixo", "pistol": "baixo",
 };
 
+function zeroAmmoWeaponItem(name: string): WeaponCapture["weaponItem"] | null {
+  const known = findWeaponInText(name);
+  if (known) return known;
+  const caliber = WEAPON_CALIBER[normalizeLine(name)];
+  if (caliber === "alto") return "arma alto calibre";
+  if (caliber === "medio") return "arma medio calibre";
+  if (caliber === "baixo") return "arma baixo calibre";
+  if (/ALTO|RIFLE|CARABIN|SNIPER|GUSENBERG|BULLPUP|FAMAS|SHOTGUN|SPAS|DRACO/i.test(name)) return "arma alto calibre";
+  if (/MEDIO|M[EÉ]DIO|SMG|MACHINE|UZI|PDW|P90|TEC/i.test(name)) return "arma medio calibre";
+  if (/PISTOL|SNS|REVOLVER|VINTAGE|AP\s|50/i.test(name)) return "arma baixo calibre";
+  return null;
+}
+
+/* A extensão envia armas sem munição como "Nome - 0 munições". O parser
+ * normal descarta qty 0 (extractQtyOnlyPairs) e a heurística "excedente =
+ * munição" não se aplica. Aqui cada arma dessas conta como 1 unidade, sem
+ * somar munição (não dispara a coima de Posse de Munição). */
+function extractZeroAmmoWeapons(text: string): ItemMatch[] {
+  const out: ItemMatch[] = [];
+  const re = /^(.{2,90}?)\s*[-–—:|]\s*(?:x\s*)?0\s*muni[cç][oõ]es?/gim;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const name = m[1].replace(/\s*\([^)]*\)\s*$/, "").trim();
+    const item = zeroAmmoWeaponItem(name);
+    if (!item) continue;
+    const def = ITEM_BY_NAME.get(item);
+    const unitKg = def?.unitKg ?? 0;
+    out.push({
+      item,
+      qty: 1,
+      kg: unitKg,
+      unitKg,
+      confidence: 95,
+      confidenceLevel: "high",
+      matchReason: "Arma com 0 munições",
+    });
+  }
+  return out;
+}
+
 function normalizeWeaponMeta(text: string): string {
   return text.replace(
     /^([^\n—–]*?)\s*[—–]\s*MUNI[CÇ][AÃ]?[OÕ]?E?S?\s*:\s*(\d{1,15})[ ]*(balas?\s+\w+\s+calibre)?.*$/gim,
@@ -1180,6 +1220,7 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
   const fixedFull = fixOcrTypos(
     mergeSplitPairs(recoverFragmentQty(recoverCorruptedQty(rawText, usedRecover), usedRecover))
   );
+  const zeroAmmoWeapons = extractZeroAmmoWeapons(fixedFull);
   const headerLines = detectHeaderLines(fixed.split("\n"));
 
   const allPairs = extractPairs(fixed);
@@ -1261,6 +1302,12 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
 
   const anyPairs = extractPairs(fixed).length > 0;
   if (!anyPairs) {
+    if (zeroAmmoWeapons.length) {
+      const mergedZero = mergeResults(zeroAmmoWeapons);
+      const text = mergedZero.map((w) => `${w.qty} ${displayName(w.item)}`).join(", ");
+      const overall = mergedZero.reduce((s, w) => s + w.confidence, 0) / mergedZero.length;
+      return { text, weights: mergedZero, weaponCapture: detectWeaponCapture(fixedFull), overallConfidence: overall };
+    }
     return { text: "", weights: [], weaponCapture: detectWeaponCapture(fixedFull), overallConfidence: 0 };
   }
 
@@ -1297,6 +1344,12 @@ const allSummary = [...summaryLines, ...xSummaryLines, ...tabSummaryLines, ...qt
       const unitKg = def?.unitKg ?? 0;
       merged.push({ item, qty, kg: Math.round(qty * unitKg * 1000) / 1000, unitKg, confidence: 90, confidenceLevel: "medium", matchReason: "Munição do arsenal (por calibre)" });
     }
+  }
+  /* Só depois da heurística "excedente = munição": assim as armas com 0
+   * munições contam como 1 unidade cada e não viram munição. */
+  if (zeroAmmoWeapons.length) {
+    const withZero = mergeResults([...merged, ...zeroAmmoWeapons]);
+    merged.splice(0, merged.length, ...withZero);
   }
   const text = merged.filter((w) => !w.item.startsWith("item nao identificado")).map((w) => `${w.qty} ${displayName(w.item)}`).join(", ") + ambiguityWarning(merged, scrambledText);
   const overall = merged.length ? merged.reduce((s, w) => s + w.confidence, 0) / merged.length : 0;
