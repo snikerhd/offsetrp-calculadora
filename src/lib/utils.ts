@@ -487,6 +487,8 @@ const SYNONYMS_DROGAS: Record<string, string> = {
   "óleos": "Óleo de Cannabis",
   "oleo de cannabis": "Óleo de Cannabis",
   "óleo de cannabis": "Óleo de Cannabis",
+  "oleo medicinal": "Óleo de Cannabis",
+  "óleo medicinal": "Óleo de Cannabis",
   "oil": "Óleo de Cannabis",
   "cannabis oil": "Óleo de Cannabis",
   // Cannabis - Saco
