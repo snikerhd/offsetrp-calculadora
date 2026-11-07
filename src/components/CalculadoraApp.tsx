@@ -676,7 +676,18 @@ export default function CalculadoraApp() {
 
     if (r.drogas.resultados.length) {
       const crimeDrogas = r.drogas.grande ? "Posse de Droga em Grande Quantidade" : "Posse de Droga";
-      msg += `--- DROGAS --- ${crimeDrogas}\n` + r.drogas.resultados.join("\n") + `\nTOTAL DROGAS: ${fmt2(r.drogas.subtotal)} €\n\n`;
+      const linhasDrogas = r.drogas.resultados.map((linha) => {
+        const m = linha.trim().match(/^(\d+)x\s+(.+)$/);
+        if (!m) return linha;
+        const qtd = parseInt(m[1], 10);
+        const nome = m[2];
+        const preco = PRECOS_DROGAS[nome];
+        if (r.drogas.grande && preco != null) {
+          return `  ${qtd}x ${nome} x ${fmt(preco)} = ${fmt(qtd * preco)}`;
+        }
+        return `  ${qtd}x ${nome}`;
+      });
+      msg += `--- DROGAS --- ${crimeDrogas}\n` + linhasDrogas.join("\n") + `\nTOTAL DROGAS: ${fmt2(r.drogas.subtotal)} €\n\n`;
     }
     if (r.itens.resultados.length) {
       msg += `--- ITENS ILEGAIS (base 30 000€) --- Posse de Itens Ilegais\n` + r.itens.resultados.join("\n") + `\nTOTAL ITENS: ${fmt2(30000 + r.itens.subtotal)} €\n\n`;
