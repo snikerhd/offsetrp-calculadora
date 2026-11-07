@@ -866,7 +866,22 @@ export default function CalculadoraApp() {
           const crimeDrogas = ocrParsed.drogas.grande ? "Posse de Droga em Grande Quantidade" : "Posse de Droga";
           linhas.push(`  Drogas (${crimeDrogas}):`);
           for (const linha of ocrParsed.drogas.resultados) {
-            linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ")}`);
+            const m = linha.trim().match(/^(\d+)x\s+(.+)$/);
+            if (m) {
+              const qtd = parseInt(m[1], 10);
+              const nome = m[2];
+              const preco = PRECOS_DROGAS[nome];
+              // Em grande quantidade a coima é o valor das drogas: mostra a conta
+              // de cada linha como nos itens ilegais. Na posse simples a coima é
+              // a base fixa, por isso só se mostra a quantidade.
+              if (ocrParsed.drogas.grande && preco != null) {
+                linhas.push(`  ${qtd} ${nome} x ${fmt(preco)} € = ${fmt(qtd * preco)} €`);
+                continue;
+              }
+              linhas.push(`  ${qtd} ${nome}`);
+              continue;
+            }
+            linhas.push(`  ${linha.trim()}`);
           }
           linhas.push(`  ${crimeDrogas}: ${fmt2(ocrParsed.drogas.subtotal)} €`);
         }
