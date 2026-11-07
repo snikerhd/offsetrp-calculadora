@@ -850,16 +850,25 @@ export default function CalculadoraApp() {
       const ocrTexto = relOcrPorCC[cc];
       const ocrParsed = ocrTexto ? parseQuickInput(ocrTexto) : null;
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
+      const ocrDrogasExtra = ocrParsed?.drogas.subtotal || 0;
       const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
       const { linhas: ocrArmasGrandeLinhas, total: ocrArmasExtra } = ocrArmasGrande(ocrParsed);
-      // Drogas NÃO entram nas Coimas Extras: a coima é a base de "Posse de
-      // Droga" (22 500 €) e vai no CAD, tal como as armas singulares.
-      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
+      // Drogas entram nas Coimas Extras com a base de "Posse de Droga"
+      // (22 500 €) ou, em grande quantidade, com o valor das drogas.
+      const ocrExtraTotal = ocrItensExtra + ocrDrogasExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       if (extraEntries.length || ocrExtraTotal > 0 || sequestroMultaRel > 0) {
         for (const entry of extraEntries) {
           linhas.push(`  ${entry.desc}`);
+        }
+        if (ocrParsed?.drogas.resultados.length) {
+          const crimeDrogas = ocrParsed.drogas.grande ? "Posse de Droga em Grande Quantidade" : "Posse de Droga";
+          linhas.push(`  Drogas (${crimeDrogas}):`);
+          for (const linha of ocrParsed.drogas.resultados) {
+            linhas.push(`  ${linha.trim().replace(/^(\d+)x /, "$1 ")}`);
+          }
+          linhas.push(`  ${crimeDrogas}: ${fmt2(ocrParsed.drogas.subtotal)} €`);
         }
         if (ocrParsed?.itens.resultados.length) {
           linhas.push("  Itens Ilegais:");
@@ -915,11 +924,11 @@ export default function CalculadoraApp() {
       const ocrTexto = relOcrPorCC[cc] || "";
       const ocrParsed = ocrTexto ? parseQuickInput(ocrTexto) : null;
       const ocrItensExtra = ocrParsed?.itens.subtotal || 0;
+      const ocrDrogasExtra = ocrParsed?.drogas.subtotal || 0;
       const ocrMunicaoExtra = ocrParsed?.municao.total || 0;
       const ocrDinheiroExtra = ocrParsed?.dinheiro.total || 0;
       const { total: ocrArmasExtra } = ocrArmasGrande(ocrParsed);
-      // Drogas ficam de fora do relatório: a base de "Posse de Droga" vai no CAD.
-      const ocrExtraTotal = ocrItensExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
+      const ocrExtraTotal = ocrItensExtra + ocrDrogasExtra + ocrMunicaoExtra + ocrDinheiroExtra + ocrArmasExtra;
       const sequestroMultaRel = calcSequestro(relCivis, relFunc);
       const totalExtras = extraEntries.reduce((s, e) => s + e.valor, 0) + ocrExtraTotal;
       const totalCC = cadEntries.reduce((s, e) => s + e.multa, 0) + totalExtras + sequestroMultaRel;
@@ -1488,11 +1497,12 @@ const labelCls = "block text-xs font-bold text-gray-400 uppercase tracking-wider
                     return { ...prev, [cc]: atual ? `${atual}, ${txt}` : txt };
                   });
                   const detected: string[] = [];
+                  if (parsed.drogas.resultados.length) detected.push(...parsed.drogas.resultados.map(x => x.trim()));
                   if (parsed.itens.resultados.length) detected.push(...parsed.itens.resultados.map(x => x.trim()));
                   if (parsed.armas.resultados.length) detected.push(...parsed.armas.resultados.map(x => x.trim()));
                   if (parsed.municao.resultados.length) detected.push(...parsed.municao.resultados.map(x => x.trim()));
                   if (parsed.dinheiro.resultados.length) detected.push(...parsed.dinheiro.resultados.map(x => x.trim()));
-                  const ocrExtraTotalPreview = parsed.itens.subtotal + parsed.municao.total + parsed.dinheiro.total + ocrArmasGrande(parsed).total;
+                  const ocrExtraTotalPreview = parsed.drogas.subtotal + parsed.itens.subtotal + parsed.municao.total + parsed.dinheiro.total + ocrArmasGrande(parsed).total;
                   if (detected.length) {
                     showAlert(`CC ${cc}: detetado(s) ${detected.join("; ")} → total ${fmt2(ocrExtraTotalPreview)} €.`);
                   } else {
