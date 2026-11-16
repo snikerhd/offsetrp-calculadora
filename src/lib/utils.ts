@@ -469,7 +469,6 @@ const SYNONYMS_DROGAS: Record<string, string> = {
   // Cannabis - Sementes
   "semente": "Sementes de Cannabis",
   "sementes": "Sementes de Cannabis",
-  "semente tabaco": "Semente de Tabaco",
   "mining drill": "Mining Drill",
   "seed": "Sementes de Cannabis",
   "seeds": "Sementes de Cannabis",
@@ -577,10 +576,13 @@ export function obterItemPorSinonimo(nome: string): string | null {
   
   if (!normalized) return null;
 
-  // "Folha de tabaco" é um artigo do inventário, não uma droga/coima.
-  // É importante bloquear ANTES dos matches parciais, porque o termo
+  // "Folha de tabaco" e "sementes de tabaco" são artigos do inventário,
+  // não drogas/coimas. Bloquear ANTES dos matches parciais, porque o termo
   // "tabaco" poderia ser associado incorretamente a "Maço tabaco".
   if (/^folha(?:\s+de)?\s+tabaco$/.test(normalized)) {
+    return null;
+  }
+  if (/^sementes?(?:\s+de)?\s+tabaco$/.test(normalized)) {
     return null;
   }
   
@@ -625,7 +627,11 @@ export function obterDrogaPorSinonimo(nome: string): string | null {
   const normalized = normalizeText(nome);
   
   if (!normalized) return null;
-  
+
+  // Sementes de tabaco são legais — nunca são droga. Sem este bloqueio o
+  // fallback parcial de "tabaco" associava-as a "Maço tabaco".
+  if (/^sementes?(?:\s+de)?\s+tabaco$/.test(normalized)) return null;
+
   // 1. Verificar se é um nome direto (match exato)
   const keys = Object.keys(PRECOS_DROGAS);
   for (const key of keys) {
@@ -778,9 +784,12 @@ export function parseQuickInput(input: string, opts?: { posseMunicao?: boolean }
       continue;
     }
 
-    // Folha de tabaco é artigo/inventário e nunca entra nas coimas.
-    // Não deixar o fallback parcial de "tabaco" convertê-la em "Maço tabaco".
+    // Folha/sementes de tabaco são artigos/inventário e nunca entram nas coimas.
+    // Não deixar o fallback parcial de "tabaco" convertê-los em "Maço tabaco".
     if (/^folha(?:\s+de)?\s+tabaco$/.test(nome)) {
+      continue;
+    }
+    if (/^sementes?(?:\s+de)?\s+tabaco$/.test(nome)) {
       continue;
     }
 

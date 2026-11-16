@@ -24,7 +24,7 @@ export const ITEM_CATALOG: ItemDef[] = [
   { name: "cristal processado", displayName: "Cristal Processado", unitKg: 0.3, category: "droga", illegal: true },
   { name: "estimulante", displayName: "Estimulante", unitKg: 0.2, category: "droga", illegal: true },
   { name: "semente erva", displayName: "Semente de Erva", unitKg: 0.1, category: "droga", illegal: true },
-  { name: "semente tabaco", displayName: "Semente de Tabaco", unitKg: 0.1, category: "droga", illegal: true },
+  { name: "semente tabaco", displayName: "Semente de Tabaco", unitKg: 0.1, category: "crafting", illegal: false },
   { name: "cabeco erva", displayName: "Cabeço de Erva", unitKg: 0.2, category: "droga", illegal: true },
   { name: "saco erva", displayName: "Saco de Erva", unitKg: 0.3, category: "droga", illegal: true },
   { name: "oleo medicinal", displayName: "Óleo Medicinal", unitKg: 0.2, category: "droga", illegal: true },
